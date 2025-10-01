@@ -538,8 +538,14 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
 
     console.log(`✅ Processed ${processedCount} alerts with ${errorCount} errors`);
 
-    // Clean up resolved alerts
-    await cleanupResolvedAlerts(pool, currentCriticalPdus);
+    // Clean up resolved alerts (only if pool is still valid)
+    if (pool && pool.connected) {
+      try {
+        await cleanupResolvedAlerts(pool, currentCriticalPdus);
+      } catch (cleanupError) {
+        console.error('❌ Error during cleanup, but continuing:', cleanupError.message);
+      }
+    }
 
     console.log('✅ Active critical alerts management completed');
 
@@ -547,7 +553,7 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
     console.error('❌ Error managing active critical alerts:', error);
   } finally {
     // Always close the pool if it was opened
-    if (pool) {
+    if (pool && pool.connected) {
       try {
         await pool.close();
       } catch (closeError) {
@@ -1414,40 +1420,60 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     const pool = await sql.connect(sqlConfig);
 
-    // First, get the rack data to find its chain
-    const rackData = await pool.request()
-      .input('rack_id', sql.NVarChar, rackId)
-      .query(`
-        SELECT TOP 1 * FROM (
-          SELECT
-            id as pdu_id,
-            id as rack_id,
-            name,
-            country,
-            site,
-            dc,
-            phase,
-            chain,
-            node,
-            serial
-          FROM active_critical_alerts
-          WHERE rack_id = @rack_id OR pdu_id = @rack_id
-        ) AS temp
-      `);
+    // First, try to get rack data from the live API
+    let rack = null;
+    let chain = null;
 
-    if (rackData.recordset.length === 0) {
-      // If not in alerts, we need to fetch from the current racks data
-      // For now, we'll accept the rackId and assume chain needs to be provided
-      await pool.close();
-      return res.status(404).json({
-        success: false,
-        message: 'Rack not found. Please provide chain information.',
-        timestamp: new Date().toISOString()
-      });
+    try {
+      const energyResponse = await fetch(ENERGY_MONITORING_API_URL);
+      if (energyResponse.ok) {
+        const data = await energyResponse.json();
+        // Find the rack in the live data
+        rack = data.find(r => r.id === rackId || r.name === rackId);
+        if (rack) {
+          chain = rack.chain;
+          console.log(`✅ Found rack in live data: ${rack.name}, chain: ${chain}`);
+        }
+      }
+    } catch (apiError) {
+      console.log('⚠️ Could not fetch live rack data, trying alerts table...');
     }
 
-    const rack = rackData.recordset[0];
-    const chain = rack.chain;
+    // If not found in live data, try to get from alerts table
+    if (!rack) {
+      const rackData = await pool.request()
+        .input('rack_id', sql.NVarChar, rackId)
+        .query(`
+          SELECT TOP 1 * FROM (
+            SELECT
+              id as pdu_id,
+              id as rack_id,
+              name,
+              country,
+              site,
+              dc,
+              phase,
+              chain,
+              node,
+              serial
+            FROM active_critical_alerts
+            WHERE rack_id = @rack_id OR pdu_id = @rack_id
+          ) AS temp
+        `);
+
+      if (rackData.recordset.length === 0) {
+        await pool.close();
+        return res.status(404).json({
+          success: false,
+          message: 'Rack not found in live data or alerts.',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      rack = rackData.recordset[0];
+      chain = rack.chain;
+      console.log(`✅ Found rack in alerts table: ${rack.name}, chain: ${chain}`);
+    }
 
     if (!chain) {
       await pool.close();
@@ -1467,14 +1493,14 @@ app.post('/api/maintenance/chain', async (req, res) => {
     const insertResult = await pool.request()
       .input('rack_id', sql.NVarChar, rackId)
       .input('chain', sql.NVarChar, chain)
-      .input('pdu_id', sql.NVarChar, rack.pdu_id)
-      .input('name', sql.NVarChar, rack.name)
-      .input('country', sql.NVarChar, rack.country)
-      .input('site', sql.NVarChar, rack.site)
-      .input('dc', sql.NVarChar, rack.dc)
-      .input('phase', sql.NVarChar, rack.phase)
-      .input('node', sql.NVarChar, rack.node)
-      .input('serial', sql.NVarChar, rack.serial)
+      .input('pdu_id', sql.NVarChar, rack.pdu_id || rack.id || rackId)
+      .input('name', sql.NVarChar, rack.name || rackId)
+      .input('country', sql.NVarChar, rack.country || 'Unknown')
+      .input('site', sql.NVarChar, rack.site || 'Unknown')
+      .input('dc', sql.NVarChar, rack.dc || 'Unknown')
+      .input('phase', sql.NVarChar, rack.phase || 'Unknown')
+      .input('node', sql.NVarChar, rack.node || 'Unknown')
+      .input('serial', sql.NVarChar, rack.serial || 'Unknown')
       .input('reason', sql.NVarChar, reason)
       .input('started_by', sql.NVarChar, startedBy)
       .query(`
