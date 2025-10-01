@@ -11,6 +11,7 @@ interface UseRackDataReturn {
   racks: RackData[];
   groupedRacks: { [country: string]: { [site: string]: { [dc: string]: RackData[][] } } };
   originalRackGroups: RackData[][];
+  maintenanceRacks: Set<string>;
   loading: boolean;
   error: string | null;
   expandedCountryIds: Set<string>;
@@ -46,6 +47,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   
   const [racks, setRacks] = useState<RackData[]>([]);
   const [originalRackGroups, setOriginalRackGroups] = useState<RackData[][]>([]);
+  const [maintenanceRacks, setMaintenanceRacks] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedCountryIds, setExpandedCountryIds] = useState<Set<string>>(new Set());
@@ -135,11 +137,46 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     }
   };
 
+  const fetchMaintenanceRacks = async () => {
+    try {
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/maintenance?t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+
+      if (!response.ok) {
+        console.error('Failed to fetch maintenance racks');
+        return;
+      }
+
+      const data = await response.json();
+      if (data.success && Array.isArray(data.data)) {
+        const maintenanceSet = new Set<string>();
+        data.data.forEach((rack: any) => {
+          if (rack.rack_id) {
+            maintenanceSet.add(rack.rack_id);
+          }
+        });
+        setMaintenanceRacks(maintenanceSet);
+      }
+    } catch (err) {
+      console.error('Error fetching maintenance racks:', err);
+    }
+  };
+
   useEffect(() => {
     fetchRacks();
-    
+    fetchMaintenanceRacks();
+
     // Set up polling every 30 seconds
-    const interval = setInterval(fetchRacks, 30000);
+    const interval = setInterval(() => {
+      fetchRacks();
+      fetchMaintenanceRacks();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -240,6 +277,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   return {
     racks,
     originalRackGroups,
+    maintenanceRacks,
     groupedRacks,
     loading,
     error,
@@ -268,6 +306,9 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     setSearchQuery,
     searchField,
     setSearchField,
-    refreshData: fetchRacks,
+    refreshData: () => {
+      fetchRacks();
+      fetchMaintenanceRacks();
+    },
   };
 }

@@ -15,7 +15,9 @@ interface CombinedRackCardProps {
   ) => string;
   getAmperageStatusColor: (rack: RackData) => string;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
-  onSendToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
+  onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
+  onSendChainToMaintenance?: (chain: string, rackData?: any) => void;
+  maintenanceRacks: Set<string>;
 }
 
 export default function CombinedRackCard({
@@ -25,7 +27,9 @@ export default function CombinedRackCard({
   getMetricStatusColor,
   getAmperageStatusColor,
   onConfigureThresholds,
-  onSendToMaintenance
+  onSendRackToMaintenance,
+  onSendChainToMaintenance,
+  maintenanceRacks
 }: CombinedRackCardProps) {
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -131,10 +135,13 @@ export default function CombinedRackCard({
 
   // Use first rack for common information (name, site, dc)
   const commonInfo = racks[0];
+  const rackId = commonInfo.rackId || commonInfo.id;
+  const isInMaintenance = maintenanceRacks.has(rackId);
 
   return (
     <div className={`rounded-lg shadow hover:shadow-md transition-shadow bg-white ${
-      overallStatus === 'critical' ? 'border-l-4 border-red-700' : 
+      isInMaintenance ? 'border-l-4 border-blue-500' :
+      overallStatus === 'critical' ? 'border-l-4 border-red-700' :
       overallStatus === 'warning' ? 'border-l-4 border-yellow-500' : ''
     }`}>
       <div className="p-6">
@@ -162,7 +169,7 @@ export default function CombinedRackCard({
               </button>
 
               {showMenu && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                   {onConfigureThresholds && (
                     <button
                       onClick={() => {
@@ -175,11 +182,11 @@ export default function CombinedRackCard({
                       <span>Configurar Umbrales</span>
                     </button>
                   )}
-                  {onSendToMaintenance && (
+                  {onSendRackToMaintenance && (
                     <button
                       onClick={() => {
                         setShowMenu(false);
-                        onSendToMaintenance(
+                        onSendRackToMaintenance(
                           commonInfo.rackId || commonInfo.id,
                           commonInfo.chain || 'Unknown',
                           commonInfo.name,
@@ -197,10 +204,36 @@ export default function CombinedRackCard({
                           }
                         );
                       }}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-amber-50 transition-colors border-t border-gray-100"
+                    >
+                      <Wrench className="h-4 w-4 text-amber-600" />
+                      <span>Enviar Rack a Mantenimiento</span>
+                    </button>
+                  )}
+                  {onSendChainToMaintenance && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onSendChainToMaintenance(
+                          commonInfo.chain || 'Unknown',
+                          {
+                            id: commonInfo.id,
+                            rackId: commonInfo.rackId,
+                            name: commonInfo.name,
+                            country: commonInfo.country,
+                            site: commonInfo.site,
+                            dc: commonInfo.dc,
+                            phase: commonInfo.phase,
+                            chain: commonInfo.chain,
+                            node: commonInfo.node,
+                            serial: commonInfo.serial
+                          }
+                        );
+                      }}
                       className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-amber-50 transition-colors last:rounded-b-lg border-t border-gray-100"
                     >
                       <Wrench className="h-4 w-4 text-amber-600" />
-                      <span>Enviar a Mantenimiento</span>
+                      <span>Enviar Chain a Mantenimiento</span>
                     </button>
                   )}
                 </div>

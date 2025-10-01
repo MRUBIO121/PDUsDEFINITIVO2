@@ -26,7 +26,9 @@ interface CountryGroupProps {
   activeStatusFilter: 'all' | 'critical' | 'warning';
   onStatusFilterChange: (filter: 'all' | 'critical' | 'warning') => void;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
-  onSendToMaintenance?: (rackId: string, chain: string, rackName: string) => void;
+  onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
+  onSendChainToMaintenance?: (chain: string, rackData?: any) => void;
+  maintenanceRacks: Set<string>;
 }
 
 export default function CountryGroup({
@@ -46,7 +48,9 @@ export default function CountryGroup({
   activeStatusFilter,
   onStatusFilterChange,
   onConfigureThresholds,
-  onSendToMaintenance
+  onSendRackToMaintenance,
+  onSendChainToMaintenance,
+  maintenanceRacks
 }: CountryGroupProps) {
 
   // Calculate total racks for this country from original data (unfiltered)
@@ -224,7 +228,9 @@ export default function CountryGroup({
               activeStatusFilter={activeStatusFilter}
               onStatusFilterChange={onStatusFilterChange}
               onConfigureThresholds={onConfigureThresholds}
-              onSendToMaintenance={onSendToMaintenance}
+              onSendRackToMaintenance={onSendRackToMaintenance}
+              onSendChainToMaintenance={onSendChainToMaintenance}
+              maintenanceRacks={maintenanceRacks}
             />
           ))}
         </div>

@@ -24,6 +24,7 @@ function App() {
   const {
     racks,
     originalRackGroups,
+    maintenanceRacks,
     groupedRacks,
     loading: racksLoading,
     error: racksError,
@@ -73,12 +74,21 @@ function App() {
     Object.values(groupedRacks).forEach(siteGroups => {
       Object.values(siteGroups).forEach(dcGroups => {
         Object.values(dcGroups).forEach(logicalGroups => {
-          rackGroups.push(...logicalGroups);
+          // Filter out maintenance racks from alertas view
+          if (activeView === 'alertas') {
+            const nonMaintenanceGroups = logicalGroups.filter(group => {
+              const rackId = group[0]?.rackId || group[0]?.id;
+              return !maintenanceRacks.has(rackId);
+            });
+            rackGroups.push(...nonMaintenanceGroups);
+          } else {
+            rackGroups.push(...logicalGroups);
+          }
         });
       });
     });
     return rackGroups;
-  }, [groupedRacks]);
+  }, [groupedRacks, activeView, maintenanceRacks]);
 
   // Calculate alert summary statistics
   const filteredAlertSummary = React.useMemo(() => {
@@ -394,15 +404,15 @@ function App() {
     setShowRackThresholdsModal(true);
   };
 
-  const handleSendToMaintenance = async (rackId: string, chain: string, rackName: string, rackData?: any) => {
-    const reason = prompt(`¿Por qué se está enviando "${rackName}" (chain: ${chain}) a mantenimiento?`, 'Mantenimiento programado');
+  const handleSendRackToMaintenance = async (rackId: string, chain: string, rackName: string, rackData?: any) => {
+    const reason = prompt(`¿Por qué se está enviando el rack "${rackName}" a mantenimiento?`, 'Mantenimiento programado');
 
     if (reason === null) {
       return;
     }
 
     try {
-      const response = await fetch('/api/maintenance/chain', {
+      const response = await fetch('/api/maintenance/rack', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -425,11 +435,50 @@ function App() {
         throw new Error(data.message || 'Failed to send rack to maintenance');
       }
 
-      alert(`El rack "${rackName}" y su chain "${chain}" han sido enviados a mantenimiento.`);
+      alert(`El rack "${rackName}" ha sido enviado a mantenimiento.`);
       refreshData();
     } catch (error) {
-      console.error('Error sending to maintenance:', error);
-      alert(`Error al enviar a mantenimiento: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Error sending rack to maintenance:', error);
+      alert(`Error al enviar rack a mantenimiento: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleSendChainToMaintenance = async (chain: string, rackData?: any) => {
+    const reason = prompt(`¿Por qué se está enviando toda la chain "${chain}" a mantenimiento?`, 'Mantenimiento programado');
+
+    if (reason === null) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/maintenance/chain', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          chain,
+          rackData,
+          reason: reason || 'Mantenimiento programado',
+          startedBy: 'Usuario'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to send chain to maintenance');
+      }
+
+      alert(`Toda la chain "${chain}" ha sido enviada a mantenimiento.`);
+      refreshData();
+    } catch (error) {
+      console.error('Error sending chain to maintenance:', error);
+      alert(`Error al enviar chain a mantenimiento: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -1165,7 +1214,9 @@ function App() {
                       activeStatusFilter={activeStatusFilter}
                       onStatusFilterChange={setActiveStatusFilter}
                       onConfigureThresholds={handleConfigureThresholds}
-                      onSendToMaintenance={handleSendToMaintenance}
+                      onSendRackToMaintenance={handleSendRackToMaintenance}
+                      onSendChainToMaintenance={handleSendChainToMaintenance}
+                      maintenanceRacks={maintenanceRacks}
                     />
                   ))}
                   </div>

@@ -25,7 +25,9 @@ interface DcGroupProps {
   activeStatusFilter: 'all' | 'critical' | 'warning';
   onStatusFilterChange: (filter: 'all' | 'critical' | 'warning') => void;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
-  onSendToMaintenance?: (rackId: string, chain: string, rackName: string) => void;
+  onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
+  onSendChainToMaintenance?: (chain: string, rackData?: any) => void;
+  maintenanceRacks: Set<string>;
 }
 
 export default function DcGroup({ 
@@ -43,7 +45,9 @@ export default function DcGroup({
   activeStatusFilter,
   onStatusFilterChange,
   onConfigureThresholds,
-  onSendToMaintenance
+  onSendRackToMaintenance,
+  onSendChainToMaintenance,
+  maintenanceRacks
 }: DcGroupProps) {
   
   // Debug: Log DC group data
@@ -200,7 +204,9 @@ export default function DcGroup({
                 getMetricStatusColor={getMetricStatusColor}
                 getAmperageStatusColor={getAmperageStatusColor}
                 onConfigureThresholds={onConfigureThresholds}
-                onSendToMaintenance={onSendToMaintenance}
+                onSendRackToMaintenance={onSendRackToMaintenance}
+                onSendChainToMaintenance={onSendChainToMaintenance}
+                maintenanceRacks={maintenanceRacks}
               />
             );
           })}
