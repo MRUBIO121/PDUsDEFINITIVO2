@@ -313,7 +313,8 @@ async function processRackData(racks, thresholds) {
     
     // Temperature evaluation (using sensorTemperature primarily)
     const temperature = parseFloat(rack.sensorTemperature) || parseFloat(rack.temperature) || null;
-    if (temperature !== null) {
+    // Skip evaluation if temperature is N/A or invalid
+    if (temperature !== null && !isNaN(temperature) && rack.sensorTemperature !== 'N/A' && rack.temperature !== 'N/A') {
       const tempCriticalLow = getThresholdValue(thresholds, 'critical_temperature_low');
       const tempCriticalHigh = getThresholdValue(thresholds, 'critical_temperature_high');
       const tempWarningLow = getThresholdValue(thresholds, 'warning_temperature_low');
@@ -341,7 +342,8 @@ async function processRackData(racks, thresholds) {
     
     // Humidity evaluation
     const humidity = parseFloat(rack.sensorHumidity) || null;
-    if (humidity !== null) {
+    // Skip evaluation if humidity is N/A or invalid
+    if (humidity !== null && !isNaN(humidity) && rack.sensorHumidity !== 'N/A') {
       const humidCriticalLow = getThresholdValue(thresholds, 'critical_humidity_low');
       const humidCriticalHigh = getThresholdValue(thresholds, 'critical_humidity_high');
       const humidWarningLow = getThresholdValue(thresholds, 'warning_humidity_low');
