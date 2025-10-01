@@ -254,7 +254,7 @@ async function saveThresholdsToDatabase(thresholds) {
 // Load rack-specific thresholds from database
 async function loadRackSpecificThresholds(rackId) {
   try {
-    const pool = await sql.connect(dbConfig);
+    const pool = await sql.connect(sqlConfig);
     const result = await pool.request()
       .input('rackId', sql.NVarChar, rackId)
       .query(`
@@ -299,7 +299,15 @@ async function processRackData(racks, thresholds) {
     // Merge global thresholds with rack-specific overrides
     const rackId = rack.rackId || rack.id;
     const rackOverrides = rackThresholdsMap.get(rackId) || {};
-    const effectiveThresholds = { ...thresholds, ...rackOverrides };
+
+    // Create effective thresholds by merging global with rack-specific
+    const effectiveThresholds = thresholds.map(t => {
+      if (rackOverrides[t.key] !== undefined) {
+        return { ...t, value: rackOverrides[t.key] };
+      }
+      return t;
+    });
+
     const reasons = [];
     let status = 'normal';
     
