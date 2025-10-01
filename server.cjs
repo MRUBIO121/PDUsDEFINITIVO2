@@ -650,8 +650,10 @@ app.get('/api/racks/energy', async (req, res) => {
     if (!process.env.NENG_API_URL || !process.env.NENG_API_KEY) {
       throw new Error('NENG API configuration missing. Please check NENG_API_URL and NENG_API_KEY environment variables.');
     }
-    
-    const nengResponse = await fetchFromNengApi(
+
+    // Fetch power data
+    console.log(`[${requestId}] 🔌 Fetching power data...`);
+    const powerResponse = await fetchFromNengApi(
       `${process.env.NENG_API_URL}?skip=${skip}&limit=${limit}`,
       {
         method: 'GET',
@@ -661,15 +663,70 @@ app.get('/api/racks/energy', async (req, res) => {
         }
       }
     );
-    
-    if (!nengResponse.success || !nengResponse.data) {
-      throw new Error('Invalid response from NENG API');
+
+    if (!powerResponse.success || !powerResponse.data) {
+      throw new Error('Invalid response from NENG Power API');
     }
-    
-    console.log(`[${requestId}] ✅ NENG API Response - Received ${nengResponse.data.length} PDUs`);
-    
-    // Process individual PDUs into a flat array
-    const combinedData = Array.isArray(nengResponse.data) ? nengResponse.data : [];
+
+    console.log(`[${requestId}] ✅ Power API Response - Received ${powerResponse.data.length} PDUs`);
+
+    // Fetch sensor data if sensors URL is configured
+    let sensorsData = [];
+    if (process.env.NENG_SENSORS_API_URL) {
+      console.log(`[${requestId}] 🌡️ Fetching sensor data...`);
+      try {
+        const sensorsResponse = await fetchFromNengApi(
+          `${process.env.NENG_SENSORS_API_URL}?skip=${skip}&limit=${limit}`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        if (sensorsResponse.success && sensorsResponse.data) {
+          sensorsData = sensorsResponse.data;
+          console.log(`[${requestId}] ✅ Sensors API Response - Received ${sensorsData.length} sensors`);
+        }
+      } catch (sensorError) {
+        console.warn(`[${requestId}] ⚠️ Sensors API failed (continuing without sensor data):`, sensorError.message);
+      }
+    }
+
+    // Map and combine power and sensor data
+    const powerData = Array.isArray(powerResponse.data) ? powerResponse.data : [];
+    const combinedData = powerData.map(powerItem => {
+      // Map power fields to expected format
+      const mapped = {
+        id: String(powerItem.id),
+        rackId: String(powerItem.rackId),
+        name: powerItem.name,
+        country: 'España',
+        site: powerItem.site,
+        dc: powerItem.dc,
+        phase: powerItem.phase,
+        chain: String(powerItem.chain || ''),
+        node: String(powerItem.node || ''),
+        serial: powerItem.serial,
+        current: parseFloat(powerItem.totalAmps) || 0,
+        temperature: parseFloat(powerItem.avgVolts) || 0,
+        lastUpdated: powerItem.lastUpdate || new Date().toISOString()
+      };
+
+      // Find matching sensor data by rackId
+      const matchingSensor = sensorsData.find(sensor =>
+        String(sensor.rackId) === String(powerItem.rackId)
+      );
+
+      if (matchingSensor) {
+        mapped.sensorTemperature = parseFloat(matchingSensor.temperature) || null;
+        mapped.sensorHumidity = parseFloat(matchingSensor.humidity) || null;
+      }
+
+      return mapped;
+    });
     
     if (combinedData.length === 0) {
       console.log(`[${requestId}] ⚠️ No data received from NENG API`);
@@ -684,9 +741,14 @@ app.get('/api/racks/energy', async (req, res) => {
     
     console.log(`[${requestId}] 📊 Data Summary:`);
     console.log(`[${requestId}]   - Total PDUs: ${combinedData.length}`);
+    console.log(`[${requestId}]   - Power data items: ${powerData.length}`);
+    console.log(`[${requestId}]   - Sensor data items: ${sensorsData.length}`);
+
+    const pdusWithSensorData = combinedData.filter(pdu => pdu.sensorTemperature != null).length;
+    console.log(`[${requestId}]   - PDUs with sensor data: ${pdusWithSensorData}`);
     console.log(`[${requestId}]   - Data source: NENG API (real)`);
     console.log(`[${requestId}]   - Request timestamp: ${new Date().toISOString()}`);
-    
+
     // Debug: Log first few PDUs for inspection
     if (combinedData.length > 0) {
       console.log(`[${requestId}] 🔍 DEBUG - First PDU sample:`, {
@@ -694,9 +756,12 @@ app.get('/api/racks/energy', async (req, res) => {
         rackId: combinedData[0].rackId,
         name: combinedData[0].name,
         site: combinedData[0].site,
+        dc: combinedData[0].dc,
+        phase: combinedData[0].phase,
         current: combinedData[0].current,
         temperature: combinedData[0].temperature,
-        sensorTemperature: combinedData[0].sensorTemperature
+        sensorTemperature: combinedData[0].sensorTemperature,
+        sensorHumidity: combinedData[0].sensorHumidity
       });
     }
     
