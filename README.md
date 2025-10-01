@@ -80,13 +80,7 @@ cd energy-monitoring-system
 
 2. **Instalar dependencias**:
 ```bash
-# Frontend
 npm install
-
-# Backend
-cd backend
-npm install
-cd ..
 ```
 
 3. **Configurar variables de entorno**:
@@ -136,19 +130,21 @@ npm run build
 npm run dev
 
 # Terminal 2 - Backend
-cd backend
-npm run dev
+npm run server:dev
 ```
 
 ### Producción
 
-1. **Configurar PM2**:
+1. **Desplegar con script automatizado**:
 ```bash
-# Instalar PM2 globalmente
-npm install -g pm2
+# Ejecutar script de despliegue (Windows)
+deploy.bat
 
-# Iniciar con ecosystem config
+# O manualmente:
+npm install --production
+npm run build
 pm2 start ecosystem.config.cjs --env production
+pm2 save
 ```
 
 2. **Configurar Nginx**:
@@ -158,15 +154,12 @@ cp nginx.conf /etc/nginx/sites-available/energy-monitoring
 # O en Windows: C:\nginx\conf\nginx.conf
 ```
 
-3. **Iniciar servicios**:
+3. **Comandos útiles PM2**:
 ```bash
-# Nginx
-sudo systemctl start nginx  # Linux
-# O iniciar manualmente en Windows
-
-# PM2
-pm2 save
-pm2 startup
+pm2 status              # Ver estado
+pm2 logs                # Ver logs en tiempo real
+pm2 restart energy-monitoring-api  # Reiniciar
+pm2 stop energy-monitoring-api     # Detener
 ```
 
 ## 📁 Estructura del Proyecto
@@ -189,15 +182,16 @@ pm2 startup
 │   │   ├── thresholdUtils.ts    # Utilidades de umbrales y evaluación
 │   │   └── uiUtils.ts           # Utilidades de UI y colores de estado
 │   └── types/                   # Definiciones TypeScript para datos y umbrales
-├── backend/                     # Backend Node.js
-│   ├── server.js               # Servidor principal con paginación y logging detallado
-│   └── package.json            # Dependencias backend
+├── server.js                    # Servidor Express con API NENG y SQL Server
 ├── supabase/migrations/         # Migraciones SQL
 ├── public/                      # Archivos estáticos
 ├── dist/                        # Build de producción
+├── logs/                        # Logs de aplicación (generado)
+├── exports/                     # Archivos Excel exportados (generado)
 ├── nginx.conf                   # Configuración Nginx
 ├── ecosystem.config.cjs         # Configuración PM2
-└── README.md                    # Este archivo
+├── deploy.bat                   # Script de despliegue automatizado
+└── package.json                 # Dependencias unificadas (frontend + backend)
 ```
 
 ## 🌐 API Endpoints
