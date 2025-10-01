@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { Activity, AlertTriangle, Settings, BarChart3, Zap, ZapOff, Download } from 'lucide-react';
+import { Activity, AlertTriangle, Settings, BarChart3, Zap, ZapOff, Download, RefreshCw } from 'lucide-react';
 import CountryGroup from './components/CountryGroup';
 import ThresholdManager from './components/ThresholdManager';
 import RackThresholdManager from './components/RackThresholdManager';
@@ -707,6 +707,24 @@ function App() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-4">
+                  {/* Refresh Button */}
+                  <button
+                    onClick={() => {
+                      refreshData();
+                      refreshThresholds();
+                    }}
+                    disabled={racksLoading || thresholdsLoading}
+                    className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md transition-colors ${
+                      racksLoading || thresholdsLoading
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                    title="Refrescar datos"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${racksLoading || thresholdsLoading ? 'animate-spin' : ''}`} />
+                    Refrescar
+                  </button>
+
                   {/* Export Button */}
                   <button
                     onClick={handleExportAlerts}
@@ -721,13 +739,13 @@ function App() {
                     <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
                     {isExporting ? 'Exportando...' : 'Exportar Excel'}
                   </button>
-                  
+
                   {/* Settings Button */}
                   <button
                     onClick={() => setShowThresholds(!showThresholds)}
                     className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md transition-colors ${
-                      showThresholds 
-                        ? 'text-blue-800 bg-blue-100 hover:bg-blue-200' 
+                      showThresholds
+                        ? 'text-blue-800 bg-blue-100 hover:bg-blue-200'
                         : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
                     }`}
                     title={showThresholds ? "Cerrar Configuración de Umbrales" : "Abrir Configuración de Umbrales"}
