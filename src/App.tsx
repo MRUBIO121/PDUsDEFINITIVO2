@@ -744,13 +744,12 @@ function App() {
                     </button>
                     <button
                       onClick={() => setActiveView('mantenimiento')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                         activeView === 'mantenimiento'
                           ? 'bg-blue-600 text-white shadow-sm'
                           : 'text-gray-700 hover:text-gray-900 hover:bg-white'
                       }`}
                     >
-                      <Wrench className="w-4 h-4" />
                       Mantenimiento
                     </button>
                   </div>
