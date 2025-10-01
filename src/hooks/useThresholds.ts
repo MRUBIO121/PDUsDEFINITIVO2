@@ -26,10 +26,20 @@ export function useThresholds(options: UseThresholdsOptions = {}): UseThresholds
     try {
       setLoading(true);
       setError(null);
-      
+
+      // Add timestamp to prevent caching
+      const timestamp = new Date().getTime();
+      const fetchOptions = {
+        cache: 'no-store' as RequestCache,
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      };
+
       if (rackId) {
         // Fetch rack-specific thresholds
-        const response = await fetch(`/api/racks/${rackId}/thresholds`);
+        const response = await fetch(`/api/racks/${rackId}/thresholds?t=${timestamp}`, fetchOptions);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -56,7 +66,7 @@ export function useThresholds(options: UseThresholdsOptions = {}): UseThresholds
         setThresholds(mergedThresholds);
       } else {
         // Fetch global thresholds only
-        const response = await fetch('/api/thresholds');
+        const response = await fetch(`/api/thresholds?t=${timestamp}`, fetchOptions);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }

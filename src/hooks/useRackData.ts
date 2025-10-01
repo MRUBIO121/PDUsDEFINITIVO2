@@ -64,8 +64,16 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch('/api/racks/energy');
+
+      // Add timestamp to prevent caching
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/racks/energy?t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }

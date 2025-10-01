@@ -693,12 +693,15 @@ async function cleanupResolvedAlerts(pool, currentCriticalPdus) {
 // Endpoint para obtener datos de racks de energía
 app.get('/api/racks/energy', async (req, res) => {
   const requestId = Math.random().toString(36).substr(2, 9);
-  
+
   try {
     console.log(`[${requestId}] 📥 NEW REQUEST - Energy racks data`);
-    
-    // Check cache first
-    if (isCacheValid(racksCache)) {
+
+    // Check if client wants to bypass cache (from refresh button)
+    const bypassCache = req.headers['cache-control'] === 'no-cache' || req.headers['pragma'] === 'no-cache';
+
+    // Check cache first (unless explicitly bypassed)
+    if (!bypassCache && isCacheValid(racksCache)) {
       console.log(`[${requestId}] 📦 Using cached rack data`);
       return res.json({
         success: true,
@@ -708,8 +711,8 @@ app.get('/api/racks/energy', async (req, res) => {
         timestamp: new Date().toISOString()
       });
     }
-    
-    console.log(`[${requestId}] 🔄 Cache expired, fetching fresh data...`);
+
+    console.log(`[${requestId}] 🔄 ${bypassCache ? 'Cache bypassed by client' : 'Cache expired'}, fetching fresh data...`);
     
     // Get thresholds first
     const thresholds = await fetchThresholdsFromDatabase();
