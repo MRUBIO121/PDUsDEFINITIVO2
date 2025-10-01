@@ -9,6 +9,23 @@ const fs = require('fs');
 const path = require('path');
 const ExcelJS = require('exceljs');
 
+// DEBUG: Log environment variables on startup
+console.log('🔍 DEBUGGING ENVIRONMENT VARIABLES:');
+console.log('   NODE_ENV:', process.env.NODE_ENV);
+console.log('   PORT:', process.env.PORT);
+console.log('   FRONTEND_URL:', process.env.FRONTEND_URL);
+console.log('   NENG_API_URL:', process.env.NENG_API_URL ? '✅ SET' : '❌ NOT SET');
+console.log('   NENG_API_KEY:', process.env.NENG_API_KEY ? '✅ SET' : '❌ NOT SET');
+console.log('   SQL_SERVER_HOST:', process.env.SQL_SERVER_HOST);
+console.log('   SQL_SERVER_DATABASE:', process.env.SQL_SERVER_DATABASE);
+console.log('   SQL_SERVER_USER:', process.env.SQL_SERVER_USER);
+console.log('   SQL_SERVER_PASSWORD:', process.env.SQL_SERVER_PASSWORD ? '✅ SET' : '❌ NOT SET');
+console.log('   SQL_SERVER_PORT:', process.env.SQL_SERVER_PORT);
+console.log('   Working Directory:', process.cwd());
+console.log('   .env file location should be:', path.join(process.cwd(), '.env'));
+console.log('   .env file exists?:', fs.existsSync(path.join(process.cwd(), '.env')) ? '✅ YES' : '❌ NO');
+console.log('');
+
 const app = express();
 const port = process.env.PORT || 3001;
 
