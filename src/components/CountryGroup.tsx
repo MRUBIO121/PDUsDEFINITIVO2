@@ -131,7 +131,8 @@ export default function CountryGroup({
                 let count = 0;
 
                 if (status === 'maintenance') {
-                  // Count maintenance racks
+                  // Count maintenance racks (only show in main view)
+                  if (activeView === 'alertas') return null;
                   count = Object.values(siteGroups).reduce((total, dcGroups) =>
                     total + Object.values(dcGroups).flat()
                       .filter(rackGroup => {
@@ -140,14 +141,19 @@ export default function CountryGroup({
                       }).length, 0
                   );
                 } else {
-                  // Count other statuses
+                  // Count other statuses, excluding maintenance racks
                   count = Object.values(siteGroups).reduce((total, dcGroups) =>
                     total + Object.values(dcGroups).flat()
-                      .filter(rackGroup => rackGroup.some(rack => rack.status === status)).length, 0
+                      .filter(rackGroup => {
+                        const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
+                        // Don't count if rack is in maintenance
+                        if (maintenanceRacks.has(rackId)) return false;
+                        return rackGroup.some(rack => rack.status === status);
+                      }).length, 0
                   );
                 }
 
-                if (count === 0 || (activeView === 'alertas' && (status === 'normal' || status === 'maintenance'))) return null;
+                if (count === 0 || (activeView === 'alertas' && status === 'normal')) return null;
                 
                 // Critical and Warning are buttons, Normal is just a display
                 if (status === 'critical' || status === 'warning') {

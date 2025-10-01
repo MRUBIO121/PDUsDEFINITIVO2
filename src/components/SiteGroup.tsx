@@ -121,19 +121,25 @@ export default function SiteGroup({
                 let count = 0;
 
                 if (status === 'maintenance') {
-                  // Count maintenance racks
+                  // Count maintenance racks (only show in main view)
+                  if (activeView === 'alertas') return null;
                   count = Object.values(dcGroups).flat()
                     .filter(rackGroup => {
                       const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
                       return maintenanceRacks.has(rackId);
                     }).length;
                 } else {
-                  // Count other statuses
+                  // Count other statuses, excluding maintenance racks
                   count = Object.values(dcGroups).flat()
-                    .filter(rackGroup => rackGroup.some(rack => rack.status === status)).length;
+                    .filter(rackGroup => {
+                      const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
+                      // Don't count if rack is in maintenance
+                      if (maintenanceRacks.has(rackId)) return false;
+                      return rackGroup.some(rack => rack.status === status);
+                    }).length;
                 }
 
-                if (count === 0 || (activeView === 'alertas' && (status === 'normal' || status === 'maintenance'))) return null;
+                if (count === 0 || (activeView === 'alertas' && status === 'normal')) return null;
                 
                 // Critical and Warning are buttons, Normal is just a display
                 if (status === 'critical' || status === 'warning') {
