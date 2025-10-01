@@ -1,7 +1,7 @@
 module.exports = {
   apps: [{
     name: 'energy-monitoring-api',
-    script: './server.js',
+    script: './server.cjs',
 
     instances: 2,
     exec_mode: 'cluster',

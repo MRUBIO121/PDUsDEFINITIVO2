@@ -10,8 +10,8 @@
     "preview": "vite preview",
     "serve": "vite preview --port 5173",
     "build:prod": "NODE_ENV=production vite build",
-    "server": "node server.js",
-    "server:dev": "nodemon server.js"
+    "server": "node server.cjs",
+    "server:dev": "nodemon server.cjs"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",

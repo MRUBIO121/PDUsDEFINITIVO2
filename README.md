@@ -182,7 +182,7 @@ pm2 stop energy-monitoring-api     # Detener
 │   │   ├── thresholdUtils.ts    # Utilidades de umbrales y evaluación
 │   │   └── uiUtils.ts           # Utilidades de UI y colores de estado
 │   └── types/                   # Definiciones TypeScript para datos y umbrales
-├── server.js                    # Servidor Express con API NENG y SQL Server
+├── server.cjs                   # Servidor Express con API NENG y SQL Server
 ├── supabase/migrations/         # Migraciones SQL
 ├── public/                      # Archivos estáticos
 ├── dist/                        # Build de producción
