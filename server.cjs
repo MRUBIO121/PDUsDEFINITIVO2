@@ -186,10 +186,10 @@ async function fetchThresholdsFromDatabase() {
 
     console.log('🔍 Fetching thresholds from SQL Server...');
     const pool = await sql.connect(sqlConfig);
-    
+
     const result = await pool.request().query(`
       SELECT threshold_key as [key], value, unit, description, created_at as createdAt, updated_at as updatedAt
-      FROM threshold_configs
+      FROM dbo.threshold_configs
       ORDER BY threshold_key
     `);
     
@@ -224,8 +224,8 @@ async function saveThresholdsToDatabase(thresholds) {
         .input('key', sql.NVarChar, key)
         .input('value', sql.Decimal(18, 4), value)
         .query(`
-          UPDATE threshold_configs 
-          SET value = @value, updated_at = GETDATE() 
+          UPDATE dbo.threshold_configs
+          SET value = @value, updated_at = GETDATE()
           WHERE threshold_key = @key
         `);
       
@@ -271,90 +271,99 @@ async function processRackData(racks, thresholds) {
     let criticalLow, criticalHigh, warningLow, warningHigh;
     
     if (isSinglePhase) {
-      criticalLow = getThresholdValue(thresholds, 'critical_amperage_low_single_phase') || 1.0;
-      criticalHigh = getThresholdValue(thresholds, 'critical_amperage_high_single_phase') || 25.0;
-      warningLow = getThresholdValue(thresholds, 'warning_amperage_low_single_phase') || 2.0;
-      warningHigh = getThresholdValue(thresholds, 'warning_amperage_high_single_phase') || 20.0;
+      criticalLow = getThresholdValue(thresholds, 'critical_amperage_low_single_phase');
+      criticalHigh = getThresholdValue(thresholds, 'critical_amperage_high_single_phase');
+      warningLow = getThresholdValue(thresholds, 'warning_amperage_low_single_phase');
+      warningHigh = getThresholdValue(thresholds, 'warning_amperage_high_single_phase');
     } else if (is3Phase) {
-      criticalLow = getThresholdValue(thresholds, 'critical_amperage_low_3_phase') || 1.0;
-      criticalHigh = getThresholdValue(thresholds, 'critical_amperage_high_3_phase') || 30.0;
-      warningLow = getThresholdValue(thresholds, 'warning_amperage_low_3_phase') || 2.0;
-      warningHigh = getThresholdValue(thresholds, 'warning_amperage_high_3_phase') || 25.0;
+      criticalLow = getThresholdValue(thresholds, 'critical_amperage_low_3_phase');
+      criticalHigh = getThresholdValue(thresholds, 'critical_amperage_high_3_phase');
+      warningLow = getThresholdValue(thresholds, 'warning_amperage_low_3_phase');
+      warningHigh = getThresholdValue(thresholds, 'warning_amperage_high_3_phase');
     } else {
       // Default to single phase
-      criticalLow = getThresholdValue(thresholds, 'critical_amperage_low_single_phase') || 1.0;
-      criticalHigh = getThresholdValue(thresholds, 'critical_amperage_high_single_phase') || 25.0;
-      warningLow = getThresholdValue(thresholds, 'warning_amperage_low_single_phase') || 2.0;
-      warningHigh = getThresholdValue(thresholds, 'warning_amperage_high_single_phase') || 20.0;
+      criticalLow = getThresholdValue(thresholds, 'critical_amperage_low_single_phase');
+      criticalHigh = getThresholdValue(thresholds, 'critical_amperage_high_single_phase');
+      warningLow = getThresholdValue(thresholds, 'warning_amperage_low_single_phase');
+      warningHigh = getThresholdValue(thresholds, 'warning_amperage_high_single_phase');
     }
     
     // Amperage evaluation - CRITICAL: Including 0A evaluation
-    if (current === 0) {
-      reasons.push('critical_amperage_zero_reading');
-      status = 'critical';
-    } else if (current <= criticalLow || current >= criticalHigh) {
-      if (current <= criticalLow) {
-        reasons.push(`critical_amperage_low_${isSinglePhase ? 'single_phase' : '3_phase'}`);
-      } else {
-        reasons.push(`critical_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
+    // Only evaluate if all thresholds are defined
+    if (criticalLow !== undefined && criticalHigh !== undefined && warningLow !== undefined && warningHigh !== undefined) {
+      if (current === 0) {
+        reasons.push('critical_amperage_zero_reading');
+        status = 'critical';
+      } else if (current <= criticalLow || current >= criticalHigh) {
+        if (current <= criticalLow) {
+          reasons.push(`critical_amperage_low_${isSinglePhase ? 'single_phase' : '3_phase'}`);
+        } else {
+          reasons.push(`critical_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
+        }
+        status = 'critical';
+      } else if (current <= warningLow || current >= warningHigh) {
+        if (current <= warningLow) {
+          reasons.push(`warning_amperage_low_${isSinglePhase ? 'single_phase' : '3_phase'}`);
+        } else {
+          reasons.push(`warning_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
+        }
+        if (status !== 'critical') status = 'warning';
       }
-      status = 'critical';
-    } else if (current <= warningLow || current >= warningHigh) {
-      if (current <= warningLow) {
-        reasons.push(`warning_amperage_low_${isSinglePhase ? 'single_phase' : '3_phase'}`);
-      } else {
-        reasons.push(`warning_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
-      }
-      if (status !== 'critical') status = 'warning';
     }
     
     // Temperature evaluation (using sensorTemperature primarily)
     const temperature = parseFloat(rack.sensorTemperature) || parseFloat(rack.temperature) || null;
     if (temperature !== null) {
-      const tempCriticalLow = getThresholdValue(thresholds, 'critical_temperature_low') || 5.0;
-      const tempCriticalHigh = getThresholdValue(thresholds, 'critical_temperature_high') || 40.0;
-      const tempWarningLow = getThresholdValue(thresholds, 'warning_temperature_low') || 10.0;
-      const tempWarningHigh = getThresholdValue(thresholds, 'warning_temperature_high') || 30.0;
-      
-      if (temperature <= tempCriticalLow || temperature >= tempCriticalHigh) {
-        if (temperature <= tempCriticalLow) {
-          reasons.push('critical_temperature_low');
-        } else {
-          reasons.push('critical_temperature_high');
+      const tempCriticalLow = getThresholdValue(thresholds, 'critical_temperature_low');
+      const tempCriticalHigh = getThresholdValue(thresholds, 'critical_temperature_high');
+      const tempWarningLow = getThresholdValue(thresholds, 'warning_temperature_low');
+      const tempWarningHigh = getThresholdValue(thresholds, 'warning_temperature_high');
+
+      // Only evaluate if all thresholds are defined
+      if (tempCriticalLow !== undefined && tempCriticalHigh !== undefined && tempWarningLow !== undefined && tempWarningHigh !== undefined) {
+        if (temperature <= tempCriticalLow || temperature >= tempCriticalHigh) {
+          if (temperature <= tempCriticalLow) {
+            reasons.push('critical_temperature_low');
+          } else {
+            reasons.push('critical_temperature_high');
+          }
+          status = 'critical';
+        } else if (temperature <= tempWarningLow || temperature >= tempWarningHigh) {
+          if (temperature <= tempWarningLow) {
+            reasons.push('warning_temperature_low');
+          } else {
+            reasons.push('warning_temperature_high');
+          }
+          if (status !== 'critical') status = 'warning';
         }
-        status = 'critical';
-      } else if (temperature <= tempWarningLow || temperature >= tempWarningHigh) {
-        if (temperature <= tempWarningLow) {
-          reasons.push('warning_temperature_low');
-        } else {
-          reasons.push('warning_temperature_high');
-        }
-        if (status !== 'critical') status = 'warning';
       }
     }
     
     // Humidity evaluation
     const humidity = parseFloat(rack.sensorHumidity) || null;
     if (humidity !== null) {
-      const humidCriticalLow = getThresholdValue(thresholds, 'critical_humidity_low') || 20.0;
-      const humidCriticalHigh = getThresholdValue(thresholds, 'critical_humidity_high') || 80.0;
-      const humidWarningLow = getThresholdValue(thresholds, 'warning_humidity_low') || 30.0;
-      const humidWarningHigh = getThresholdValue(thresholds, 'warning_humidity_high') || 70.0;
-      
-      if (humidity <= humidCriticalLow || humidity >= humidCriticalHigh) {
-        if (humidity <= humidCriticalLow) {
-          reasons.push('critical_humidity_low');
-        } else {
-          reasons.push('critical_humidity_high');
+      const humidCriticalLow = getThresholdValue(thresholds, 'critical_humidity_low');
+      const humidCriticalHigh = getThresholdValue(thresholds, 'critical_humidity_high');
+      const humidWarningLow = getThresholdValue(thresholds, 'warning_humidity_low');
+      const humidWarningHigh = getThresholdValue(thresholds, 'warning_humidity_high');
+
+      // Only evaluate if all thresholds are defined
+      if (humidCriticalLow !== undefined && humidCriticalHigh !== undefined && humidWarningLow !== undefined && humidWarningHigh !== undefined) {
+        if (humidity <= humidCriticalLow || humidity >= humidCriticalHigh) {
+          if (humidity <= humidCriticalLow) {
+            reasons.push('critical_humidity_low');
+          } else {
+            reasons.push('critical_humidity_high');
+          }
+          status = 'critical';
+        } else if (humidity <= humidWarningLow || humidity >= humidWarningHigh) {
+          if (humidity <= humidWarningLow) {
+            reasons.push('warning_humidity_low');
+          } else {
+            reasons.push('warning_humidity_high');
+          }
+          if (status !== 'critical') status = 'warning';
         }
-        status = 'critical';
-      } else if (humidity <= humidWarningLow || humidity >= humidWarningHigh) {
-        if (humidity <= humidWarningLow) {
-          reasons.push('warning_humidity_low');
-        } else {
-          reasons.push('warning_humidity_high');
-        }
-        if (status !== 'critical') status = 'warning';
       }
     }
     
@@ -993,7 +1002,7 @@ app.get('/api/racks/:rackId/thresholds', async (req, res) => {
     // Get global thresholds
     const globalResult = await pool.request().query(`
       SELECT threshold_key as [key], value, unit, description, created_at as createdAt, updated_at as updatedAt
-      FROM threshold_configs
+      FROM dbo.threshold_configs
       ORDER BY threshold_key
     `);
     
@@ -1002,7 +1011,7 @@ app.get('/api/racks/:rackId/thresholds', async (req, res) => {
       .input('rackId', sql.NVarChar, rackId)
       .query(`
         SELECT threshold_key as [key], value, unit, description, created_at as createdAt, updated_at as updatedAt
-        FROM rack_threshold_overrides
+        FROM dbo.rack_threshold_overrides
         WHERE rack_id = @rackId
         ORDER BY threshold_key
       `);
@@ -1092,12 +1101,12 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
         .input('key', sql.NVarChar, key)
         .input('value', sql.Decimal(18, 4), value)
         .query(`
-          MERGE rack_threshold_overrides AS target
+          MERGE dbo.rack_threshold_overrides AS target
           USING (SELECT @rackId as rack_id, @key as threshold_key, @value as value) AS source
           ON target.rack_id = source.rack_id AND target.threshold_key = source.threshold_key
-          WHEN MATCHED THEN 
+          WHEN MATCHED THEN
             UPDATE SET value = source.value, updated_at = GETDATE()
-          WHEN NOT MATCHED THEN 
+          WHEN NOT MATCHED THEN
             INSERT (rack_id, threshold_key, value) VALUES (source.rack_id, source.threshold_key, source.value);
         `);
       
@@ -1140,7 +1149,7 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
     const result = await pool.request()
       .input('rackId', sql.NVarChar, rackId)
       .query(`
-        DELETE FROM rack_threshold_overrides WHERE rack_id = @rackId
+        DELETE FROM dbo.rack_threshold_overrides WHERE rack_id = @rackId
       `);
     
     await pool.close();
