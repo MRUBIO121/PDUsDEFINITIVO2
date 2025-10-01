@@ -776,8 +776,15 @@ app.get('/api/racks/energy', async (req, res) => {
       );
 
       if (matchingSensor) {
-        mapped.sensorTemperature = parseFloat(matchingSensor.temperature) || null;
-        mapped.sensorHumidity = parseFloat(matchingSensor.humidity) || null;
+        // Check for N/A before parsing temperature
+        mapped.sensorTemperature = (matchingSensor.temperature === 'N/A' || matchingSensor.temperature === null || matchingSensor.temperature === undefined)
+          ? 'N/A'
+          : (parseFloat(matchingSensor.temperature) || null);
+
+        // Check for N/A before parsing humidity
+        mapped.sensorHumidity = (matchingSensor.humidity === 'N/A' || matchingSensor.humidity === null || matchingSensor.humidity === undefined)
+          ? 'N/A'
+          : (parseFloat(matchingSensor.humidity) || null);
       }
 
       return mapped;
