@@ -148,9 +148,14 @@ export default function CombinedRackCard({
         {/* Overall Status - Moved to Top */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center">
-            <div className={`w-3 h-3 rounded-full ${isInMaintenance ? 'bg-blue-500' : getStatusColor(overallStatus)} ${
+            <div className={`w-3 h-3 rounded-full ${isInMaintenance ? 'bg-blue-500' : getStatusColor(overallStatus)} mr-2 ${
               !isInMaintenance && overallStatus !== 'normal' ? 'animate-pulse' : ''
             }`}></div>
+            {isInMaintenance && (
+              <span className="font-medium text-gray-700 text-xs">
+                Mantenimiento
+              </span>
+            )}
           </div>
           <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded">
             {racks.length} PDUs
