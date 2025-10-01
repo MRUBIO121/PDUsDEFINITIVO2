@@ -444,7 +444,42 @@ function App() {
   };
 
   const handleSendChainToMaintenance = async (chain: string, rackData?: any) => {
-    alert('La funcionalidad de mantenimiento por cadena completa no está disponible. Por favor, gestiona los racks individualmente desde la página de Mantenimiento.');
+    const reason = prompt(`¿Por qué se está enviando toda la chain "${chain}" a mantenimiento?`, 'Mantenimiento programado');
+
+    if (reason === null) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/maintenance/chain', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          chain,
+          rackData,
+          reason: reason || 'Mantenimiento programado',
+          startedBy: 'Usuario'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to send chain to maintenance');
+      }
+
+      alert(`Toda la chain "${chain}" ha sido enviada a mantenimiento (${data.data.racksAdded} racks).`);
+      refreshData();
+    } catch (error) {
+      console.error('Error sending chain to maintenance:', error);
+      alert(`Error al enviar chain a mantenimiento: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleCloseRackThresholds = () => {

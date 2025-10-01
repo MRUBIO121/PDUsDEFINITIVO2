@@ -1414,6 +1414,168 @@ app.post('/api/maintenance/rack', async (req, res) => {
   }
 });
 
+// Add all racks from a chain to maintenance (using Supabase)
+app.post('/api/maintenance/chain', async (req, res) => {
+  try {
+    const {
+      chain,
+      rackData,
+      reason = 'Scheduled maintenance',
+      startedBy = 'System'
+    } = req.body;
+
+    if (!chain) {
+      return res.status(400).json({
+        success: false,
+        message: 'chain is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Fetch current energy racks to get all racks in this chain
+    const nengResponse = await fetch(process.env.NENG_API_URL, {
+      headers: {
+        'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!nengResponse.ok) {
+      throw new Error(`Failed to fetch racks from NENG API: ${nengResponse.statusText}`);
+    }
+
+    const allRacks = await nengResponse.json();
+
+    // Filter racks that belong to this chain
+    const chainRacks = allRacks.filter(rack => rack.chain === chain);
+
+    if (chainRacks.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `No racks found for chain ${chain}`,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Prepare maintenance records for Supabase
+    const maintenanceRecords = chainRacks.map(rack => ({
+      rack_id: rack.rackId || `${rack.site}_${rack.dc}_${rack.name}`,
+      name: rack.name,
+      country: rack.country,
+      site: rack.site,
+      dc: rack.dc,
+      chain: rack.chain,
+      node: rack.node,
+      phase: rack.phase,
+      serial: rack.serial,
+      reason: reason,
+      started_by: startedBy
+    }));
+
+    // Insert into Supabase using fetch (since we don't have @supabase/supabase-js in backend)
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase configuration is missing');
+    }
+
+    let insertedCount = 0;
+
+    // Insert each rack individually (upsert to avoid duplicates)
+    for (const record of maintenanceRecords) {
+      const response = await fetch(`${supabaseUrl}/rest/v1/maintenance_racks`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=ignore-duplicates'
+        },
+        body: JSON.stringify(record)
+      });
+
+      if (response.ok || response.status === 201) {
+        insertedCount++;
+      }
+    }
+
+    logger.info(`Chain ${chain} added to maintenance (${insertedCount}/${chainRacks.length} racks)`);
+
+    res.json({
+      success: true,
+      message: `Chain ${chain} added to maintenance (${insertedCount} racks)`,
+      data: { chain, racksAdded: insertedCount, totalRacks: chainRacks.length },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error adding chain to maintenance:', error);
+    logger.error('Add chain to maintenance failed', { error: error.message, body: req.body });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to add chain to maintenance',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Remove rack(s) from maintenance by chain (using Supabase)
+app.delete('/api/maintenance/chain/:chain', async (req, res) => {
+  try {
+    const { chain } = req.params;
+
+    if (!chain) {
+      return res.status(400).json({
+        success: false,
+        message: 'chain parameter is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase configuration is missing');
+    }
+
+    // Delete all racks with this chain from Supabase
+    const response = await fetch(`${supabaseUrl}/rest/v1/maintenance_racks?chain=eq.${encodeURIComponent(chain)}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete chain from Supabase: ${response.statusText}`);
+    }
+
+    logger.info(`Chain ${chain} removed from maintenance`);
+
+    res.json({
+      success: true,
+      message: `Chain ${chain} removed from maintenance`,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error removing chain from maintenance:', error);
+    logger.error('Remove from maintenance failed', { error: error.message, chain: req.params.chain });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove chain from maintenance',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

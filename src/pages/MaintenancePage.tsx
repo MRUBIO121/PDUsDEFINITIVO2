@@ -68,8 +68,40 @@ export default function MaintenancePage() {
     return () => clearInterval(interval);
   }, []);
 
+  const [removingChain, setRemovingChain] = useState<string | null>(null);
+
   const handleRemoveChain = async (chain: string) => {
-    alert('La funcionalidad de mantenimiento por cadena completa no está disponible. Por favor, gestiona los racks individualmente.');
+    if (!confirm(`¿Seguro que quieres sacar la chain "${chain}" de mantenimiento?`)) {
+      return;
+    }
+
+    try {
+      setRemovingChain(chain);
+
+      const response = await fetch(`/api/maintenance/chain/${encodeURIComponent(chain)}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to remove chain from maintenance');
+      }
+
+      await fetchMaintenanceRacks();
+    } catch (err) {
+      console.error('Error removing chain from maintenance:', err);
+      alert(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setRemovingChain(null);
+    }
   };
 
   const groupedByChain: GroupedByChain = maintenanceRacks.reduce((acc, rack) => {
@@ -195,7 +227,23 @@ export default function MaintenancePage() {
                         )}
                       </div>
 
-                      {/* Funcionalidad de mantenimiento por cadena completa deshabilitada */}
+                      <button
+                        onClick={() => handleRemoveChain(chain)}
+                        disabled={removingChain === chain}
+                        className="ml-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {removingChain === chain ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                            Procesando...
+                          </>
+                        ) : (
+                          <>
+                            <Wrench className="w-4 h-4" />
+                            Finalizar Mantenimiento
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
 
