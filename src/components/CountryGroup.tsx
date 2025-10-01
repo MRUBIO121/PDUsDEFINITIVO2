@@ -74,6 +74,7 @@ export default function CountryGroup({
       case 'normal': return 'bg-green-500';
       case 'warning': return 'bg-yellow-500';
       case 'critical': return 'bg-red-500';
+      case 'maintenance': return 'bg-blue-500';
       default: return 'bg-gray-500';
     }
   };
@@ -83,6 +84,7 @@ export default function CountryGroup({
       case 'normal': return 'Normal';
       case 'warning': return 'Advertencia';
       case 'critical': return 'Crítico';
+      case 'maintenance': return 'Mantenimiento';
       default: return 'Desconocido';
     }
   };
@@ -125,12 +127,27 @@ export default function CountryGroup({
           {/* Country Status Summary */}
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2">
-              {['critical', 'warning', 'normal'].map(status => {
-                const count = Object.values(siteGroups).reduce((total, dcGroups) => 
-                  total + Object.values(dcGroups).flat()
-                    .filter(rackGroup => rackGroup.some(rack => rack.status === status)).length, 0
-                );
-                if (count === 0 || (activeView === 'alertas' && status === 'normal')) return null;
+              {['critical', 'warning', 'normal', 'maintenance'].map(status => {
+                let count = 0;
+
+                if (status === 'maintenance') {
+                  // Count maintenance racks
+                  count = Object.values(siteGroups).reduce((total, dcGroups) =>
+                    total + Object.values(dcGroups).flat()
+                      .filter(rackGroup => {
+                        const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
+                        return maintenanceRacks.has(rackId);
+                      }).length, 0
+                  );
+                } else {
+                  // Count other statuses
+                  count = Object.values(siteGroups).reduce((total, dcGroups) =>
+                    total + Object.values(dcGroups).flat()
+                      .filter(rackGroup => rackGroup.some(rack => rack.status === status)).length, 0
+                  );
+                }
+
+                if (count === 0 || (activeView === 'alertas' && (status === 'normal' || status === 'maintenance'))) return null;
                 
                 // Critical and Warning are buttons, Normal is just a display
                 if (status === 'critical' || status === 'warning') {
@@ -175,12 +192,10 @@ export default function CountryGroup({
                     </button>
                   );
                 }
-                
+
                 return (
                   <div key={status} className="flex items-center space-x-1 bg-white rounded-full border px-3 py-1">
-                    <div className={`w-2 h-2 rounded-full ${getStatusColor(status)} ${
-                      status !== 'normal' ? 'animate-pulse' : ''
-                    }`}></div>
+                    <div className={`w-2 h-2 rounded-full ${getStatusColor(status)}`}></div>
                     <span className="font-medium text-gray-700 text-xs">
                       {count}
                     </span>
