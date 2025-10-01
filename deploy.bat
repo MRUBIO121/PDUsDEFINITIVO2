@@ -1,95 +1,70 @@
 @echo off
-echo Iniciando despliegue de la aplicacion Energy Monitoring System...
+echo ================================================================
+echo   Energy Monitoring System - Despliegue en Produccion
+echo ================================================================
 echo.
 
-echo [0/7] Verificando herramientas necesarias...
+echo [1/4] Verificando herramientas necesarias...
 where npm >nul 2>nul
 if %errorlevel% neq 0 (
-    echo ERROR: npm no se encuentra en el PATH del sistema
+    echo ERROR: npm no esta instalado
     echo Instala Node.js desde https://nodejs.org/
     pause
-    exit /b %errorlevel%
+    exit /b 1
 )
-echo EXITO: npm encontrado en el sistema
-echo.
 
 where pm2 >nul 2>nul
 if %errorlevel% neq 0 (
-    echo ERROR: pm2 no se encuentra en el PATH del sistema
+    echo ERROR: pm2 no esta instalado
     echo Instala PM2 con: npm install -g pm2
     pause
-    exit /b %errorlevel%
+    exit /b 1
 )
-echo EXITO: pm2 encontrado en el sistema
+echo EXITO: Herramientas verificadas
 echo.
 
-echo [1/6] Instalando dependencias del frontend...
-call npm install
+echo [2/4] Instalando dependencias...
+call npm install --production
 if %errorlevel% neq 0 (
-    echo ERROR: Fallo al instalar dependencias del frontend
+    echo ERROR: Fallo al instalar dependencias
     pause
     exit /b %errorlevel%
 )
-echo EXITO: Dependencias del frontend instaladas correctamente
+echo EXITO: Dependencias instaladas
 echo.
 
-echo [2/6] Cambiando al directorio backend...
-cd .\backend\
-if %errorlevel% neq 0 (
-    echo ERROR: No se pudo acceder al directorio backend
-    pause
-    exit /b %errorlevel%
-)
-echo EXITO: Cambio al directorio backend completado
-echo.
-
-echo [3/6] Instalando dependencias del backend...
-call npm install
-if %errorlevel% neq 0 (
-    echo ERROR: Fallo al instalar dependencias del backend
-    pause
-    exit /b %errorlevel%
-)
-echo EXITO: Dependencias del backend instaladas correctamente
-echo.
-
-echo [4/6] Regresando al directorio raiz...
-cd ..
-if %errorlevel% neq 0 (
-    echo ERROR: No se pudo regresar al directorio raiz
-    pause
-    exit /b %errorlevel%
-)
-echo EXITO: Regreso al directorio raiz completado
-echo.
-
-echo [5/6] Construyendo la aplicacion...
+echo [3/4] Construyendo la aplicacion...
 call npm run build
 if %errorlevel% neq 0 (
     echo ERROR: Fallo al construir la aplicacion
     pause
     exit /b %errorlevel%
 )
-echo EXITO: Aplicacion construida correctamente
+echo EXITO: Aplicacion construida
 echo.
 
-echo [6/6] Iniciando el servicio con PM2...
-call pm2 start .\ecosystem.config.cjs
+echo [4/4] Desplegando con PM2...
+call pm2 delete energy-monitoring-api 2>nul
+call pm2 start ecosystem.config.cjs --env production
 if %errorlevel% neq 0 (
-    echo ERROR: Fallo al iniciar el servicio con PM2
+    echo ERROR: Fallo al desplegar con PM2
     pause
     exit /b %errorlevel%
 )
-echo EXITO: Servicio iniciado correctamente con PM2
+call pm2 save
+echo EXITO: Aplicacion desplegada
 echo.
 
 echo ================================================================
 echo          DESPLIEGUE COMPLETADO EXITOSAMENTE
 echo ================================================================
-echo La aplicacion Energy Monitoring System esta ahora ejecutandose.
-echo Mostrando logs en tiempo real...
 echo.
-echo Presiona Ctrl+C para detener la visualizacion de logs.
+echo La aplicacion esta ejecutandose en modo produccion
 echo.
-
-rem call pm2 logs energy-monitoring-api
+echo Comandos utiles:
+echo   pm2 status              - Ver estado de la aplicacion
+echo   pm2 logs                - Ver logs en tiempo real
+echo   pm2 restart energy-monitoring-api - Reiniciar aplicacion
+echo   pm2 stop energy-monitoring-api    - Detener aplicacion
+echo.
+pause
