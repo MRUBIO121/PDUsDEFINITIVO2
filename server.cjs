@@ -1416,6 +1416,7 @@ app.post('/api/maintenance/rack', async (req, res) => {
 
 // Add all racks from a chain to maintenance
 app.post('/api/maintenance/chain', async (req, res) => {
+  let pool;
   try {
     const {
       chain,
@@ -1432,75 +1433,89 @@ app.post('/api/maintenance/chain', async (req, res) => {
       });
     }
 
-    const pool = await sql.connect(sqlConfig);
+    pool = await sql.connect(sqlConfig);
 
-    // Get all racks from this chain from the live API
-    try {
-      const energyResponse = await fetch(`http://localhost:${PORT}/api/racks/energy`);
-      if (!energyResponse.ok) {
-        throw new Error('Failed to fetch rack data');
-      }
+    // Get all racks from this chain from pdu_status table
+    const chainRacksResult = await pool.request()
+      .input('chain', sql.NVarChar, chain)
+      .query(`
+        SELECT DISTINCT
+          id,
+          rack_id,
+          name,
+          country,
+          site,
+          dc,
+          phase,
+          chain,
+          node,
+          serial
+        FROM pdu_status
+        WHERE chain = @chain
+      `);
 
-      const allRacks = await energyResponse.json();
-      const chainRacks = allRacks.filter(r => r.chain === chain);
+    const chainRacks = chainRacksResult.recordset;
 
-      if (chainRacks.length === 0) {
-        await pool.close();
-        return res.status(404).json({
-          success: false,
-          message: `No racks found for chain ${chain}`,
-          timestamp: new Date().toISOString()
-        });
-      }
-
-      // Insert all racks from this chain
-      let insertedCount = 0;
-      for (const rack of chainRacks) {
-        const result = await pool.request()
-          .input('rack_id', sql.NVarChar, rack.rackId || rack.id)
-          .input('chain', sql.NVarChar, chain)
-          .input('pdu_id', sql.NVarChar, rack.id)
-          .input('name', sql.NVarChar, rack.name || rack.rackId || rack.id)
-          .input('country', sql.NVarChar, rack.country || 'Unknown')
-          .input('site', sql.NVarChar, rack.site || 'Unknown')
-          .input('dc', sql.NVarChar, rack.dc || 'Unknown')
-          .input('phase', sql.NVarChar, rack.phase || 'Unknown')
-          .input('node', sql.NVarChar, rack.node || 'Unknown')
-          .input('serial', sql.NVarChar, rack.serial || 'Unknown')
-          .input('reason', sql.NVarChar, reason)
-          .input('started_by', sql.NVarChar, startedBy)
-          .query(`
-            IF NOT EXISTS (SELECT 1 FROM maintenance_racks WHERE rack_id = @rack_id)
-            BEGIN
-              INSERT INTO maintenance_racks
-              (rack_id, chain, pdu_id, name, country, site, dc, phase, node, serial, reason, started_by)
-              VALUES
-              (@rack_id, @chain, @pdu_id, @name, @country, @site, @dc, @phase, @node, @serial, @reason, @started_by)
-            END
-          `);
-
-        if (result.rowsAffected[0] > 0) {
-          insertedCount++;
-        }
-      }
-
+    if (chainRacks.length === 0) {
       await pool.close();
-
-      res.json({
-        success: true,
-        message: `Chain ${chain} added to maintenance (${insertedCount} racks)`,
-        data: { chain, racksAdded: insertedCount, totalRacks: chainRacks.length },
+      return res.status(404).json({
+        success: false,
+        message: `No racks found for chain ${chain}`,
         timestamp: new Date().toISOString()
       });
-
-    } catch (apiError) {
-      await pool.close();
-      throw new Error(`Failed to fetch rack data: ${apiError.message}`);
     }
+
+    // Insert all racks from this chain
+    let insertedCount = 0;
+    for (const rack of chainRacks) {
+      const result = await pool.request()
+        .input('rack_id', sql.NVarChar, rack.rack_id || rack.id)
+        .input('chain', sql.NVarChar, chain)
+        .input('pdu_id', sql.NVarChar, rack.id)
+        .input('name', sql.NVarChar, rack.name || rack.rack_id || rack.id)
+        .input('country', sql.NVarChar, rack.country || 'Unknown')
+        .input('site', sql.NVarChar, rack.site || 'Unknown')
+        .input('dc', sql.NVarChar, rack.dc || 'Unknown')
+        .input('phase', sql.NVarChar, rack.phase || 'Unknown')
+        .input('node', sql.NVarChar, rack.node || 'Unknown')
+        .input('serial', sql.NVarChar, rack.serial || 'Unknown')
+        .input('reason', sql.NVarChar, reason)
+        .input('started_by', sql.NVarChar, startedBy)
+        .query(`
+          IF NOT EXISTS (SELECT 1 FROM maintenance_racks WHERE rack_id = @rack_id)
+          BEGIN
+            INSERT INTO maintenance_racks
+            (rack_id, chain, pdu_id, name, country, site, dc, phase, node, serial, reason, started_by)
+            VALUES
+            (@rack_id, @chain, @pdu_id, @name, @country, @site, @dc, @phase, @node, @serial, @reason, @started_by)
+          END
+        `);
+
+      if (result.rowsAffected[0] > 0) {
+        insertedCount++;
+      }
+    }
+
+    await pool.close();
+
+    res.json({
+      success: true,
+      message: `Chain ${chain} added to maintenance (${insertedCount} racks)`,
+      data: { chain, racksAdded: insertedCount, totalRacks: chainRacks.length },
+      timestamp: new Date().toISOString()
+    });
 
   } catch (error) {
     console.error('❌ Error adding chain to maintenance:', error);
     logger.error('Add chain to maintenance failed', { error: error.message, body: req.body });
+
+    if (pool) {
+      try {
+        await pool.close();
+      } catch (closeError) {
+        console.error('Error closing pool:', closeError);
+      }
+    }
 
     res.status(500).json({
       success: false,
