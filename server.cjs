@@ -1306,7 +1306,12 @@ app.get('/api/maintenance', async (req, res) => {
 // Add rack(s) to maintenance by chain
 app.post('/api/maintenance/chain', async (req, res) => {
   try {
-    const { rackId, reason = 'Scheduled maintenance', startedBy = 'System' } = req.body;
+    const {
+      rackId,
+      rackData,
+      reason = 'Scheduled maintenance',
+      startedBy = 'System'
+    } = req.body;
 
     if (!rackId) {
       return res.status(400).json({
@@ -1316,38 +1321,21 @@ app.post('/api/maintenance/chain', async (req, res) => {
       });
     }
 
-    // Adding rack to maintenance
-
     const pool = await sql.connect(sqlConfig);
 
-    // First, try to get rack data from the live API
-    let rack = null;
-    let chain = null;
+    // Use rack data from request body if provided, otherwise try to find it
+    let rack = rackData;
+    let chain = rackData?.chain;
 
-    try {
-      const energyResponse = await fetch(ENERGY_MONITORING_API_URL);
-      if (energyResponse.ok) {
-        const data = await energyResponse.json();
-        // Find the rack in the live data
-        rack = data.find(r => r.id === rackId || r.name === rackId);
-        if (rack) {
-          chain = rack.chain;
-          // Found rack in live data
-        }
-      }
-    } catch (apiError) {
-      // Trying alerts table
-    }
-
-    // If not found in live data, try to get from alerts table
+    // If rack data not provided, try to find it in alerts table
     if (!rack) {
-      const rackData = await pool.request()
+      const rackDbData = await pool.request()
         .input('rack_id', sql.NVarChar, rackId)
         .query(`
           SELECT TOP 1 * FROM (
             SELECT
-              id as pdu_id,
-              id as rack_id,
+              pdu_id,
+              rack_id,
               name,
               country,
               site,
@@ -1361,18 +1349,17 @@ app.post('/api/maintenance/chain', async (req, res) => {
           ) AS temp
         `);
 
-      if (rackData.recordset.length === 0) {
+      if (rackDbData.recordset.length === 0) {
         await pool.close();
         return res.status(404).json({
           success: false,
-          message: 'Rack not found in live data or alerts.',
+          message: 'Rack not found. Please provide rack data in request body.',
           timestamp: new Date().toISOString()
         });
       }
 
-      rack = rackData.recordset[0];
+      rack = rackDbData.recordset[0];
       chain = rack.chain;
-      // Found rack in alerts table
     }
 
     if (!chain) {
@@ -1383,8 +1370,6 @@ app.post('/api/maintenance/chain', async (req, res) => {
         timestamp: new Date().toISOString()
       });
     }
-
-    // Chain identified, adding to maintenance
 
     const insertResult = await pool.request()
       .input('rack_id', sql.NVarChar, rackId)

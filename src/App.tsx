@@ -394,7 +394,7 @@ function App() {
     setShowRackThresholdsModal(true);
   };
 
-  const handleSendToMaintenance = async (rackId: string, chain: string, rackName: string) => {
+  const handleSendToMaintenance = async (rackId: string, chain: string, rackName: string, rackData?: any) => {
     const reason = prompt(`¿Por qué se está enviando "${rackName}" (chain: ${chain}) a mantenimiento?`, 'Mantenimiento programado');
 
     if (reason === null) {
@@ -409,6 +409,7 @@ function App() {
         },
         body: JSON.stringify({
           rackId,
+          rackData,
           reason: reason || 'Mantenimiento programado',
           startedBy: 'Usuario'
         })

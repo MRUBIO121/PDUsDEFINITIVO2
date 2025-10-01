@@ -182,7 +182,19 @@ export default function CombinedRackCard({
                         onSendToMaintenance(
                           commonInfo.rackId || commonInfo.id,
                           commonInfo.chain || 'Unknown',
-                          commonInfo.name
+                          commonInfo.name,
+                          {
+                            id: commonInfo.id,
+                            rackId: commonInfo.rackId,
+                            name: commonInfo.name,
+                            country: commonInfo.country,
+                            site: commonInfo.site,
+                            dc: commonInfo.dc,
+                            phase: commonInfo.phase,
+                            chain: commonInfo.chain,
+                            node: commonInfo.node,
+                            serial: commonInfo.serial
+                          }
                         );
                       }}
                       className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-amber-50 transition-colors last:rounded-b-lg border-t border-gray-100"
