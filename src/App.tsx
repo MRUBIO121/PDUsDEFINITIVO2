@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { Activity, AlertTriangle, Settings, BarChart3, Zap, ZapOff, Download, RefreshCw } from 'lucide-react';
+import { Activity, AlertTriangle, Settings, BarChart3, Zap, ZapOff, Download, RefreshCw, Wrench } from 'lucide-react';
 import CountryGroup from './components/CountryGroup';
 import ThresholdManager from './components/ThresholdManager';
 import RackThresholdManager from './components/RackThresholdManager';
+import MaintenancePage from './pages/MaintenancePage';
 import { useRackData } from './hooks/useRackData';
 import { useThresholds } from './hooks/useThresholds';
 import { getThresholdValue } from './utils/thresholdUtils';
@@ -18,7 +19,7 @@ function App() {
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [showAllDcs, setShowAllDcs] = useState(false);
-  const [activeView, setActiveView] = useState<'principal' | 'alertas'>('principal');
+  const [activeView, setActiveView] = useState<'principal' | 'alertas' | 'mantenimiento'>('principal');
   
   const {
     racks,
@@ -393,6 +394,44 @@ function App() {
     setShowRackThresholdsModal(true);
   };
 
+  const handleSendToMaintenance = async (rackId: string, chain: string, rackName: string) => {
+    const reason = prompt(`¿Por qué se está enviando "${rackName}" (chain: ${chain}) a mantenimiento?`, 'Mantenimiento programado');
+
+    if (reason === null) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/maintenance/chain', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          rackId,
+          reason: reason || 'Mantenimiento programado',
+          startedBy: 'Usuario'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to send rack to maintenance');
+      }
+
+      alert(`El rack "${rackName}" y su chain "${chain}" han sido enviados a mantenimiento.`);
+      refreshData();
+    } catch (error) {
+      console.error('Error sending to maintenance:', error);
+      alert(`Error al enviar a mantenimiento: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const handleCloseRackThresholds = () => {
     setShowRackThresholdsModal(false);
     setSelectedRackId('');
@@ -703,6 +742,17 @@ function App() {
                       }`}
                     >
                       Alertas
+                    </button>
+                    <button
+                      onClick={() => setActiveView('mantenimiento')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                        activeView === 'mantenimiento'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-gray-700 hover:text-gray-900 hover:bg-white'
+                      }`}
+                    >
+                      <Wrench className="w-4 h-4" />
+                      Mantenimiento
                     </button>
                   </div>
                 </div>
@@ -1091,43 +1141,50 @@ function App() {
               </div>
             )}
             {/* Main Content */}
-            {!showRackThresholdsModal && (
-              <div className="space-y-6">
-              {Object.entries(groupedRacks).map(([country, siteGroups]) => (
-                <CountryGroup
-                  key={country}
-                  country={country}
-                  siteGroups={siteGroups}
-                  originalRackGroups={originalRackGroups}
-                  activeView={activeView}
-                  isExpanded={expandedCountryIds.has(country)}
-                  onToggleExpand={toggleCountryExpansion}
-                  expandedSiteIds={expandedSiteIds}
-                  toggleSiteExpansion={toggleSiteExpansion}
-                  expandedDcIds={expandedDcIds}
-                  toggleDcExpansion={toggleDcExpansion}
-                  getThresholdValue={getThresholdValueWrapper}
-                  getMetricStatusColor={getMetricStatusColor}
-                  getAmperageStatusColor={getAmperageStatusColorWrapper}
-                  activeStatusFilter={activeStatusFilter}
-                  onStatusFilterChange={setActiveStatusFilter}
-                  onConfigureThresholds={handleConfigureThresholds}
-                />
-              ))}
-              </div>
-            )}
+            {activeView === 'mantenimiento' ? (
+              <MaintenancePage />
+            ) : (
+              <>
+                {!showRackThresholdsModal && (
+                  <div className="space-y-6">
+                  {Object.entries(groupedRacks).map(([country, siteGroups]) => (
+                    <CountryGroup
+                      key={country}
+                      country={country}
+                      siteGroups={siteGroups}
+                      originalRackGroups={originalRackGroups}
+                      activeView={activeView}
+                      isExpanded={expandedCountryIds.has(country)}
+                      onToggleExpand={toggleCountryExpansion}
+                      expandedSiteIds={expandedSiteIds}
+                      toggleSiteExpansion={toggleSiteExpansion}
+                      expandedDcIds={expandedDcIds}
+                      toggleDcExpansion={toggleDcExpansion}
+                      getThresholdValue={getThresholdValueWrapper}
+                      getMetricStatusColor={getMetricStatusColor}
+                      getAmperageStatusColor={getAmperageStatusColorWrapper}
+                      activeStatusFilter={activeStatusFilter}
+                      onStatusFilterChange={setActiveStatusFilter}
+                      onConfigureThresholds={handleConfigureThresholds}
+                      onSendToMaintenance={handleSendToMaintenance}
+                    />
+                  ))}
+                  </div>
+                )}
 
-            {/* No Data Message */}
-            {Object.keys(groupedRacks).length === 0 && !showRackThresholdsModal && (
-              <div className="text-center py-12">
-                <Activity className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">
-                  No hay datos de racks disponibles
-                </h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Los datos se cargarán automáticamente cuando estén disponibles.
-                </p>
-              </div>
+                {/* No Data Message */}
+                {Object.keys(groupedRacks).length === 0 && !showRackThresholdsModal && (
+                  <div className="text-center py-12">
+                    <Activity className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">
+                      No hay datos de racks disponibles
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Los datos se cargarán automáticamente cuando estén disponibles.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

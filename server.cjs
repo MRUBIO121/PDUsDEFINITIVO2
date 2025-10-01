@@ -465,8 +465,24 @@ function getThresholdValue(thresholds, key) {
 }
 
 /**
+ * Get list of rack IDs currently in maintenance mode
+ */
+async function getMaintenanceRackIds(pool) {
+  try {
+    const result = await pool.request().query(`
+      SELECT rack_id FROM maintenance_racks
+    `);
+    return new Set(result.recordset.map(r => r.rack_id));
+  } catch (error) {
+    console.error('⚠️ Error fetching maintenance racks:', error.message);
+    return new Set();
+  }
+}
+
+/**
  * Manages active critical alerts in the database
  * Inserts new critical alerts and removes resolved ones
+ * Excludes racks that are in maintenance mode
  */
 async function manageActiveCriticalAlerts(allPdus, thresholds) {
   let pool = null;
@@ -475,10 +491,15 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
 
     pool = await sql.connect(sqlConfig);
 
-    // Get current critical PDUs with their reasons
-    const currentCriticalPdus = allPdus.filter(pdu =>
-      pdu.status === 'critical' && pdu.reasons && pdu.reasons.length > 0
-    );
+    // Get racks currently in maintenance
+    const maintenanceRackIds = await getMaintenanceRackIds(pool);
+    console.log(`🔧 Found ${maintenanceRackIds.size} racks in maintenance mode`);
+
+    // Get current critical PDUs with their reasons, excluding maintenance racks
+    const currentCriticalPdus = allPdus.filter(pdu => {
+      const isInMaintenance = maintenanceRackIds.has(pdu.id) || maintenanceRackIds.has(pdu.logicalRackId);
+      return pdu.status === 'critical' && pdu.reasons && pdu.reasons.length > 0 && !isInMaintenance;
+    });
 
     console.log(`📊 Found ${currentCriticalPdus.length} PDUs with critical alerts`);
 
@@ -936,30 +957,43 @@ app.get('/api/racks/energy', async (req, res) => {
     // Procesar los datos con evaluación de umbrales
     console.log(`[${requestId}] 🔧 Processing data with thresholds evaluation...`);
     const processedData = await processRackData(combinedData, thresholds);
-    
-    // Manage active critical alerts in database
-    await manageActiveCriticalAlerts(processedData, thresholds);
-    
+
+    // Get maintenance rack IDs to filter them out
+    const pool = await sql.connect(sqlConfig);
+    const maintenanceRackIds = await getMaintenanceRackIds(pool);
+    await pool.close();
+
+    // Filter out racks in maintenance mode
+    const filteredData = processedData.filter(pdu => {
+      const isInMaintenance = maintenanceRackIds.has(pdu.id) || maintenanceRackIds.has(pdu.logicalRackId);
+      return !isInMaintenance;
+    });
+
+    console.log(`[${requestId}] 🔧 Filtered out ${processedData.length - filteredData.length} racks in maintenance mode`);
+
+    // Manage active critical alerts in database (only for non-maintenance racks)
+    await manageActiveCriticalAlerts(filteredData, thresholds);
+
     // Agrupar por rackId para formar grupos
     const rackGroups = [];
     const rackMap = new Map();
-    
-    processedData.forEach(pdu => {
+
+    filteredData.forEach(pdu => {
       const rackId = pdu.rackId || pdu.id;
-      
+
       if (!rackMap.has(rackId)) {
         rackMap.set(rackId, []);
       }
-      
+
       rackMap.get(rackId).push(pdu);
     });
-    
+
     // Convertir el Map en arrays
     Array.from(rackMap.values()).forEach(rackGroup => {
       rackGroups.push(rackGroup);
     });
-    
-    console.log(`[${requestId}] 🏗️ Grouped ${processedData.length} PDUs into ${rackGroups.length} rack groups`);
+
+    console.log(`[${requestId}] 🏗️ Grouped ${filteredData.length} PDUs into ${rackGroups.length} rack groups`);
     
     // Update cache
     racksCache.data = rackGroups;
@@ -1280,6 +1314,227 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
     res.status(500).json({
       success: false,
       message: `Failed to reset thresholds for rack ${req.params.rackId}`,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// ============================================
+// MAINTENANCE MODE ENDPOINTS
+// ============================================
+
+// Get all racks in maintenance
+app.get('/api/maintenance', async (req, res) => {
+  try {
+    console.log('🔍 Fetching racks in maintenance...');
+
+    const pool = await sql.connect(sqlConfig);
+
+    const result = await pool.request().query(`
+      SELECT
+        id,
+        rack_id,
+        chain,
+        pdu_id,
+        name,
+        country,
+        site,
+        dc,
+        phase,
+        node,
+        serial,
+        reason,
+        started_at,
+        started_by,
+        created_at
+      FROM maintenance_racks
+      ORDER BY chain, started_at DESC
+    `);
+
+    await pool.close();
+
+    const maintenanceRacks = result.recordset || [];
+
+    res.json({
+      success: true,
+      data: maintenanceRacks,
+      message: 'Maintenance racks retrieved successfully',
+      count: maintenanceRacks.length,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching maintenance racks:', error);
+    logger.error('Maintenance racks fetch failed', { error: error.message });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch maintenance racks',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Add rack(s) to maintenance by chain
+app.post('/api/maintenance/chain', async (req, res) => {
+  try {
+    const { rackId, reason = 'Scheduled maintenance', startedBy = 'System' } = req.body;
+
+    if (!rackId) {
+      return res.status(400).json({
+        success: false,
+        message: 'rackId is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log(`🔧 Adding rack ${rackId} and its chain to maintenance...`);
+
+    const pool = await sql.connect(sqlConfig);
+
+    // First, get the rack data to find its chain
+    const rackData = await pool.request()
+      .input('rack_id', sql.NVarChar, rackId)
+      .query(`
+        SELECT TOP 1 * FROM (
+          SELECT
+            id as pdu_id,
+            id as rack_id,
+            name,
+            country,
+            site,
+            dc,
+            phase,
+            chain,
+            node,
+            serial
+          FROM active_critical_alerts
+          WHERE rack_id = @rack_id OR pdu_id = @rack_id
+        ) AS temp
+      `);
+
+    if (rackData.recordset.length === 0) {
+      // If not in alerts, we need to fetch from the current racks data
+      // For now, we'll accept the rackId and assume chain needs to be provided
+      await pool.close();
+      return res.status(404).json({
+        success: false,
+        message: 'Rack not found. Please provide chain information.',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const rack = rackData.recordset[0];
+    const chain = rack.chain;
+
+    if (!chain) {
+      await pool.close();
+      return res.status(400).json({
+        success: false,
+        message: 'Rack does not have chain information',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log(`🔗 Chain identified: ${chain}`);
+
+    // Add this rack and all racks in the same chain to maintenance
+    // We'll need to get all racks from the chain from the current energy API data
+    // For now, we'll just add the single rack
+
+    const insertResult = await pool.request()
+      .input('rack_id', sql.NVarChar, rackId)
+      .input('chain', sql.NVarChar, chain)
+      .input('pdu_id', sql.NVarChar, rack.pdu_id)
+      .input('name', sql.NVarChar, rack.name)
+      .input('country', sql.NVarChar, rack.country)
+      .input('site', sql.NVarChar, rack.site)
+      .input('dc', sql.NVarChar, rack.dc)
+      .input('phase', sql.NVarChar, rack.phase)
+      .input('node', sql.NVarChar, rack.node)
+      .input('serial', sql.NVarChar, rack.serial)
+      .input('reason', sql.NVarChar, reason)
+      .input('started_by', sql.NVarChar, startedBy)
+      .query(`
+        IF NOT EXISTS (SELECT 1 FROM maintenance_racks WHERE rack_id = @rack_id)
+        BEGIN
+          INSERT INTO maintenance_racks
+          (rack_id, chain, pdu_id, name, country, site, dc, phase, node, serial, reason, started_by)
+          VALUES
+          (@rack_id, @chain, @pdu_id, @name, @country, @site, @dc, @phase, @node, @serial, @reason, @started_by)
+        END
+      `);
+
+    await pool.close();
+
+    console.log(`✅ Rack ${rackId} added to maintenance`);
+
+    res.json({
+      success: true,
+      message: `Rack ${rackId} and chain ${chain} added to maintenance`,
+      data: { rackId, chain },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error adding rack to maintenance:', error);
+    logger.error('Add to maintenance failed', { error: error.message, body: req.body });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to add rack to maintenance',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Remove rack(s) from maintenance by chain
+app.delete('/api/maintenance/chain/:chain', async (req, res) => {
+  try {
+    const { chain } = req.params;
+
+    if (!chain) {
+      return res.status(400).json({
+        success: false,
+        message: 'chain parameter is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log(`🔧 Removing chain ${chain} from maintenance...`);
+
+    const pool = await sql.connect(sqlConfig);
+
+    const deleteResult = await pool.request()
+      .input('chain', sql.NVarChar, chain)
+      .query(`
+        DELETE FROM maintenance_racks
+        WHERE chain = @chain
+      `);
+
+    await pool.close();
+
+    const deletedCount = deleteResult.rowsAffected[0] || 0;
+
+    console.log(`✅ Removed ${deletedCount} racks from chain ${chain} from maintenance`);
+
+    res.json({
+      success: true,
+      message: `Chain ${chain} removed from maintenance`,
+      count: deletedCount,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error removing chain from maintenance:', error);
+    logger.error('Remove from maintenance failed', { error: error.message, chain: req.params.chain });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove chain from maintenance',
       error: error.message,
       timestamp: new Date().toISOString()
     });

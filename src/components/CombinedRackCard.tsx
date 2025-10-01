@@ -1,5 +1,5 @@
-import React from 'react';
-import { Server, Settings } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Server, Settings, Wrench, MoreVertical } from 'lucide-react';
 import { RackData } from '../types';
 
 interface CombinedRackCardProps {
@@ -7,24 +7,44 @@ interface CombinedRackCardProps {
   overallStatus: 'normal' | 'warning' | 'critical';
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
-    value: number, 
-    criticalLow: number, 
-    criticalHigh: number, 
-    warningLow: number, 
+    value: number,
+    criticalLow: number,
+    criticalHigh: number,
+    warningLow: number,
     warningHigh: number
   ) => string;
   getAmperageStatusColor: (rack: RackData) => string;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
+  onSendToMaintenance?: (rackId: string, chain: string, rackName: string) => void;
 }
 
-export default function CombinedRackCard({ 
-  racks, 
+export default function CombinedRackCard({
+  racks,
   overallStatus,
-  getThresholdValue, 
-  getMetricStatusColor, 
+  getThresholdValue,
+  getMetricStatusColor,
   getAmperageStatusColor,
-  onConfigureThresholds
+  onConfigureThresholds,
+  onSendToMaintenance
 }: CombinedRackCardProps) {
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showMenu]);
   // 🔍 DEBUG: Log rack data received by component
   React.useEffect(() => {
     const rackId = racks[0]?.rackId || racks[0]?.id;
@@ -131,14 +151,49 @@ export default function CombinedRackCard({
           <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded">
             {racks.length} PDUs
           </span>
-          {onConfigureThresholds && (
-            <button
-              onClick={() => onConfigureThresholds(commonInfo.rackId || commonInfo.id, commonInfo.name)}
-              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-              title={`Configurar umbrales específicos para ${commonInfo.name}`}
-            >
-              <Settings className="h-4 w-4" />
-            </button>
+          {(onConfigureThresholds || onSendToMaintenance) && (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                title="Opciones"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </button>
+
+              {showMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  {onConfigureThresholds && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onConfigureThresholds(commonInfo.rackId || commonInfo.id, commonInfo.name);
+                      }}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-blue-50 transition-colors first:rounded-t-lg"
+                    >
+                      <Settings className="h-4 w-4 text-blue-600" />
+                      <span>Configurar Umbrales</span>
+                    </button>
+                  )}
+                  {onSendToMaintenance && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onSendToMaintenance(
+                          commonInfo.rackId || commonInfo.id,
+                          commonInfo.chain || 'Unknown',
+                          commonInfo.name
+                        );
+                      }}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-amber-50 transition-colors last:rounded-b-lg border-t border-gray-100"
+                    >
+                      <Wrench className="h-4 w-4 text-amber-600" />
+                      <span>Enviar a Mantenimiento</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
 

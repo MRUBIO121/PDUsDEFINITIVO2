@@ -7,7 +7,7 @@ interface SiteGroupProps {
   site: string;
   dcGroups: { [dc: string]: RackData[][] };
   originalRackGroups: RackData[][];
-  activeView: 'principal' | 'alertas';
+  activeView: 'principal' | 'alertas' | 'mantenimiento';
   country: string;
   isExpanded: boolean;
   onToggleExpand: (site: string) => void;
@@ -15,16 +15,17 @@ interface SiteGroupProps {
   toggleDcExpansion: (dc: string) => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
-    value: number, 
-    criticalLow: number, 
-    criticalHigh: number, 
-    warningLow: number, 
+    value: number,
+    criticalLow: number,
+    criticalHigh: number,
+    warningLow: number,
     warningHigh: number
   ) => string;
   getAmperageStatusColor: (rack: RackData) => string;
   activeStatusFilter: 'all' | 'critical' | 'warning';
   onStatusFilterChange: (filter: 'all' | 'critical' | 'warning') => void;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
+  onSendToMaintenance?: (rackId: string, chain: string, rackName: string) => void;
 }
 
 export default function SiteGroup({ 
@@ -42,7 +43,8 @@ export default function SiteGroup({
   getAmperageStatusColor,
   activeStatusFilter,
   onStatusFilterChange,
-  onConfigureThresholds
+  onConfigureThresholds,
+  onSendToMaintenance
 }: SiteGroupProps) {
 
   // Calculate total racks for this site from original data (unfiltered)
@@ -209,6 +211,7 @@ export default function SiteGroup({
               activeStatusFilter={activeStatusFilter}
               onStatusFilterChange={onStatusFilterChange}
               onConfigureThresholds={onConfigureThresholds}
+              onSendToMaintenance={onSendToMaintenance}
             />
           ))}
         </div>

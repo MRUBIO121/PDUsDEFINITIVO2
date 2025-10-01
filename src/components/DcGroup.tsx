@@ -8,23 +8,24 @@ interface DcGroupProps {
   dc: string;
   rackGroups: RackData[][];
   originalRackGroups: RackData[][];
-  activeView: 'principal' | 'alertas';
+  activeView: 'principal' | 'alertas' | 'mantenimiento';
   country: string;
   site: string;
   isExpanded: boolean;
   onToggleExpand: (dc: string) => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
-    value: number, 
-    criticalLow: number, 
-    criticalHigh: number, 
-    warningLow: number, 
+    value: number,
+    criticalLow: number,
+    criticalHigh: number,
+    warningLow: number,
     warningHigh: number
   ) => string;
   getAmperageStatusColor: (rack: RackData) => string;
   activeStatusFilter: 'all' | 'critical' | 'warning';
   onStatusFilterChange: (filter: 'all' | 'critical' | 'warning') => void;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
+  onSendToMaintenance?: (rackId: string, chain: string, rackName: string) => void;
 }
 
 export default function DcGroup({ 
@@ -41,7 +42,8 @@ export default function DcGroup({
   getAmperageStatusColor,
   activeStatusFilter,
   onStatusFilterChange,
-  onConfigureThresholds
+  onConfigureThresholds,
+  onSendToMaintenance
 }: DcGroupProps) {
   
   // Debug: Log DC group data
@@ -198,6 +200,7 @@ export default function DcGroup({
                 getMetricStatusColor={getMetricStatusColor}
                 getAmperageStatusColor={getAmperageStatusColor}
                 onConfigureThresholds={onConfigureThresholds}
+                onSendToMaintenance={onSendToMaintenance}
               />
             );
           })}

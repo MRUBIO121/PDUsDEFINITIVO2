@@ -7,7 +7,7 @@ interface CountryGroupProps {
   country: string;
   siteGroups: { [site: string]: { [dc: string]: RackData[][] } };
   originalRackGroups: RackData[][];
-  activeView: 'principal' | 'alertas';
+  activeView: 'principal' | 'alertas' | 'mantenimiento';
   isExpanded: boolean;
   onToggleExpand: (country: string) => void;
   expandedSiteIds: Set<string>;
@@ -16,21 +16,22 @@ interface CountryGroupProps {
   toggleDcExpansion: (dc: string) => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
-    value: number, 
-    criticalLow: number, 
-    criticalHigh: number, 
-    warningLow: number, 
+    value: number,
+    criticalLow: number,
+    criticalHigh: number,
+    warningLow: number,
     warningHigh: number
   ) => string;
   getAmperageStatusColor: (rack: RackData) => string;
   activeStatusFilter: 'all' | 'critical' | 'warning';
   onStatusFilterChange: (filter: 'all' | 'critical' | 'warning') => void;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
+  onSendToMaintenance?: (rackId: string, chain: string, rackName: string) => void;
 }
 
-export default function CountryGroup({ 
-  country, 
-  siteGroups, 
+export default function CountryGroup({
+  country,
+  siteGroups,
   originalRackGroups,
   activeView,
   isExpanded,
@@ -39,12 +40,13 @@ export default function CountryGroup({
   toggleSiteExpansion,
   expandedDcIds,
   toggleDcExpansion,
-  getThresholdValue, 
-  getMetricStatusColor, 
+  getThresholdValue,
+  getMetricStatusColor,
   getAmperageStatusColor,
   activeStatusFilter,
   onStatusFilterChange,
-  onConfigureThresholds
+  onConfigureThresholds,
+  onSendToMaintenance
 }: CountryGroupProps) {
 
   // Calculate total racks for this country from original data (unfiltered)
@@ -221,7 +223,8 @@ export default function CountryGroup({
               getAmperageStatusColor={getAmperageStatusColor}
               activeStatusFilter={activeStatusFilter}
               onStatusFilterChange={onStatusFilterChange}
-             onConfigureThresholds={onConfigureThresholds}
+              onConfigureThresholds={onConfigureThresholds}
+              onSendToMaintenance={onSendToMaintenance}
             />
           ))}
         </div>
