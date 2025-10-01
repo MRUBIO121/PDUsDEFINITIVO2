@@ -9,22 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const ExcelJS = require('exceljs');
 
-// DEBUG: Log environment variables on startup
-console.log('🔍 DEBUGGING ENVIRONMENT VARIABLES:');
-console.log('   NODE_ENV:', process.env.NODE_ENV);
-console.log('   PORT:', process.env.PORT);
-console.log('   FRONTEND_URL:', process.env.FRONTEND_URL);
-console.log('   NENG_API_URL:', process.env.NENG_API_URL ? '✅ SET' : '❌ NOT SET');
-console.log('   NENG_API_KEY:', process.env.NENG_API_KEY ? '✅ SET' : '❌ NOT SET');
-console.log('   SQL_SERVER_HOST:', process.env.SQL_SERVER_HOST);
-console.log('   SQL_SERVER_DATABASE:', process.env.SQL_SERVER_DATABASE);
-console.log('   SQL_SERVER_USER:', process.env.SQL_SERVER_USER);
-console.log('   SQL_SERVER_PASSWORD:', process.env.SQL_SERVER_PASSWORD ? '✅ SET' : '❌ NOT SET');
-console.log('   SQL_SERVER_PORT:', process.env.SQL_SERVER_PORT);
-console.log('   Working Directory:', process.cwd());
-console.log('   .env file location should be:', path.join(process.cwd(), '.env'));
-console.log('   .env file exists?:', fs.existsSync(path.join(process.cwd(), '.env')) ? '✅ YES' : '❌ NO');
-console.log('');
+// Environment variables loaded from .env file
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -80,9 +65,7 @@ const sqlConfig = {
 // Test SQL connection on startup
 async function testSqlConnection() {
   try {
-    console.log('🔗 Testing SQL Server connection...');
     const pool = await sql.connect(sqlConfig);
-    console.log('✅ SQL Server connection established');
     await pool.close();
   } catch (error) {
     console.error('❌ SQL Server connection failed:', error.message);
@@ -134,7 +117,7 @@ function isCacheValid(cache) {
 async function fetchFromNengApi(url, options = {}) {
   const apiTimeout = parseInt(process.env.API_TIMEOUT) || 10000;
   
-  console.log(`🌐 Making real API call to: ${url}`);
+  // Making API call to NENG
   
   try {
     const controller = new AbortController();
@@ -158,7 +141,7 @@ async function fetchFromNengApi(url, options = {}) {
     
     const data = await response.json();
     
-    console.log(`✅ NENG API Response successful - Status: ${response.status}`);
+    // API call successful
     
     return {
       success: true,
@@ -182,11 +165,8 @@ async function fetchFromNengApi(url, options = {}) {
 async function fetchThresholdsFromDatabase() {
   try {
     if (isCacheValid(thresholdsCache)) {
-      console.log('📦 Using cached thresholds data');
       return thresholdsCache.data;
     }
-
-    console.log('🔍 Fetching thresholds from SQL Server...');
     const pool = await sql.connect(sqlConfig);
 
     const result = await pool.request().query(`
@@ -198,7 +178,6 @@ async function fetchThresholdsFromDatabase() {
     await pool.close();
     
     const thresholds = result.recordset || [];
-    console.log(`✅ Fetched ${thresholds.length} thresholds from database`);
     
     // Update cache
     thresholdsCache.data = thresholds;
@@ -216,11 +195,10 @@ async function fetchThresholdsFromDatabase() {
 // Function to save thresholds to SQL Server
 async function saveThresholdsToDatabase(thresholds) {
   try {
-    console.log('💾 Saving thresholds to SQL Server...');
     const pool = await sql.connect(sqlConfig);
-    
+
     let updatedCount = 0;
-    
+
     for (const [key, value] of Object.entries(thresholds)) {
       const result = await pool.request()
         .input('key', sql.NVarChar, key)
@@ -230,20 +208,18 @@ async function saveThresholdsToDatabase(thresholds) {
           SET value = @value, updated_at = GETDATE()
           WHERE threshold_key = @key
         `);
-      
+
       if (result.rowsAffected[0] > 0) {
         updatedCount++;
-        console.log(`✅ Updated threshold: ${key} = ${value}`);
       }
     }
-    
+
     await pool.close();
-    
+
     // Clear cache to force reload
     thresholdsCache.data = null;
     thresholdsCache.timestamp = null;
-    
-    console.log(`💾 Successfully updated ${updatedCount} thresholds in database`);
+
     return updatedCount;
     
   } catch (error) {
@@ -284,7 +260,7 @@ async function loadAllRackSpecificThresholds(rackIds) {
       }
     });
 
-    console.log(`📊 Loaded rack-specific thresholds for ${rackThresholdsMap.size} racks`);
+    // Loaded rack-specific thresholds
     return rackThresholdsMap;
   } catch (error) {
     console.error('Error loading rack-specific thresholds:', error.message);
@@ -294,7 +270,6 @@ async function loadAllRackSpecificThresholds(rackIds) {
 
 // Process rack data with threshold evaluation
 async function processRackData(racks, thresholds) {
-  console.log(`🔧 Processing ${racks.length} racks with threshold evaluation...`);
 
   // Load all rack-specific thresholds in one query
   const uniqueRackIds = [...new Set(racks.map(r => r.rackId || r.id))];
@@ -446,16 +421,7 @@ async function processRackData(racks, thresholds) {
   const warningCount = processedRacks.filter(r => r.status === 'warning').length;
   const normalCount = processedRacks.filter(r => r.status === 'normal').length;
   
-  console.log(`🎯 Evaluation Summary: ${criticalCount} critical, ${warningCount} warning, ${normalCount} normal`);
-  
-  // Log some examples of critical PDUs for debugging
-  const criticalExamples = processedRacks.filter(r => r.status === 'critical').slice(0, 3);
-  if (criticalExamples.length > 0) {
-    console.log('🚨 Critical PDU examples:');
-    criticalExamples.forEach(pdu => {
-      console.log(`   PDU ${pdu.id}: Current=${pdu.current}A, Temp=${pdu.sensorTemperature}°C, Humidity=${pdu.sensorHumidity}%, Reasons=[${pdu.reasons.join(', ')}]`);
-    });
-  }
+  // Evaluation complete
   
   return processedRacks;
 }
@@ -489,21 +455,16 @@ async function getMaintenanceRackIds(pool) {
 async function manageActiveCriticalAlerts(allPdus, thresholds) {
   let pool = null;
   try {
-    console.log('🔄 Starting active critical alerts management...');
-
     pool = await sql.connect(sqlConfig);
 
     // Get racks currently in maintenance
     const maintenanceRackIds = await getMaintenanceRackIds(pool);
-    console.log(`🔧 Found ${maintenanceRackIds.size} racks in maintenance mode`);
 
     // Get current critical PDUs with their reasons, excluding maintenance racks
     const currentCriticalPdus = allPdus.filter(pdu => {
       const isInMaintenance = maintenanceRackIds.has(pdu.id) || maintenanceRackIds.has(pdu.logicalRackId);
       return pdu.status === 'critical' && pdu.reasons && pdu.reasons.length > 0 && !isInMaintenance;
     });
-
-    console.log(`📊 Found ${currentCriticalPdus.length} PDUs with critical alerts`);
 
     // Process PDUs in batches to avoid connection timeout issues
     const BATCH_SIZE = 50;
@@ -512,7 +473,6 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
 
     for (let i = 0; i < currentCriticalPdus.length; i += BATCH_SIZE) {
       const batch = currentCriticalPdus.slice(i, i + BATCH_SIZE);
-      console.log(`🔄 Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(currentCriticalPdus.length / BATCH_SIZE)} (${batch.length} PDUs)...`);
 
       for (const pdu of batch) {
         // Process each alert reason for this PDU
@@ -536,8 +496,6 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
       }
     }
 
-    console.log(`✅ Processed ${processedCount} alerts with ${errorCount} errors`);
-
     // Clean up resolved alerts (only if pool is still valid)
     if (pool && pool.connected) {
       try {
@@ -546,8 +504,6 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
         console.error('❌ Error during cleanup, but continuing:', cleanupError.message);
       }
     }
-
-    console.log('✅ Active critical alerts management completed');
 
   } catch (error) {
     console.error('❌ Error managing active critical alerts:', error);
@@ -609,7 +565,7 @@ async function processCriticalAlert(pool, pdu, reason, thresholds) {
           WHERE pdu_id = @pdu_id AND metric_type = @metric_type AND alert_reason = @alert_reason
         `);
       
-      console.log(`🔄 Updated critical alert for PDU ${pdu.id}, metric: ${metricType}`);
+      // Updated alert
     } else {
       // Insert new alert
       await pool.request()
@@ -637,7 +593,7 @@ async function processCriticalAlert(pool, pdu, reason, thresholds) {
            @metric_type, @alert_reason, @alert_value, @alert_field, @threshold_exceeded)
         `);
       
-      console.log(`🚨 NEW critical alert inserted for PDU ${pdu.id}, metric: ${metricType}, value: ${alertValue}`);
+      // New alert inserted
     }
     
   } catch (error) {
@@ -725,7 +681,7 @@ async function cleanupResolvedAlerts(pool, currentCriticalPdus) {
         DELETE FROM active_critical_alerts
       `);
 
-      console.log(`🧹 Cleaned up all ${deleteResult.rowsAffected} resolved alerts (no critical PDUs)`);
+      // Cleaned up all resolved alerts
       return;
     }
 
@@ -743,9 +699,7 @@ async function cleanupResolvedAlerts(pool, currentCriticalPdus) {
       WHERE pdu_id NOT IN (${pduIdsList})
     `);
 
-    if (deleteResult.rowsAffected > 0) {
-      console.log(`🧹 Cleaned up ${deleteResult.rowsAffected} resolved alerts`);
-    }
+    // Cleaned up resolved alerts
 
     // Also clean up alerts for PDUs that are still critical but no longer have the specific reason
     for (const criticalPdu of currentCriticalPdus) {
@@ -766,9 +720,7 @@ async function cleanupResolvedAlerts(pool, currentCriticalPdus) {
             WHERE pdu_id = @pdu_id AND alert_reason NOT IN (${reasonsList})
           `);
 
-        if (cleanupResult.rowsAffected > 0) {
-          console.log(`🧹 Cleaned up ${cleanupResult.rowsAffected} resolved specific alerts for PDU ${criticalPdu.id}`);
-        }
+        // Cleaned up specific alerts
       }
     }
 
@@ -782,14 +734,11 @@ app.get('/api/racks/energy', async (req, res) => {
   const requestId = Math.random().toString(36).substr(2, 9);
 
   try {
-    console.log(`[${requestId}] 📥 NEW REQUEST - Energy racks data`);
-
     // Check if client wants to bypass cache (from refresh button)
     const bypassCache = req.headers['cache-control'] === 'no-cache' || req.headers['pragma'] === 'no-cache';
 
     // Check cache first (unless explicitly bypassed)
     if (!bypassCache && isCacheValid(racksCache)) {
-      console.log(`[${requestId}] 📦 Using cached rack data`);
       return res.json({
         success: true,
         data: racksCache.data,
@@ -799,11 +748,8 @@ app.get('/api/racks/energy', async (req, res) => {
       });
     }
 
-    console.log(`[${requestId}] 🔄 ${bypassCache ? 'Cache bypassed by client' : 'Cache expired'}, fetching fresh data...`);
-    
     // Get thresholds first
     const thresholds = await fetchThresholdsFromDatabase();
-    console.log(`[${requestId}] 🎯 Loaded ${thresholds.length} thresholds for evaluation`);
     
     // Validate NENG API configuration
     if (!process.env.NENG_API_URL || !process.env.NENG_API_KEY) {
@@ -811,14 +757,12 @@ app.get('/api/racks/energy', async (req, res) => {
     }
 
     // Fetch ALL power data with pagination (skip by 100)
-    console.log(`[${requestId}] 🔌 Fetching all power data with pagination...`);
     let allPowerData = [];
     let powerSkip = 0;
     const pageSize = 100;
     let hasMorePowerData = true;
 
     while (hasMorePowerData) {
-      console.log(`[${requestId}] 📄 Fetching power page: skip=${powerSkip}, limit=${pageSize}`);
 
       const powerResponse = await fetchFromNengApi(
         `${process.env.NENG_API_URL}?skip=${powerSkip}&limit=${pageSize}`,
@@ -836,7 +780,6 @@ app.get('/api/racks/energy', async (req, res) => {
       }
 
       const pageData = Array.isArray(powerResponse.data) ? powerResponse.data : [];
-      console.log(`[${requestId}] ✅ Power page received: ${pageData.length} PDUs`);
 
       if (pageData.length === 0) {
         hasMorePowerData = false;
@@ -851,18 +794,16 @@ app.get('/api/racks/energy', async (req, res) => {
       }
     }
 
-    console.log(`[${requestId}] ✅ Total Power API data collected: ${allPowerData.length} PDUs`);
+    // Power data collected
 
     // Fetch ALL sensor data if sensors URL is configured
     let allSensorsData = [];
     if (process.env.NENG_SENSORS_API_URL) {
-      console.log(`[${requestId}] 🌡️ Fetching all sensor data with pagination...`);
       let sensorSkip = 0;
       let hasMoreSensorData = true;
 
       try {
         while (hasMoreSensorData) {
-          console.log(`[${requestId}] 📄 Fetching sensor page: skip=${sensorSkip}, limit=${pageSize}`);
 
           const sensorsResponse = await fetchFromNengApi(
             `${process.env.NENG_SENSORS_API_URL}?skip=${sensorSkip}&limit=${pageSize}`,
@@ -882,7 +823,6 @@ app.get('/api/racks/energy', async (req, res) => {
           }
 
           const pageData = Array.isArray(sensorsResponse.data) ? sensorsResponse.data : [];
-          console.log(`[${requestId}] ✅ Sensor page received: ${pageData.length} sensors`);
 
           if (pageData.length === 0) {
             hasMoreSensorData = false;
@@ -897,7 +837,7 @@ app.get('/api/racks/energy', async (req, res) => {
           }
         }
 
-        console.log(`[${requestId}] ✅ Total Sensors API data collected: ${allSensorsData.length} sensors`);
+        // Sensors data collected
       } catch (sensorError) {
         console.warn(`[${requestId}] ⚠️ Sensors API failed (continuing without sensor data):`, sensorError.message);
       }
@@ -955,48 +895,9 @@ app.get('/api/racks/energy', async (req, res) => {
       });
     }
     
-    console.log(`[${requestId}] 📊 Data Summary:`);
-    console.log(`[${requestId}]   - Total combined PDUs: ${combinedData.length}`);
-    console.log(`[${requestId}]   - Power data items: ${allPowerData.length}`);
-    console.log(`[${requestId}]   - Sensor data items: ${allSensorsData.length}`);
-
-    const pdusWithSensorData = combinedData.filter(pdu => pdu.sensorTemperature != null).length;
-    console.log(`[${requestId}]   - PDUs with sensor data: ${pdusWithSensorData}`);
-    console.log(`[${requestId}]   - PDUs without sensor data: ${combinedData.length - pdusWithSensorData}`);
-    console.log(`[${requestId}]   - Data source: NENG API (real)`);
-    console.log(`[${requestId}]   - Request timestamp: ${new Date().toISOString()}`);
-
-    // Debug: Log first few PDUs for inspection
-    if (combinedData.length > 0) {
-      console.log(`[${requestId}] 🔍 DEBUG - First PDU sample:`, {
-        id: combinedData[0].id,
-        rackId: combinedData[0].rackId,
-        name: combinedData[0].name,
-        site: combinedData[0].site,
-        dc: combinedData[0].dc,
-        phase: combinedData[0].phase,
-        current: combinedData[0].current,
-        temperature: combinedData[0].temperature,
-        sensorTemperature: combinedData[0].sensorTemperature,
-        sensorHumidity: combinedData[0].sensorHumidity
-      });
-
-      // Also log a PDU with sensor data if available
-      const pduWithSensor = combinedData.find(pdu => pdu.sensorTemperature != null);
-      if (pduWithSensor) {
-        console.log(`[${requestId}] 🔍 DEBUG - PDU with sensor data sample:`, {
-          id: pduWithSensor.id,
-          rackId: pduWithSensor.rackId,
-          name: pduWithSensor.name,
-          current: pduWithSensor.current,
-          sensorTemperature: pduWithSensor.sensorTemperature,
-          sensorHumidity: pduWithSensor.sensorHumidity
-        });
-      }
-    }
+    // Data collected and combined
     
-    // Procesar los datos con evaluación de umbrales
-    console.log(`[${requestId}] 🔧 Processing data with thresholds evaluation...`);
+    // Process data with thresholds evaluation
     const processedData = await processRackData(combinedData, thresholds);
 
     // Get maintenance rack IDs to filter them out
@@ -1010,7 +911,7 @@ app.get('/api/racks/energy', async (req, res) => {
       return !isInMaintenance;
     });
 
-    console.log(`[${requestId}] 🔧 Filtered out ${processedData.length - filteredData.length} racks in maintenance mode`);
+    // Filtered out racks in maintenance mode
 
     // Manage active critical alerts in database (only for non-maintenance racks)
     await manageActiveCriticalAlerts(filteredData, thresholds);
@@ -1034,7 +935,7 @@ app.get('/api/racks/energy', async (req, res) => {
       rackGroups.push(rackGroup);
     });
 
-    console.log(`[${requestId}] 🏗️ Grouped ${filteredData.length} PDUs into ${rackGroups.length} rack groups`);
+    // Grouped into rack groups
     
     // Update cache
     racksCache.data = rackGroups;
@@ -1048,7 +949,6 @@ app.get('/api/racks/energy', async (req, res) => {
       timestamp: new Date().toISOString()
     };
     
-    console.log(`[${requestId}] ✅ REQUEST COMPLETED - Returning ${rackGroups.length} rack groups`);
     res.json(response);
     
   } catch (error) {
@@ -1072,8 +972,6 @@ app.get('/api/racks/energy', async (req, res) => {
 // Endpoint para obtener umbrales globales
 app.get('/api/thresholds', async (req, res) => {
   try {
-    console.log('🔍 Fetching global thresholds...');
-    
     const thresholds = await fetchThresholdsFromDatabase();
     
     res.json({
@@ -1100,7 +998,6 @@ app.get('/api/thresholds', async (req, res) => {
 // Endpoint para actualizar umbrales globales
 app.put('/api/thresholds', async (req, res) => {
   try {
-    console.log('💾 Updating global thresholds...');
     
     const { thresholds } = req.body;
     
@@ -1171,7 +1068,6 @@ app.put('/api/thresholds', async (req, res) => {
 app.get('/api/racks/:rackId/thresholds', async (req, res) => {
   try {
     const { rackId } = req.params;
-    console.log(`🔍 Fetching thresholds for rack: ${rackId}`);
     
     const pool = await sql.connect(sqlConfig);
     
@@ -1196,8 +1092,6 @@ app.get('/api/racks/:rackId/thresholds', async (req, res) => {
     
     const globalThresholds = globalResult.recordset || [];
     const rackSpecificThresholds = rackResult.recordset || [];
-    
-    console.log(`✅ Found ${globalThresholds.length} global and ${rackSpecificThresholds.length} rack-specific thresholds`);
     
     res.json({
       success: true,
@@ -1227,8 +1121,6 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
   try {
     const { rackId } = req.params;
     const { thresholds } = req.body;
-    
-    console.log(`💾 Updating thresholds for rack: ${rackId}`);
     
     if (!thresholds || typeof thresholds !== 'object') {
       return res.status(400).json({
@@ -1295,12 +1187,9 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
         `);
 
       updatedCount++;
-      console.log(`✅ Updated rack-specific threshold: ${rackId}.${key} = ${value} ${unit || ''}`);
     }
-    
+
     await pool.close();
-    
-    console.log(`💾 Successfully updated ${updatedCount} rack-specific thresholds`);
     
     res.json({
       success: true,
@@ -1326,20 +1215,18 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
 app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
   try {
     const { rackId } = req.params;
-    console.log(`🔄 Resetting thresholds for rack: ${rackId} to global values`);
-    
+
     const pool = await sql.connect(sqlConfig);
-    
+
     const result = await pool.request()
       .input('rackId', sql.NVarChar, rackId)
       .query(`
         DELETE FROM dbo.rack_threshold_overrides WHERE rack_id = @rackId
       `);
-    
+
     await pool.close();
-    
+
     const deletedCount = result.rowsAffected[0];
-    console.log(`✅ Deleted ${deletedCount} rack-specific thresholds for ${rackId}`);
     
     res.json({
       success: true,
@@ -1368,8 +1255,6 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
 // Get all racks in maintenance
 app.get('/api/maintenance', async (req, res) => {
   try {
-    console.log('🔍 Fetching racks in maintenance...');
-
     const pool = await sql.connect(sqlConfig);
 
     const result = await pool.request().query(`
@@ -1431,7 +1316,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
       });
     }
 
-    console.log(`🔧 Adding rack ${rackId} and its chain to maintenance...`);
+    // Adding rack to maintenance
 
     const pool = await sql.connect(sqlConfig);
 
@@ -1447,11 +1332,11 @@ app.post('/api/maintenance/chain', async (req, res) => {
         rack = data.find(r => r.id === rackId || r.name === rackId);
         if (rack) {
           chain = rack.chain;
-          console.log(`✅ Found rack in live data: ${rack.name}, chain: ${chain}`);
+          // Found rack in live data
         }
       }
     } catch (apiError) {
-      console.log('⚠️ Could not fetch live rack data, trying alerts table...');
+      // Trying alerts table
     }
 
     // If not found in live data, try to get from alerts table
@@ -1487,7 +1372,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
       rack = rackData.recordset[0];
       chain = rack.chain;
-      console.log(`✅ Found rack in alerts table: ${rack.name}, chain: ${chain}`);
+      // Found rack in alerts table
     }
 
     if (!chain) {
@@ -1499,11 +1384,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
       });
     }
 
-    console.log(`🔗 Chain identified: ${chain}`);
-
-    // Add this rack and all racks in the same chain to maintenance
-    // We'll need to get all racks from the chain from the current energy API data
-    // For now, we'll just add the single rack
+    // Chain identified, adding to maintenance
 
     const insertResult = await pool.request()
       .input('rack_id', sql.NVarChar, rackId)
@@ -1529,8 +1410,6 @@ app.post('/api/maintenance/chain', async (req, res) => {
       `);
 
     await pool.close();
-
-    console.log(`✅ Rack ${rackId} added to maintenance`);
 
     res.json({
       success: true,
@@ -1565,8 +1444,6 @@ app.delete('/api/maintenance/chain/:chain', async (req, res) => {
       });
     }
 
-    console.log(`🔧 Removing chain ${chain} from maintenance...`);
-
     const pool = await sql.connect(sqlConfig);
 
     const deleteResult = await pool.request()
@@ -1579,8 +1456,6 @@ app.delete('/api/maintenance/chain/:chain', async (req, res) => {
     await pool.close();
 
     const deletedCount = deleteResult.rowsAffected[0] || 0;
-
-    console.log(`✅ Removed ${deletedCount} racks from chain ${chain} from maintenance`);
 
     res.json({
       success: true,
@@ -1616,7 +1491,6 @@ app.get('/api/health', (req, res) => {
 // Endpoint para exportar alertas a Excel
 app.post('/api/export/alerts', async (req, res) => {
   try {
-    console.log('📊 Starting alerts export to Excel...');
 
     const pool = await sql.connect(sqlConfig);
 
@@ -1748,7 +1622,7 @@ app.post('/api/export/alerts', async (req, res) => {
     // Write the Excel file to project root
     await workbook.xlsx.writeFile(filepath);
 
-    console.log(`✅ Excel export completed: ${filename} (${alerts.length} alerts)`);
+    // Excel export completed
 
     res.json({
       success: true,
@@ -1774,7 +1648,7 @@ app.post('/api/export/alerts', async (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('🚨 Unhandled error:', err);
+  // Unhandled error
   logger.error('Unhandled error', { 
     error: err.message, 
     stack: err.stack,
