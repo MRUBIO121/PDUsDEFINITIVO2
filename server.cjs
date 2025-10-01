@@ -1281,25 +1281,24 @@ app.post('/api/export/alerts', async (req, res) => {
       SELECT
         pdu_id,
         rack_id,
-        pdu_name,
+        name,
         country,
         site,
         dc,
         phase,
         chain,
         node,
-        serial_number,
+        serial,
         alert_type,
         metric_type,
-        field_name,
-        current_value,
-        threshold_value,
-        unit,
-        message,
-        detected_at,
-        last_updated
+        alert_reason,
+        alert_value,
+        alert_field,
+        threshold_exceeded,
+        alert_started_at,
+        last_updated_at
       FROM active_critical_alerts
-      ORDER BY detected_at DESC
+      ORDER BY alert_started_at DESC
     `);
 
     await pool.close();
@@ -1323,23 +1322,22 @@ app.post('/api/export/alerts', async (req, res) => {
     worksheet.columns = [
       { header: 'ID PDU', key: 'pdu_id', width: 20 },
       { header: 'ID Rack', key: 'rack_id', width: 20 },
-      { header: 'Nombre PDU', key: 'pdu_name', width: 30 },
+      { header: 'Nombre PDU', key: 'name', width: 30 },
       { header: 'País', key: 'country', width: 15 },
       { header: 'Sitio', key: 'site', width: 20 },
       { header: 'Data Center', key: 'dc', width: 15 },
       { header: 'Fase', key: 'phase', width: 15 },
       { header: 'Chain', key: 'chain', width: 12 },
       { header: 'Node', key: 'node', width: 12 },
-      { header: 'N° Serie', key: 'serial_number', width: 20 },
+      { header: 'N° Serie', key: 'serial', width: 20 },
       { header: 'Tipo de Alerta', key: 'alert_type', width: 15 },
       { header: 'Métrica', key: 'metric_type', width: 15 },
-      { header: 'Campo', key: 'field_name', width: 25 },
-      { header: 'Valor Actual', key: 'current_value', width: 15 },
-      { header: 'Umbral', key: 'threshold_value', width: 15 },
-      { header: 'Unidad', key: 'unit', width: 10 },
-      { header: 'Mensaje', key: 'message', width: 50 },
-      { header: 'Detectada', key: 'detected_at', width: 20 },
-      { header: 'Última Actualización', key: 'last_updated', width: 20 }
+      { header: 'Razón', key: 'alert_reason', width: 35 },
+      { header: 'Valor Actual', key: 'alert_value', width: 15 },
+      { header: 'Campo', key: 'alert_field', width: 25 },
+      { header: 'Umbral Excedido', key: 'threshold_exceeded', width: 15 },
+      { header: 'Detectada', key: 'alert_started_at', width: 20 },
+      { header: 'Última Actualización', key: 'last_updated_at', width: 20 }
     ];
 
     // Style the header row
@@ -1361,23 +1359,22 @@ app.post('/api/export/alerts', async (req, res) => {
       const row = worksheet.addRow({
         pdu_id: alert.pdu_id,
         rack_id: alert.rack_id,
-        pdu_name: alert.pdu_name,
+        name: alert.name,
         country: alert.country || 'N/A',
         site: alert.site || 'N/A',
         dc: alert.dc || 'N/A',
         phase: alert.phase || 'N/A',
         chain: alert.chain || 'N/A',
         node: alert.node || 'N/A',
-        serial_number: alert.serial_number || 'N/A',
+        serial: alert.serial || 'N/A',
         alert_type: alert.alert_type === 'critical' ? 'CRÍTICO' : 'ADVERTENCIA',
         metric_type: alert.metric_type,
-        field_name: alert.field_name,
-        current_value: alert.current_value,
-        threshold_value: alert.threshold_value,
-        unit: alert.unit || '',
-        message: alert.message,
-        detected_at: new Date(alert.detected_at).toLocaleString('es-ES'),
-        last_updated: new Date(alert.last_updated).toLocaleString('es-ES')
+        alert_reason: alert.alert_reason,
+        alert_value: alert.alert_value,
+        alert_field: alert.alert_field,
+        threshold_exceeded: alert.threshold_exceeded,
+        alert_started_at: new Date(alert.alert_started_at).toLocaleString('es-ES'),
+        last_updated_at: new Date(alert.last_updated_at).toLocaleString('es-ES')
       });
 
       // Color-code alert type column
