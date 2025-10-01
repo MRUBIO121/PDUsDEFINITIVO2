@@ -1273,32 +1273,40 @@ app.get('/api/health', (req, res) => {
 app.post('/api/export/alerts', async (req, res) => {
   try {
     console.log('📊 Starting alerts export to Excel...');
-    
-    // Get thresholds for processing
-    const thresholds = await fetchThresholdsFromDatabase();
-    
-    // Fetch current rack data
-    if (!process.env.NENG_API_URL || !process.env.NENG_API_KEY) {
-      throw new Error('NENG API configuration missing. Please check NENG_API_URL and NENG_API_KEY environment variables.');
-    }
-    
-    const nengResponse = await fetchFromNengApi(
-      process.env.NENG_API_URL
-    );
-    
-    if (!nengResponse.success || !nengResponse.data) {
-      throw new Error('Failed to fetch current rack data for export');
-    }
-    
-    // Process data with threshold evaluation
-    const processedData = await processRackData(Array.isArray(nengResponse.data) ? nengResponse.data : [], thresholds);
-    
-    // Filter only PDUs with alerts (critical or warning)
-    const alertingPdus = processedData.filter(pdu => 
-      pdu.status === 'critical' || pdu.status === 'warning'
-    );
-    
-    if (alertingPdus.length === 0) {
+
+    const pool = await sql.connect(sqlConfig);
+
+    // Query active critical alerts from database
+    const result = await pool.request().query(`
+      SELECT
+        pdu_id,
+        rack_id,
+        pdu_name,
+        country,
+        site,
+        dc,
+        phase,
+        chain,
+        node,
+        serial_number,
+        alert_type,
+        metric_type,
+        field_name,
+        current_value,
+        threshold_value,
+        unit,
+        message,
+        detected_at,
+        last_updated
+      FROM active_critical_alerts
+      ORDER BY detected_at DESC
+    `);
+
+    await pool.close();
+
+    const alerts = result.recordset || [];
+
+    if (alerts.length === 0) {
       return res.json({
         success: true,
         message: 'No alerts found to export',
@@ -1310,28 +1318,30 @@ app.post('/api/export/alerts', async (req, res) => {
     // Create Excel workbook
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Alertas Activas');
-    
+
     // Define columns
     worksheet.columns = [
-      { header: 'ID PDU', key: 'id', width: 20 },
-      { header: 'ID Rack', key: 'rackId', width: 20 },
-      { header: 'Nombre', key: 'name', width: 25 },
+      { header: 'ID PDU', key: 'pdu_id', width: 20 },
+      { header: 'ID Rack', key: 'rack_id', width: 20 },
+      { header: 'Nombre PDU', key: 'pdu_name', width: 30 },
       { header: 'País', key: 'country', width: 15 },
       { header: 'Sitio', key: 'site', width: 20 },
       { header: 'Data Center', key: 'dc', width: 15 },
       { header: 'Fase', key: 'phase', width: 15 },
       { header: 'Chain', key: 'chain', width: 12 },
       { header: 'Node', key: 'node', width: 12 },
-      { header: 'N° Serie', key: 'serial', width: 15 },
-      { header: 'Estado', key: 'status', width: 12 },
-      { header: 'Corriente (A)', key: 'current', width: 15 },
-      { header: 'Temperatura (°C)', key: 'temperature', width: 18 },
-      { header: 'Sensor Temp (°C)', key: 'sensorTemperature', width: 18 },
-      { header: 'Sensor Humedad (%)', key: 'sensorHumidity', width: 20 },
-      { header: 'Motivos de Alerta', key: 'reasons', width: 50 },
-      { header: 'Última Actualización', key: 'lastUpdated', width: 20 }
+      { header: 'N° Serie', key: 'serial_number', width: 20 },
+      { header: 'Tipo de Alerta', key: 'alert_type', width: 15 },
+      { header: 'Métrica', key: 'metric_type', width: 15 },
+      { header: 'Campo', key: 'field_name', width: 25 },
+      { header: 'Valor Actual', key: 'current_value', width: 15 },
+      { header: 'Umbral', key: 'threshold_value', width: 15 },
+      { header: 'Unidad', key: 'unit', width: 10 },
+      { header: 'Mensaje', key: 'message', width: 50 },
+      { header: 'Detectada', key: 'detected_at', width: 20 },
+      { header: 'Última Actualización', key: 'last_updated', width: 20 }
     ];
-    
+
     // Style the header row
     worksheet.getRow(1).eachCell((cell) => {
       cell.fill = {
@@ -1345,76 +1355,66 @@ app.post('/api/export/alerts', async (req, res) => {
       };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
     });
-    
+
     // Add data rows
-    alertingPdus.forEach(pdu => {
+    alerts.forEach(alert => {
       const row = worksheet.addRow({
-        id: pdu.id,
-        rackId: pdu.rackId || pdu.id,
-        name: pdu.name,
-        country: pdu.country,
-        site: pdu.site,
-        dc: pdu.dc,
-        phase: pdu.phase,
-        chain: pdu.chain || 'N/A',
-        node: pdu.node || 'N/A',
-        serial: pdu.serial || 'N/A',
-        status: pdu.status === 'critical' ? 'CRÍTICO' : 'ADVERTENCIA',
-        current: pdu.current,
-        temperature: pdu.temperature,
-        sensorTemperature: pdu.sensorTemperature,
-        sensorHumidity: pdu.sensorHumidity,
-        reasons: (pdu.reasons || []).join(', '),
-        lastUpdated: new Date(pdu.lastUpdated).toLocaleString('es-ES')
+        pdu_id: alert.pdu_id,
+        rack_id: alert.rack_id,
+        pdu_name: alert.pdu_name,
+        country: alert.country || 'N/A',
+        site: alert.site || 'N/A',
+        dc: alert.dc || 'N/A',
+        phase: alert.phase || 'N/A',
+        chain: alert.chain || 'N/A',
+        node: alert.node || 'N/A',
+        serial_number: alert.serial_number || 'N/A',
+        alert_type: alert.alert_type === 'critical' ? 'CRÍTICO' : 'ADVERTENCIA',
+        metric_type: alert.metric_type,
+        field_name: alert.field_name,
+        current_value: alert.current_value,
+        threshold_value: alert.threshold_value,
+        unit: alert.unit || '',
+        message: alert.message,
+        detected_at: new Date(alert.detected_at).toLocaleString('es-ES'),
+        last_updated: new Date(alert.last_updated).toLocaleString('es-ES')
       });
-      
-      // Color-code status column
-      const statusCell = row.getCell('status');
-      if (pdu.status === 'critical') {
-        statusCell.fill = {
+
+      // Color-code alert type column
+      const alertTypeCell = row.getCell('alert_type');
+      if (alert.alert_type === 'critical') {
+        alertTypeCell.fill = {
           type: 'pattern',
           pattern: 'solid',
           fgColor: { argb: 'FFFF0000' }
         };
-        statusCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-      } else if (pdu.status === 'warning') {
-        statusCell.fill = {
+        alertTypeCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+      } else if (alert.alert_type === 'warning') {
+        alertTypeCell.fill = {
           type: 'pattern',
           pattern: 'solid',
           fgColor: { argb: 'FFFFFF00' }
         };
-        statusCell.font = { color: { argb: 'FF000000' }, bold: true };
+        alertTypeCell.font = { color: { argb: 'FF000000' }, bold: true };
       }
     });
-    
-    // Auto-fit columns
-    worksheet.columns.forEach(column => {
-      if (column.key === 'reasons') {
-        column.width = 60; // Keep reasons column wide
-      }
-    });
-    
+
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
     const filename = `alertas_activas_${timestamp}.xlsx`;
-    const filepath = path.join(__dirname, 'exports', filename);
+    const filepath = path.join(__dirname, filename);
 
-    // Ensure exports directory exists
-    const exportsDir = path.dirname(filepath);
-    if (!fs.existsSync(exportsDir)) {
-      fs.mkdirSync(exportsDir, { recursive: true });
-    }
-    
-    // Write the Excel file
+    // Write the Excel file to project root
     await workbook.xlsx.writeFile(filepath);
-    
-    console.log(`✅ Excel export completed: ${filename} (${alertingPdus.length} alerts)`);
-    
+
+    console.log(`✅ Excel export completed: ${filename} (${alerts.length} alerts)`);
+
     res.json({
       success: true,
       message: 'Alerts exported successfully to Excel',
       filename: filename,
-      count: alertingPdus.length,
+      filepath: filepath,
+      count: alerts.length,
       timestamp: new Date().toISOString()
     });
     
