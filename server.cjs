@@ -640,64 +640,108 @@ app.get('/api/racks/energy', async (req, res) => {
     const thresholds = await fetchThresholdsFromDatabase();
     console.log(`[${requestId}] 🎯 Loaded ${thresholds.length} thresholds for evaluation`);
     
-    // Fetch data from NENG API with pagination parameters
-    const skip = parseInt(req.query.skip) || 0;
-    const limit = parseInt(req.query.limit) || 5000;
-    
-    console.log(`[${requestId}] 🌐 PAGINATION - Fetching data with skip=${skip}, limit=${limit}`);
-    
     // Validate NENG API configuration
     if (!process.env.NENG_API_URL || !process.env.NENG_API_KEY) {
       throw new Error('NENG API configuration missing. Please check NENG_API_URL and NENG_API_KEY environment variables.');
     }
 
-    // Fetch power data
-    console.log(`[${requestId}] 🔌 Fetching power data...`);
-    const powerResponse = await fetchFromNengApi(
-      `${process.env.NENG_API_URL}?skip=${skip}&limit=${limit}`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
-          'Content-Type': 'application/json'
+    // Fetch ALL power data with pagination (skip by 100)
+    console.log(`[${requestId}] 🔌 Fetching all power data with pagination...`);
+    let allPowerData = [];
+    let powerSkip = 0;
+    const pageSize = 100;
+    let hasMorePowerData = true;
+
+    while (hasMorePowerData) {
+      console.log(`[${requestId}] 📄 Fetching power page: skip=${powerSkip}, limit=${pageSize}`);
+
+      const powerResponse = await fetchFromNengApi(
+        `${process.env.NENG_API_URL}?skip=${powerSkip}&limit=${pageSize}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!powerResponse.success || !powerResponse.data) {
+        throw new Error('Invalid response from NENG Power API');
+      }
+
+      const pageData = Array.isArray(powerResponse.data) ? powerResponse.data : [];
+      console.log(`[${requestId}] ✅ Power page received: ${pageData.length} PDUs`);
+
+      if (pageData.length === 0) {
+        hasMorePowerData = false;
+      } else {
+        allPowerData = allPowerData.concat(pageData);
+        powerSkip += pageSize;
+
+        // Stop if we got less than pageSize (last page)
+        if (pageData.length < pageSize) {
+          hasMorePowerData = false;
         }
       }
-    );
-
-    if (!powerResponse.success || !powerResponse.data) {
-      throw new Error('Invalid response from NENG Power API');
     }
 
-    console.log(`[${requestId}] ✅ Power API Response - Received ${powerResponse.data.length} PDUs`);
+    console.log(`[${requestId}] ✅ Total Power API data collected: ${allPowerData.length} PDUs`);
 
-    // Fetch sensor data if sensors URL is configured
-    let sensorsData = [];
+    // Fetch ALL sensor data if sensors URL is configured
+    let allSensorsData = [];
     if (process.env.NENG_SENSORS_API_URL) {
-      console.log(`[${requestId}] 🌡️ Fetching sensor data...`);
+      console.log(`[${requestId}] 🌡️ Fetching all sensor data with pagination...`);
+      let sensorSkip = 0;
+      let hasMoreSensorData = true;
+
       try {
-        const sensorsResponse = await fetchFromNengApi(
-          `${process.env.NENG_SENSORS_API_URL}?skip=${skip}&limit=${limit}`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
-              'Content-Type': 'application/json'
+        while (hasMoreSensorData) {
+          console.log(`[${requestId}] 📄 Fetching sensor page: skip=${sensorSkip}, limit=${pageSize}`);
+
+          const sensorsResponse = await fetchFromNengApi(
+            `${process.env.NENG_SENSORS_API_URL}?skip=${sensorSkip}&limit=${pageSize}`,
+            {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          if (!sensorsResponse.success || !sensorsResponse.data) {
+            console.warn(`[${requestId}] ⚠️ Sensor page failed, stopping pagination`);
+            hasMoreSensorData = false;
+            break;
+          }
+
+          const pageData = Array.isArray(sensorsResponse.data) ? sensorsResponse.data : [];
+          console.log(`[${requestId}] ✅ Sensor page received: ${pageData.length} sensors`);
+
+          if (pageData.length === 0) {
+            hasMoreSensorData = false;
+          } else {
+            allSensorsData = allSensorsData.concat(pageData);
+            sensorSkip += pageSize;
+
+            // Stop if we got less than pageSize (last page)
+            if (pageData.length < pageSize) {
+              hasMoreSensorData = false;
             }
           }
-        );
-
-        if (sensorsResponse.success && sensorsResponse.data) {
-          sensorsData = sensorsResponse.data;
-          console.log(`[${requestId}] ✅ Sensors API Response - Received ${sensorsData.length} sensors`);
         }
+
+        console.log(`[${requestId}] ✅ Total Sensors API data collected: ${allSensorsData.length} sensors`);
       } catch (sensorError) {
         console.warn(`[${requestId}] ⚠️ Sensors API failed (continuing without sensor data):`, sensorError.message);
       }
+    } else {
+      console.log(`[${requestId}] ⚠️ NENG_SENSORS_API_URL not configured, skipping sensor data`);
     }
 
     // Map and combine power and sensor data
-    const powerData = Array.isArray(powerResponse.data) ? powerResponse.data : [];
-    const combinedData = powerData.map(powerItem => {
+    const combinedData = allPowerData.map(powerItem => {
       // Map power fields to expected format
       const mapped = {
         id: String(powerItem.id),
@@ -716,7 +760,7 @@ app.get('/api/racks/energy', async (req, res) => {
       };
 
       // Find matching sensor data by rackId
-      const matchingSensor = sensorsData.find(sensor =>
+      const matchingSensor = allSensorsData.find(sensor =>
         String(sensor.rackId) === String(powerItem.rackId)
       );
 
@@ -740,12 +784,13 @@ app.get('/api/racks/energy', async (req, res) => {
     }
     
     console.log(`[${requestId}] 📊 Data Summary:`);
-    console.log(`[${requestId}]   - Total PDUs: ${combinedData.length}`);
-    console.log(`[${requestId}]   - Power data items: ${powerData.length}`);
-    console.log(`[${requestId}]   - Sensor data items: ${sensorsData.length}`);
+    console.log(`[${requestId}]   - Total combined PDUs: ${combinedData.length}`);
+    console.log(`[${requestId}]   - Power data items: ${allPowerData.length}`);
+    console.log(`[${requestId}]   - Sensor data items: ${allSensorsData.length}`);
 
     const pdusWithSensorData = combinedData.filter(pdu => pdu.sensorTemperature != null).length;
     console.log(`[${requestId}]   - PDUs with sensor data: ${pdusWithSensorData}`);
+    console.log(`[${requestId}]   - PDUs without sensor data: ${combinedData.length - pdusWithSensorData}`);
     console.log(`[${requestId}]   - Data source: NENG API (real)`);
     console.log(`[${requestId}]   - Request timestamp: ${new Date().toISOString()}`);
 
@@ -763,6 +808,19 @@ app.get('/api/racks/energy', async (req, res) => {
         sensorTemperature: combinedData[0].sensorTemperature,
         sensorHumidity: combinedData[0].sensorHumidity
       });
+
+      // Also log a PDU with sensor data if available
+      const pduWithSensor = combinedData.find(pdu => pdu.sensorTemperature != null);
+      if (pduWithSensor) {
+        console.log(`[${requestId}] 🔍 DEBUG - PDU with sensor data sample:`, {
+          id: pduWithSensor.id,
+          rackId: pduWithSensor.rackId,
+          name: pduWithSensor.name,
+          current: pduWithSensor.current,
+          sensorTemperature: pduWithSensor.sensorTemperature,
+          sensorHumidity: pduWithSensor.sensorHumidity
+        });
+      }
     }
     
     // Procesar los datos con evaluación de umbrales
