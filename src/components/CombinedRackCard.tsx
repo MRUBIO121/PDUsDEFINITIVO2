@@ -15,7 +15,7 @@ interface CombinedRackCardProps {
   ) => string;
   getAmperageStatusColor: (rack: RackData) => string;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
-  onSendToMaintenance?: (rackId: string, chain: string, rackName: string) => void;
+  onSendToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
 }
 
 export default function CombinedRackCard({
