@@ -51,7 +51,7 @@ const logger = winston.createLogger({
 });
 
 // Ensure logs directory exists
-const logsDir = path.join(__dirname, '..', 'logs');
+const logsDir = path.join(__dirname, 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
@@ -1184,8 +1184,8 @@ app.post('/api/export/alerts', async (req, res) => {
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
     const filename = `alertas_activas_${timestamp}.xlsx`;
-    const filepath = path.join(__dirname, '..', 'exports', filename);
-    
+    const filepath = path.join(__dirname, 'exports', filename);
+
     // Ensure exports directory exists
     const exportsDir = path.dirname(filepath);
     if (!fs.existsSync(exportsDir)) {
