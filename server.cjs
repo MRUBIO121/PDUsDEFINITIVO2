@@ -746,7 +746,7 @@ app.get('/api/racks/energy', async (req, res) => {
       const mapped = {
         id: String(powerItem.id),
         rackId: String(powerItem.rackId),
-        name: powerItem.name,
+        name: powerItem.rackName || powerItem.name,
         country: 'España',
         site: powerItem.site,
         dc: powerItem.dc,
