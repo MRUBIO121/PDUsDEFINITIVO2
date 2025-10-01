@@ -68,10 +68,12 @@ const sqlConfig = {
     trustServerCertificate: true,
     enableArithAbort: true
   },
+  connectionTimeout: 60000,
+  requestTimeout: 60000,
   pool: {
-    max: 10,
-    min: 0,
-    idleTimeoutMillis: 30000
+    max: 20,
+    min: 2,
+    idleTimeoutMillis: 60000
   }
 };
 
@@ -503,20 +505,38 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
 
     console.log(`📊 Found ${currentCriticalPdus.length} PDUs with critical alerts`);
 
-    // Process each critical PDU
-    for (const pdu of currentCriticalPdus) {
-      // Process each alert reason for this PDU
-      for (const reason of pdu.reasons) {
-        if (reason.startsWith('critical_')) {
-          try {
-            await processCriticalAlert(pool, pdu, reason, thresholds);
-          } catch (alertError) {
-            console.error(`❌ Error processing critical alert for PDU ${pdu.id}:`, alertError.message);
-            // Continue processing other alerts even if one fails
+    // Process PDUs in batches to avoid connection timeout issues
+    const BATCH_SIZE = 50;
+    let processedCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < currentCriticalPdus.length; i += BATCH_SIZE) {
+      const batch = currentCriticalPdus.slice(i, i + BATCH_SIZE);
+      console.log(`🔄 Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(currentCriticalPdus.length / BATCH_SIZE)} (${batch.length} PDUs)...`);
+
+      for (const pdu of batch) {
+        // Process each alert reason for this PDU
+        for (const reason of pdu.reasons) {
+          if (reason.startsWith('critical_')) {
+            try {
+              await processCriticalAlert(pool, pdu, reason, thresholds);
+              processedCount++;
+            } catch (alertError) {
+              errorCount++;
+              console.error(`❌ Error processing critical alert for PDU ${pdu.id}:`, alertError.message);
+              // Continue processing other alerts even if one fails
+            }
           }
         }
       }
+
+      // Small delay between batches to avoid overwhelming the database
+      if (i + BATCH_SIZE < currentCriticalPdus.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
+
+    console.log(`✅ Processed ${processedCount} alerts with ${errorCount} errors`);
 
     // Clean up resolved alerts
     await cleanupResolvedAlerts(pool, currentCriticalPdus);
@@ -542,9 +562,9 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
  */
 async function processCriticalAlert(pool, pdu, reason, thresholds) {
   try {
-    // Verify pool is still connected
-    if (!pool || !pool.connected) {
-      throw new Error('Database connection is not available');
+    // Verify pool exists
+    if (!pool) {
+      throw new Error('Database pool is null');
     }
 
     // Extract metric type and field from reason
@@ -680,9 +700,9 @@ function getThresholdFromReason(reason) {
  */
 async function cleanupResolvedAlerts(pool, currentCriticalPdus) {
   try {
-    // Verify pool is still connected
-    if (!pool || !pool.connected) {
-      console.log('⚠️ Database connection not available for cleanup');
+    // Verify pool exists
+    if (!pool) {
+      console.log('⚠️ Database pool not available for cleanup');
       return;
     }
 
