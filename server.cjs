@@ -251,11 +251,55 @@ async function saveThresholdsToDatabase(thresholds) {
   }
 }
 
+// Load rack-specific thresholds from database
+async function loadRackSpecificThresholds(rackId) {
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request()
+      .input('rackId', sql.NVarChar, rackId)
+      .query(`
+        SELECT threshold_key, value, unit
+        FROM dbo.rack_threshold_overrides
+        WHERE rack_id = @rackId
+      `);
+    await pool.close();
+
+    const overrides = {};
+    result.recordset.forEach(row => {
+      overrides[row.threshold_key] = row.value;
+      // Store unit if available
+      if (row.unit) {
+        overrides[`${row.threshold_key}_unit`] = row.unit;
+      }
+    });
+
+    return overrides;
+  } catch (error) {
+    console.error(`Error loading rack-specific thresholds for ${rackId}:`, error.message);
+    return {};
+  }
+}
+
 // Process rack data with threshold evaluation
 async function processRackData(racks, thresholds) {
   console.log(`🔧 Processing ${racks.length} racks with threshold evaluation...`);
-  
+
+  // Load all rack-specific thresholds
+  const rackThresholdsMap = new Map();
+  const uniqueRackIds = [...new Set(racks.map(r => r.rackId || r.id))];
+
+  for (const rackId of uniqueRackIds) {
+    const overrides = await loadRackSpecificThresholds(rackId);
+    if (Object.keys(overrides).length > 0) {
+      rackThresholdsMap.set(rackId, overrides);
+    }
+  }
+
   const processedRacks = racks.map(rack => {
+    // Merge global thresholds with rack-specific overrides
+    const rackId = rack.rackId || rack.id;
+    const rackOverrides = rackThresholdsMap.get(rackId) || {};
+    const effectiveThresholds = { ...thresholds, ...rackOverrides };
     const reasons = [];
     let status = 'normal';
     
@@ -271,21 +315,21 @@ async function processRackData(racks, thresholds) {
     let criticalLow, criticalHigh, warningLow, warningHigh;
     
     if (isSinglePhase) {
-      criticalLow = getThresholdValue(thresholds, 'critical_amperage_low_single_phase');
-      criticalHigh = getThresholdValue(thresholds, 'critical_amperage_high_single_phase');
-      warningLow = getThresholdValue(thresholds, 'warning_amperage_low_single_phase');
-      warningHigh = getThresholdValue(thresholds, 'warning_amperage_high_single_phase');
+      criticalLow = getThresholdValue(effectiveThresholds, 'critical_amperage_low_single_phase');
+      criticalHigh = getThresholdValue(effectiveThresholds, 'critical_amperage_high_single_phase');
+      warningLow = getThresholdValue(effectiveThresholds, 'warning_amperage_low_single_phase');
+      warningHigh = getThresholdValue(effectiveThresholds, 'warning_amperage_high_single_phase');
     } else if (is3Phase) {
-      criticalLow = getThresholdValue(thresholds, 'critical_amperage_low_3_phase');
-      criticalHigh = getThresholdValue(thresholds, 'critical_amperage_high_3_phase');
-      warningLow = getThresholdValue(thresholds, 'warning_amperage_low_3_phase');
-      warningHigh = getThresholdValue(thresholds, 'warning_amperage_high_3_phase');
+      criticalLow = getThresholdValue(effectiveThresholds, 'critical_amperage_low_3_phase');
+      criticalHigh = getThresholdValue(effectiveThresholds, 'critical_amperage_high_3_phase');
+      warningLow = getThresholdValue(effectiveThresholds, 'warning_amperage_low_3_phase');
+      warningHigh = getThresholdValue(effectiveThresholds, 'warning_amperage_high_3_phase');
     } else {
       // Default to single phase
-      criticalLow = getThresholdValue(thresholds, 'critical_amperage_low_single_phase');
-      criticalHigh = getThresholdValue(thresholds, 'critical_amperage_high_single_phase');
-      warningLow = getThresholdValue(thresholds, 'warning_amperage_low_single_phase');
-      warningHigh = getThresholdValue(thresholds, 'warning_amperage_high_single_phase');
+      criticalLow = getThresholdValue(effectiveThresholds, 'critical_amperage_low_single_phase');
+      criticalHigh = getThresholdValue(effectiveThresholds, 'critical_amperage_high_single_phase');
+      warningLow = getThresholdValue(effectiveThresholds, 'warning_amperage_low_single_phase');
+      warningHigh = getThresholdValue(effectiveThresholds, 'warning_amperage_high_single_phase');
     }
     
     // Amperage evaluation - CRITICAL: Including 0A evaluation
@@ -319,10 +363,10 @@ async function processRackData(racks, thresholds) {
       const temperature = parseFloat(rack.sensorTemperature) || parseFloat(rack.temperature) || null;
 
       if (temperature !== null && !isNaN(temperature)) {
-      const tempCriticalLow = getThresholdValue(thresholds, 'critical_temperature_low');
-      const tempCriticalHigh = getThresholdValue(thresholds, 'critical_temperature_high');
-      const tempWarningLow = getThresholdValue(thresholds, 'warning_temperature_low');
-      const tempWarningHigh = getThresholdValue(thresholds, 'warning_temperature_high');
+      const tempCriticalLow = getThresholdValue(effectiveThresholds, 'critical_temperature_low');
+      const tempCriticalHigh = getThresholdValue(effectiveThresholds, 'critical_temperature_high');
+      const tempWarningLow = getThresholdValue(effectiveThresholds, 'warning_temperature_low');
+      const tempWarningHigh = getThresholdValue(effectiveThresholds, 'warning_temperature_high');
 
       // Only evaluate if all thresholds are defined
       if (tempCriticalLow !== undefined && tempCriticalHigh !== undefined && tempWarningLow !== undefined && tempWarningHigh !== undefined) {
@@ -351,10 +395,10 @@ async function processRackData(racks, thresholds) {
       const humidity = parseFloat(rack.sensorHumidity) || null;
 
       if (humidity !== null && !isNaN(humidity)) {
-      const humidCriticalLow = getThresholdValue(thresholds, 'critical_humidity_low');
-      const humidCriticalHigh = getThresholdValue(thresholds, 'critical_humidity_high');
-      const humidWarningLow = getThresholdValue(thresholds, 'warning_humidity_low');
-      const humidWarningHigh = getThresholdValue(thresholds, 'warning_humidity_high');
+      const humidCriticalLow = getThresholdValue(effectiveThresholds, 'critical_humidity_low');
+      const humidCriticalHigh = getThresholdValue(effectiveThresholds, 'critical_humidity_high');
+      const humidWarningLow = getThresholdValue(effectiveThresholds, 'warning_humidity_low');
+      const humidWarningHigh = getThresholdValue(effectiveThresholds, 'warning_humidity_high');
 
       // Only evaluate if all thresholds are defined
       if (humidCriticalLow !== undefined && humidCriticalHigh !== undefined && humidWarningLow !== undefined && humidWarningHigh !== undefined) {
@@ -1113,22 +1157,30 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
     let updatedCount = 0;
     
     for (const [key, value] of Object.entries(filteredThresholds)) {
+      // Get the unit from global threshold_configs
+      const unitResult = await pool.request()
+        .input('key', sql.NVarChar, key)
+        .query(`SELECT unit FROM dbo.threshold_configs WHERE threshold_key = @key`);
+
+      const unit = unitResult.recordset.length > 0 ? unitResult.recordset[0].unit : null;
+
       const result = await pool.request()
         .input('rackId', sql.NVarChar, rackId)
         .input('key', sql.NVarChar, key)
         .input('value', sql.Decimal(18, 4), value)
+        .input('unit', sql.NVarChar, unit)
         .query(`
           MERGE dbo.rack_threshold_overrides AS target
-          USING (SELECT @rackId as rack_id, @key as threshold_key, @value as value) AS source
+          USING (SELECT @rackId as rack_id, @key as threshold_key, @value as value, @unit as unit) AS source
           ON target.rack_id = source.rack_id AND target.threshold_key = source.threshold_key
           WHEN MATCHED THEN
-            UPDATE SET value = source.value, updated_at = GETDATE()
+            UPDATE SET value = source.value, unit = source.unit, updated_at = GETDATE()
           WHEN NOT MATCHED THEN
-            INSERT (rack_id, threshold_key, value) VALUES (source.rack_id, source.threshold_key, source.value);
+            INSERT (rack_id, threshold_key, value, unit) VALUES (source.rack_id, source.threshold_key, source.value, source.unit);
         `);
-      
+
       updatedCount++;
-      console.log(`✅ Updated rack-specific threshold: ${rackId}.${key} = ${value}`);
+      console.log(`✅ Updated rack-specific threshold: ${rackId}.${key} = ${value} ${unit || ''}`);
     }
     
     await pool.close();
