@@ -251,32 +251,42 @@ async function saveThresholdsToDatabase(thresholds) {
   }
 }
 
-// Load rack-specific thresholds from database
-async function loadRackSpecificThresholds(rackId) {
+// Load all rack-specific thresholds from database in one query
+async function loadAllRackSpecificThresholds(rackIds) {
   try {
+    if (rackIds.length === 0) return new Map();
+
     const pool = await sql.connect(sqlConfig);
-    const result = await pool.request()
-      .input('rackId', sql.NVarChar, rackId)
-      .query(`
-        SELECT threshold_key, value, unit
-        FROM dbo.rack_threshold_overrides
-        WHERE rack_id = @rackId
-      `);
+
+    // Create a table-valued parameter or use IN clause
+    const rackIdsList = rackIds.map(id => `'${id.replace("'", "''")}'`).join(',');
+
+    const result = await pool.request().query(`
+      SELECT rack_id, threshold_key, value, unit
+      FROM dbo.rack_threshold_overrides
+      WHERE rack_id IN (${rackIdsList})
+    `);
+
     await pool.close();
 
-    const overrides = {};
+    // Organize by rack_id
+    const rackThresholdsMap = new Map();
     result.recordset.forEach(row => {
+      if (!rackThresholdsMap.has(row.rack_id)) {
+        rackThresholdsMap.set(row.rack_id, {});
+      }
+      const overrides = rackThresholdsMap.get(row.rack_id);
       overrides[row.threshold_key] = row.value;
-      // Store unit if available
       if (row.unit) {
         overrides[`${row.threshold_key}_unit`] = row.unit;
       }
     });
 
-    return overrides;
+    console.log(`📊 Loaded rack-specific thresholds for ${rackThresholdsMap.size} racks`);
+    return rackThresholdsMap;
   } catch (error) {
-    console.error(`Error loading rack-specific thresholds for ${rackId}:`, error.message);
-    return {};
+    console.error('Error loading rack-specific thresholds:', error.message);
+    return new Map();
   }
 }
 
@@ -284,16 +294,9 @@ async function loadRackSpecificThresholds(rackId) {
 async function processRackData(racks, thresholds) {
   console.log(`🔧 Processing ${racks.length} racks with threshold evaluation...`);
 
-  // Load all rack-specific thresholds
-  const rackThresholdsMap = new Map();
+  // Load all rack-specific thresholds in one query
   const uniqueRackIds = [...new Set(racks.map(r => r.rackId || r.id))];
-
-  for (const rackId of uniqueRackIds) {
-    const overrides = await loadRackSpecificThresholds(rackId);
-    if (Object.keys(overrides).length > 0) {
-      rackThresholdsMap.set(rackId, overrides);
-    }
-  }
+  const rackThresholdsMap = await loadAllRackSpecificThresholds(uniqueRackIds);
 
   const processedRacks = racks.map(rack => {
     // Merge global thresholds with rack-specific overrides
@@ -490,9 +493,10 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
     
     // Clean up resolved alerts
     await cleanupResolvedAlerts(pool, currentCriticalPdus);
-    
+
+    await pool.close();
     console.log('✅ Active critical alerts management completed');
-    
+
   } catch (error) {
     console.error('❌ Error managing active critical alerts:', error);
   }
