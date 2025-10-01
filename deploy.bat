@@ -24,7 +24,7 @@ echo EXITO: Herramientas verificadas
 echo.
 
 echo [2/4] Instalando dependencias...
-call npm install --production
+call npm install
 if %errorlevel% neq 0 (
     echo ERROR: Fallo al instalar dependencias
     pause

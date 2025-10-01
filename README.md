@@ -141,7 +141,7 @@ npm run server:dev
 deploy.bat
 
 # O manualmente:
-npm install --production
+npm install
 npm run build
 pm2 start ecosystem.config.cjs --env production
 pm2 save
