@@ -73,7 +73,8 @@ if %errorlevel% neq 0 (
 echo EXITO: Aplicacion construida correctamente
 echo.
 
-echo [6/6] Iniciando el servicio con PM2...
+echo [6/6] Iniciando/reiniciando el servicio con PM2...
+call pm2 delete energy-monitoring-api 2>nul
 call pm2 start .\ecosystem.config.cjs
 if %errorlevel% neq 0 (
     echo ERROR: Fallo al iniciar el servicio con PM2
@@ -83,13 +84,23 @@ if %errorlevel% neq 0 (
 echo EXITO: Servicio iniciado correctamente con PM2
 echo.
 
+echo [7/7] Guardando configuracion de PM2...
+call pm2 save
+if %errorlevel% neq 0 (
+    echo ADVERTENCIA: No se pudo guardar la configuracion de PM2
+)
+echo EXITO: Configuracion de PM2 guardada
+echo.
+
 echo ================================================================
 echo          DESPLIEGUE COMPLETADO EXITOSAMENTE
 echo ================================================================
 echo La aplicacion Energy Monitoring System esta ahora ejecutandose.
-echo Mostrando logs en tiempo real...
 echo.
-echo Presiona Ctrl+C para detener la visualizacion de logs.
+echo Comandos utiles:
+echo   pm2 logs energy-monitoring-api  - Ver logs en tiempo real
+echo   pm2 status                       - Ver estado del servicio
+echo   pm2 restart energy-monitoring-api - Reiniciar el servicio
+echo   pm2 stop energy-monitoring-api   - Detener el servicio
 echo.
-
-rem call pm2 logs energy-monitoring-api
+pause
