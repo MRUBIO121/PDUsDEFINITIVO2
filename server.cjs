@@ -706,9 +706,9 @@ function getThresholdFromReason(reason) {
  */
 async function cleanupResolvedAlerts(pool, currentCriticalPdus) {
   try {
-    // Verify pool exists
-    if (!pool) {
-      console.log('⚠️ Database pool not available for cleanup');
+    // Verify pool exists and is connected
+    if (!pool || !pool.connected) {
+      console.log('⚠️ Database pool not available or disconnected for cleanup, skipping...');
       return;
     }
 
@@ -716,47 +716,62 @@ async function cleanupResolvedAlerts(pool, currentCriticalPdus) {
 
     if (currentCriticalPduIds.length === 0) {
       // If no critical PDUs, delete all alerts
+      if (!pool.connected) {
+        console.log('⚠️ Connection lost before cleanup query');
+        return;
+      }
+
       const deleteResult = await pool.request().query(`
         DELETE FROM active_critical_alerts
       `);
-      
+
       console.log(`🧹 Cleaned up all ${deleteResult.rowsAffected} resolved alerts (no critical PDUs)`);
       return;
     }
-    
+
     // Create a string of PDU IDs for the NOT IN clause
     const pduIdsList = currentCriticalPduIds.map(id => `'${id.replace("'", "''")}'`).join(',');
-    
+
     // Delete alerts for PDUs that are no longer critical
+    if (!pool.connected) {
+      console.log('⚠️ Connection lost before main cleanup query');
+      return;
+    }
+
     const deleteResult = await pool.request().query(`
-      DELETE FROM active_critical_alerts 
+      DELETE FROM active_critical_alerts
       WHERE pdu_id NOT IN (${pduIdsList})
     `);
-    
+
     if (deleteResult.rowsAffected > 0) {
       console.log(`🧹 Cleaned up ${deleteResult.rowsAffected} resolved alerts`);
     }
-    
+
     // Also clean up alerts for PDUs that are still critical but no longer have the specific reason
     for (const criticalPdu of currentCriticalPdus) {
+      if (!pool.connected) {
+        console.log('⚠️ Connection lost during specific cleanup loop, stopping...');
+        break;
+      }
+
       const currentReasons = criticalPdu.reasons.filter(r => r.startsWith('critical_'));
-      
+
       if (currentReasons.length > 0) {
         const reasonsList = currentReasons.map(reason => `'${reason.replace("'", "''")}'`).join(',');
-        
+
         const cleanupResult = await pool.request()
           .input('pdu_id', sql.NVarChar, criticalPdu.id)
           .query(`
-            DELETE FROM active_critical_alerts 
+            DELETE FROM active_critical_alerts
             WHERE pdu_id = @pdu_id AND alert_reason NOT IN (${reasonsList})
           `);
-        
+
         if (cleanupResult.rowsAffected > 0) {
           console.log(`🧹 Cleaned up ${cleanupResult.rowsAffected} resolved specific alerts for PDU ${criticalPdu.id}`);
         }
       }
     }
-    
+
   } catch (error) {
     console.error('❌ Error cleaning up resolved alerts:', error);
   }
