@@ -469,36 +469,50 @@ function getThresholdValue(thresholds, key) {
  * Inserts new critical alerts and removes resolved ones
  */
 async function manageActiveCriticalAlerts(allPdus, thresholds) {
+  let pool = null;
   try {
     console.log('🔄 Starting active critical alerts management...');
-    
-    const pool = await sql.connect(sqlConfig);
-    
+
+    pool = await sql.connect(sqlConfig);
+
     // Get current critical PDUs with their reasons
-    const currentCriticalPdus = allPdus.filter(pdu => 
+    const currentCriticalPdus = allPdus.filter(pdu =>
       pdu.status === 'critical' && pdu.reasons && pdu.reasons.length > 0
     );
-    
+
     console.log(`📊 Found ${currentCriticalPdus.length} PDUs with critical alerts`);
-    
+
     // Process each critical PDU
     for (const pdu of currentCriticalPdus) {
       // Process each alert reason for this PDU
       for (const reason of pdu.reasons) {
         if (reason.startsWith('critical_')) {
-          await processCriticalAlert(pool, pdu, reason, thresholds);
+          try {
+            await processCriticalAlert(pool, pdu, reason, thresholds);
+          } catch (alertError) {
+            console.error(`❌ Error processing critical alert for PDU ${pdu.id}:`, alertError.message);
+            // Continue processing other alerts even if one fails
+          }
         }
       }
     }
-    
+
     // Clean up resolved alerts
     await cleanupResolvedAlerts(pool, currentCriticalPdus);
 
-    await pool.close();
     console.log('✅ Active critical alerts management completed');
 
   } catch (error) {
     console.error('❌ Error managing active critical alerts:', error);
+  } finally {
+    // Always close the pool if it was opened
+    if (pool) {
+      try {
+        await pool.close();
+      } catch (closeError) {
+        console.error('❌ Error closing pool:', closeError.message);
+      }
+    }
   }
 }
 
@@ -507,16 +521,21 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
  */
 async function processCriticalAlert(pool, pdu, reason, thresholds) {
   try {
+    // Verify pool is still connected
+    if (!pool || !pool.connected) {
+      throw new Error('Database connection is not available');
+    }
+
     // Extract metric type and field from reason
     const metricInfo = extractMetricInfo(reason, pdu);
-    
+
     if (!metricInfo) {
       console.log(`⚠️ Could not extract metric info from reason: ${reason}`);
       return;
     }
-    
+
     const { metricType, alertField, alertValue, thresholdExceeded } = metricInfo;
-    
+
     // Check if this alert already exists
     const existingAlert = await pool.request()
       .input('pdu_id', sql.NVarChar, pdu.id)
@@ -640,8 +659,14 @@ function getThresholdFromReason(reason) {
  */
 async function cleanupResolvedAlerts(pool, currentCriticalPdus) {
   try {
+    // Verify pool is still connected
+    if (!pool || !pool.connected) {
+      console.log('⚠️ Database connection not available for cleanup');
+      return;
+    }
+
     const currentCriticalPduIds = currentCriticalPdus.map(pdu => pdu.id);
-    
+
     if (currentCriticalPduIds.length === 0) {
       // If no critical PDUs, delete all alerts
       const deleteResult = await pool.request().query(`
