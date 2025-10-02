@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Server, Settings, Wrench, MoreVertical } from 'lucide-react';
+import { Server, Settings, Wrench, MoreVertical, Zap } from 'lucide-react';
 import { RackData } from '../types';
 
 interface CombinedRackCardProps {
@@ -151,10 +151,20 @@ export default function CombinedRackCard({
             <div className={`w-3 h-3 rounded-full ${isInMaintenance ? 'bg-blue-500' : getStatusColor(overallStatus)} mr-2 ${
               !isInMaintenance && overallStatus !== 'normal' ? 'animate-pulse' : ''
             }`}></div>
-            {isInMaintenance && (
-              <span className="font-medium text-gray-700 text-xs">
-                Mantenimiento
-              </span>
+            {isInMaintenance ? (
+              <>
+                <Wrench className="w-3.5 h-3.5 text-slate-600 mr-1.5" />
+                <span className="font-medium text-slate-700 text-xs">
+                  Mantenimiento
+                </span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-3.5 h-3.5 text-emerald-600 mr-1.5" />
+                <span className="font-medium text-gray-700 text-xs">
+                  Conectado
+                </span>
+              </>
             )}
           </div>
           <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded">
@@ -266,12 +276,24 @@ export default function CombinedRackCard({
               {/* PDU Header */}
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center">
-                  <div className={`w-2 h-2 rounded-full ${getStatusColor(rack.status)} mr-1 ${
+                  <div className={`w-2 h-2 rounded-full ${getStatusColor(rack.status)} mr-1.5 ${
                     rack.status !== 'normal' ? 'animate-pulse' : ''
                   }`}></div>
-                  <span className="text-[10px] text-gray-600">
-                    {getStatusText(rack.status)}
-                  </span>
+                  {isInMaintenance ? (
+                    <>
+                      <Wrench className="w-3 h-3 text-slate-600 mr-1" />
+                      <span className="text-[10px] text-slate-700 font-medium">
+                        Mantenimiento
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3 h-3 text-emerald-600 mr-1" />
+                      <span className="text-[10px] text-gray-700 font-medium">
+                        Conectado
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
               

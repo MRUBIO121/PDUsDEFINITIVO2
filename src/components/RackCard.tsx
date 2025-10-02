@@ -1,5 +1,5 @@
 import React from 'react';
-import { Server, Activity } from 'lucide-react';
+import { Server, Activity, Wrench, Zap } from 'lucide-react';
 import { RackData } from '../types';
 
 interface RackCardProps {
@@ -105,9 +105,21 @@ export default function RackCard({
           <div className={`w-3 h-3 rounded-full ${getStatusColor(rack.status)} mr-2 ${
             rack.status !== 'normal' ? 'animate-pulse' : ''
           }`}></div>
-          <span className="font-medium text-gray-700 text-xs">
-            {getStatusText(rack.status)}
-          </span>
+          {rack.isInMaintenance ? (
+            <>
+              <Wrench className="w-3.5 h-3.5 text-slate-600 mr-1.5" />
+              <span className="font-medium text-slate-700 text-xs">
+                Mantenimiento
+              </span>
+            </>
+          ) : (
+            <>
+              <Zap className="w-3.5 h-3.5 text-emerald-600 mr-1.5" />
+              <span className="font-medium text-gray-700 text-xs">
+                Conectado
+              </span>
+            </>
+          )}
         </div>
 
         {/* Rack Header */}
