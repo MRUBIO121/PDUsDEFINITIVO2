@@ -1434,31 +1434,49 @@ app.post('/api/maintenance/chain', async (req, res) => {
       });
     }
 
-    const pool = await sql.connect(sqlConfig);
+    // Fetch ALL power data from NENG API to get all racks in this chain and dc
+    let allPowerData = [];
+    let powerSkip = 0;
+    const pageSize = 100;
+    let hasMorePowerData = true;
 
-    const racksResult = await pool.request()
-      .input('chain', sql.NVarChar, chain)
-      .input('dc', sql.NVarChar, dc)
-      .query(`
-        SELECT DISTINCT
-          rack_id,
-          pdu_id,
-          name,
-          country,
-          site,
-          dc,
-          phase,
-          chain,
-          node,
-          serial
-        FROM active_critical_alerts
-        WHERE chain = @chain AND dc = @dc
-      `);
+    while (hasMorePowerData) {
+      const powerResponse = await fetchFromNengApi(
+        `${process.env.NENG_API_URL}?skip=${powerSkip}&limit=${pageSize}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-    const chainRacks = racksResult.recordset;
+      if (!powerResponse.success || !powerResponse.data) {
+        throw new Error('Invalid response from NENG Power API');
+      }
+
+      const pageData = Array.isArray(powerResponse.data) ? powerResponse.data : [];
+
+      if (pageData.length === 0) {
+        hasMorePowerData = false;
+      } else {
+        allPowerData = allPowerData.concat(pageData);
+        powerSkip += pageSize;
+
+        if (pageData.length < pageSize) {
+          hasMorePowerData = false;
+        }
+      }
+    }
+
+    // Filter racks that belong to this chain in the specified datacenter
+    const chainRacks = allPowerData.filter(rack =>
+      String(rack.chain) === String(chain) &&
+      rack.dc === dc
+    );
 
     if (chainRacks.length === 0) {
-      await pool.close();
       return res.status(404).json({
         success: false,
         message: `No racks found for chain ${chain} in DC ${dc}`,
@@ -1466,20 +1484,24 @@ app.post('/api/maintenance/chain', async (req, res) => {
       });
     }
 
+    const pool = await sql.connect(sqlConfig);
     let insertedCount = 0;
 
     for (const rack of chainRacks) {
       try {
+        const rackId = rack.rackId || rack.id || `${rack.site}_${rack.dc}_${rack.chain}_${rack.node}`;
+        const pduId = rack.id || rackId;
+
         await pool.request()
-          .input('rack_id', sql.NVarChar, rack.rack_id)
-          .input('chain', sql.NVarChar, rack.chain)
-          .input('pdu_id', sql.NVarChar, rack.pdu_id || rack.rack_id)
-          .input('name', sql.NVarChar, rack.name || 'Unknown')
-          .input('country', sql.NVarChar, rack.country || 'Unknown')
+          .input('rack_id', sql.NVarChar, rackId)
+          .input('chain', sql.NVarChar, String(rack.chain || 'Unknown'))
+          .input('pdu_id', sql.NVarChar, pduId)
+          .input('name', sql.NVarChar, rack.rackName || rack.name || 'Unknown')
+          .input('country', sql.NVarChar, 'España')
           .input('site', sql.NVarChar, rack.site || 'Unknown')
           .input('dc', sql.NVarChar, rack.dc || 'Unknown')
           .input('phase', sql.NVarChar, rack.phase || 'Unknown')
-          .input('node', sql.NVarChar, rack.node || 'Unknown')
+          .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
           .input('serial', sql.NVarChar, rack.serial || 'Unknown')
           .input('reason', sql.NVarChar, reason)
           .input('started_by', sql.NVarChar, startedBy)
@@ -1494,7 +1516,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
           `);
         insertedCount++;
       } catch (insertError) {
-        logger.error(`Failed to insert rack ${rack.rack_id} to maintenance:`, insertError);
+        logger.error(`Failed to insert rack to maintenance:`, insertError);
       }
     }
 
