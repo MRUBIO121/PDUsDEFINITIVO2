@@ -1414,7 +1414,7 @@ app.post('/api/maintenance/rack', async (req, res) => {
   }
 });
 
-// Add all racks from a chain to maintenance (using Supabase)
+// Add all racks from a chain to maintenance (using SQL Server)
 app.post('/api/maintenance/chain', async (req, res) => {
   try {
     const {
@@ -1434,47 +1434,31 @@ app.post('/api/maintenance/chain', async (req, res) => {
       });
     }
 
-    // Fetch ALL power data with pagination to get all racks in this chain and dc
-    let allPowerData = [];
-    let powerSkip = 0;
-    const pageSize = 100;
-    let hasMorePowerData = true;
+    const pool = await sql.connect(sqlConfig);
 
-    while (hasMorePowerData) {
-      const nengResponse = await fetch(`${process.env.NENG_API_URL}?skip=${powerSkip}&limit=${pageSize}`, {
-        headers: {
-          'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
+    const racksResult = await pool.request()
+      .input('chain', sql.NVarChar, chain)
+      .input('dc', sql.NVarChar, dc)
+      .query(`
+        SELECT DISTINCT
+          rack_id,
+          pdu_id,
+          name,
+          country,
+          site,
+          dc,
+          phase,
+          chain,
+          node,
+          serial
+        FROM active_critical_alerts
+        WHERE chain = @chain AND dc = @dc
+      `);
 
-      if (!nengResponse.ok) {
-        throw new Error(`Failed to fetch racks from NENG API: ${nengResponse.statusText}`);
-      }
-
-      const pageData = await nengResponse.json();
-      const dataArray = Array.isArray(pageData) ? pageData : [];
-
-      if (dataArray.length === 0) {
-        hasMorePowerData = false;
-      } else {
-        allPowerData = allPowerData.concat(dataArray);
-        powerSkip += pageSize;
-
-        // Stop if we got less than pageSize (last page)
-        if (dataArray.length < pageSize) {
-          hasMorePowerData = false;
-        }
-      }
-    }
-
-    // Filter racks that belong to this chain in the specified datacenter (across all sites)
-    const chainRacks = allPowerData.filter(rack =>
-      String(rack.chain) === String(chain) &&
-      rack.dc === dc
-    );
+    const chainRacks = racksResult.recordset;
 
     if (chainRacks.length === 0) {
+      await pool.close();
       return res.status(404).json({
         success: false,
         message: `No racks found for chain ${chain} in DC ${dc}`,
@@ -1482,48 +1466,39 @@ app.post('/api/maintenance/chain', async (req, res) => {
       });
     }
 
-    // Prepare maintenance records for Supabase
-    const maintenanceRecords = chainRacks.map(rack => ({
-      rack_id: rack.rackId || `${rack.site}_${rack.dc}_${rack.name}`,
-      name: rack.name,
-      country: rack.country,
-      site: rack.site,
-      dc: rack.dc,
-      chain: rack.chain,
-      node: rack.node,
-      phase: rack.phase,
-      serial: rack.serial,
-      reason: reason,
-      started_by: startedBy
-    }));
-
-    // Insert into Supabase using fetch (since we don't have @supabase/supabase-js in backend)
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Supabase configuration is missing');
-    }
-
     let insertedCount = 0;
 
-    // Insert each rack individually (upsert to avoid duplicates)
-    for (const record of maintenanceRecords) {
-      const response = await fetch(`${supabaseUrl}/rest/v1/maintenance_racks`, {
-        method: 'POST',
-        headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'resolution=ignore-duplicates'
-        },
-        body: JSON.stringify(record)
-      });
-
-      if (response.ok || response.status === 201) {
+    for (const rack of chainRacks) {
+      try {
+        await pool.request()
+          .input('rack_id', sql.NVarChar, rack.rack_id)
+          .input('chain', sql.NVarChar, rack.chain)
+          .input('pdu_id', sql.NVarChar, rack.pdu_id || rack.rack_id)
+          .input('name', sql.NVarChar, rack.name || 'Unknown')
+          .input('country', sql.NVarChar, rack.country || 'Unknown')
+          .input('site', sql.NVarChar, rack.site || 'Unknown')
+          .input('dc', sql.NVarChar, rack.dc || 'Unknown')
+          .input('phase', sql.NVarChar, rack.phase || 'Unknown')
+          .input('node', sql.NVarChar, rack.node || 'Unknown')
+          .input('serial', sql.NVarChar, rack.serial || 'Unknown')
+          .input('reason', sql.NVarChar, reason)
+          .input('started_by', sql.NVarChar, startedBy)
+          .query(`
+            IF NOT EXISTS (SELECT 1 FROM maintenance_racks WHERE rack_id = @rack_id)
+            BEGIN
+              INSERT INTO maintenance_racks
+              (rack_id, chain, pdu_id, name, country, site, dc, phase, node, serial, reason, started_by)
+              VALUES
+              (@rack_id, @chain, @pdu_id, @name, @country, @site, @dc, @phase, @node, @serial, @reason, @started_by)
+            END
+          `);
         insertedCount++;
+      } catch (insertError) {
+        logger.error(`Failed to insert rack ${rack.rack_id} to maintenance:`, insertError);
       }
     }
+
+    await pool.close();
 
     logger.info(`Chain ${chain} from DC ${dc} added to maintenance (${insertedCount}/${chainRacks.length} racks)`);
 
@@ -1547,7 +1522,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
   }
 });
 
-// Remove rack(s) from maintenance by chain and dc (using Supabase)
+// Remove rack(s) from maintenance by chain and dc (using SQL Server)
 app.delete('/api/maintenance/chain/:chain/:dc', async (req, res) => {
   try {
     const { chain, dc } = req.params;
@@ -1560,32 +1535,26 @@ app.delete('/api/maintenance/chain/:chain/:dc', async (req, res) => {
       });
     }
 
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+    const pool = await sql.connect(sqlConfig);
 
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Supabase configuration is missing');
-    }
+    const result = await pool.request()
+      .input('chain', sql.NVarChar, chain)
+      .input('dc', sql.NVarChar, dc)
+      .query(`
+        DELETE FROM maintenance_racks
+        WHERE chain = @chain AND dc = @dc
+      `);
 
-    // Delete all racks with this chain and dc from Supabase (across all sites)
-    const response = await fetch(`${supabaseUrl}/rest/v1/maintenance_racks?chain=eq.${encodeURIComponent(chain)}&dc=eq.${encodeURIComponent(dc)}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    await pool.close();
 
-    if (!response.ok) {
-      throw new Error(`Failed to delete chain from Supabase: ${response.statusText}`);
-    }
+    const deletedCount = result.rowsAffected[0];
 
-    logger.info(`Chain ${chain} from DC ${dc} removed from maintenance`);
+    logger.info(`Chain ${chain} from DC ${dc} removed from maintenance (${deletedCount} racks deleted)`);
 
     res.json({
       success: true,
-      message: `Chain ${chain} from DC ${dc} removed from maintenance`,
+      message: `Chain ${chain} from DC ${dc} removed from maintenance (${deletedCount} racks)`,
+      data: { chain, dc, racksRemoved: deletedCount },
       timestamp: new Date().toISOString()
     });
 
