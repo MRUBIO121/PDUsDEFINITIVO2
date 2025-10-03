@@ -1419,15 +1419,17 @@ app.post('/api/maintenance/chain', async (req, res) => {
   try {
     const {
       chain,
+      site,
+      dc,
       rackData,
       reason = 'Scheduled maintenance',
       startedBy = 'System'
     } = req.body;
 
-    if (!chain) {
+    if (!chain || !site || !dc) {
       return res.status(400).json({
         success: false,
-        message: 'chain is required',
+        message: 'chain, site, and dc are required',
         timestamp: new Date().toISOString()
       });
     }
@@ -1446,13 +1448,17 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     const allRacks = await nengResponse.json();
 
-    // Filter racks that belong to this chain
-    const chainRacks = allRacks.filter(rack => rack.chain === chain);
+    // Filter racks that belong to this chain in the specific site and dc
+    const chainRacks = allRacks.filter(rack =>
+      rack.chain === chain &&
+      rack.site === site &&
+      rack.dc === dc
+    );
 
     if (chainRacks.length === 0) {
       return res.status(404).json({
         success: false,
-        message: `No racks found for chain ${chain}`,
+        message: `No racks found for chain ${chain} in DC ${dc} at site ${site}`,
         timestamp: new Date().toISOString()
       });
     }
@@ -1500,12 +1506,12 @@ app.post('/api/maintenance/chain', async (req, res) => {
       }
     }
 
-    logger.info(`Chain ${chain} added to maintenance (${insertedCount}/${chainRacks.length} racks)`);
+    logger.info(`Chain ${chain} from DC ${dc} at site ${site} added to maintenance (${insertedCount}/${chainRacks.length} racks)`);
 
     res.json({
       success: true,
-      message: `Chain ${chain} added to maintenance (${insertedCount} racks)`,
-      data: { chain, racksAdded: insertedCount, totalRacks: chainRacks.length },
+      message: `Chain ${chain} from DC ${dc} at site ${site} added to maintenance (${insertedCount} racks)`,
+      data: { chain, site, dc, racksAdded: insertedCount, totalRacks: chainRacks.length },
       timestamp: new Date().toISOString()
     });
 
@@ -1522,15 +1528,15 @@ app.post('/api/maintenance/chain', async (req, res) => {
   }
 });
 
-// Remove rack(s) from maintenance by chain (using Supabase)
-app.delete('/api/maintenance/chain/:chain', async (req, res) => {
+// Remove rack(s) from maintenance by chain, site, and dc (using Supabase)
+app.delete('/api/maintenance/chain/:chain/:site/:dc', async (req, res) => {
   try {
-    const { chain } = req.params;
+    const { chain, site, dc } = req.params;
 
-    if (!chain) {
+    if (!chain || !site || !dc) {
       return res.status(400).json({
         success: false,
-        message: 'chain parameter is required',
+        message: 'chain, site, and dc parameters are required',
         timestamp: new Date().toISOString()
       });
     }
@@ -1542,8 +1548,8 @@ app.delete('/api/maintenance/chain/:chain', async (req, res) => {
       throw new Error('Supabase configuration is missing');
     }
 
-    // Delete all racks with this chain from Supabase
-    const response = await fetch(`${supabaseUrl}/rest/v1/maintenance_racks?chain=eq.${encodeURIComponent(chain)}`, {
+    // Delete all racks with this chain, site, and dc from Supabase
+    const response = await fetch(`${supabaseUrl}/rest/v1/maintenance_racks?chain=eq.${encodeURIComponent(chain)}&site=eq.${encodeURIComponent(site)}&dc=eq.${encodeURIComponent(dc)}`, {
       method: 'DELETE',
       headers: {
         'apikey': supabaseKey,
@@ -1556,11 +1562,11 @@ app.delete('/api/maintenance/chain/:chain', async (req, res) => {
       throw new Error(`Failed to delete chain from Supabase: ${response.statusText}`);
     }
 
-    logger.info(`Chain ${chain} removed from maintenance`);
+    logger.info(`Chain ${chain} from DC ${dc} at site ${site} removed from maintenance`);
 
     res.json({
       success: true,
-      message: `Chain ${chain} removed from maintenance`,
+      message: `Chain ${chain} from DC ${dc} at site ${site} removed from maintenance`,
       timestamp: new Date().toISOString()
     });
 

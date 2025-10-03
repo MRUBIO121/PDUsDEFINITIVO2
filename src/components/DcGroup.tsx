@@ -26,7 +26,7 @@ interface DcGroupProps {
   onStatusFilterChange: (filter: 'all' | 'critical' | 'warning') => void;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
   onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
-  onSendChainToMaintenance?: (chain: string, rackData?: any) => void;
+  onSendChainToMaintenance?: (chain: string, site: string, dc: string, rackData?: any) => void;
   maintenanceRacks: Set<string>;
 }
 

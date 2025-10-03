@@ -443,8 +443,8 @@ function App() {
     }
   };
 
-  const handleSendChainToMaintenance = async (chain: string, rackData?: any) => {
-    const reason = prompt(`¿Por qué se está enviando toda la chain "${chain}" a mantenimiento?`, 'Mantenimiento programado');
+  const handleSendChainToMaintenance = async (chain: string, site: string, dc: string, rackData?: any) => {
+    const reason = prompt(`¿Por qué se está enviando el chain "${chain}" del DC "${dc}" en sitio "${site}" a mantenimiento?`, 'Mantenimiento programado');
 
     if (reason === null) {
       return;
@@ -458,6 +458,8 @@ function App() {
         },
         body: JSON.stringify({
           chain,
+          site,
+          dc,
           rackData,
           reason: reason || 'Mantenimiento programado',
           startedBy: 'Usuario'
@@ -474,7 +476,7 @@ function App() {
         throw new Error(data.message || 'Failed to send chain to maintenance');
       }
 
-      alert(`Toda la chain "${chain}" ha sido enviada a mantenimiento (${data.data.racksAdded} racks).`);
+      alert(`El chain "${chain}" del DC "${dc}" en sitio "${site}" ha sido enviado a mantenimiento (${data.data.racksAdded} racks).`);
       refreshData();
     } catch (error) {
       console.error('Error sending chain to maintenance:', error);
