@@ -1476,6 +1476,17 @@ app.post('/api/maintenance/chain', async (req, res) => {
       rack.dc === dc
     );
 
+    console.log(`🔍 DEBUG - Total racks from API: ${allPowerData.length}`);
+    console.log(`🔍 DEBUG - Filtered racks for chain ${chain} in DC ${dc}: ${chainRacks.length}`);
+    console.log(`🔍 DEBUG - First 5 filtered racks:`, chainRacks.slice(0, 5).map(r => ({
+      id: r.id,
+      rackId: r.rackId,
+      chain: r.chain,
+      dc: r.dc,
+      site: r.site,
+      name: r.rackName || r.name
+    })));
+
     if (chainRacks.length === 0) {
       return res.status(404).json({
         success: false,
@@ -1494,6 +1505,9 @@ app.post('/api/maintenance/chain', async (req, res) => {
     });
 
     const uniqueRacks = Array.from(rackMap.values());
+
+    console.log(`🔍 DEBUG - Unique racks after grouping: ${uniqueRacks.length}`);
+    console.log(`🔍 DEBUG - Unique rackIds:`, uniqueRacks.map(r => r.rackId || r.id));
 
     const pool = await sql.connect(sqlConfig);
     let insertedCount = 0;
