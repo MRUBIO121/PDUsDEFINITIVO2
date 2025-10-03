@@ -136,7 +136,10 @@ export default function CombinedRackCard({
   // Use first rack for common information (name, site, dc)
   const commonInfo = racks[0];
   const rackId = commonInfo.rackId || commonInfo.id;
-  const isInMaintenance = maintenanceRacks.has(rackId);
+
+  // Check if any of the PDUs in this rack are in maintenance
+  const isInMaintenance = maintenanceRacks.has(rackId) ||
+    racks.some(rack => maintenanceRacks.has(rack.id) || maintenanceRacks.has(rack.rackId || ''));
 
   return (
     <div className={`rounded-lg shadow hover:shadow-md transition-shadow bg-white ${
