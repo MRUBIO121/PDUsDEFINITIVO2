@@ -19,8 +19,8 @@ interface MaintenanceRack {
   created_at: string;
 }
 
-interface GroupedByChain {
-  [chain: string]: MaintenanceRack[];
+interface GroupedByChainDc {
+  [key: string]: MaintenanceRack[];
 }
 
 export default function MaintenancePage() {
@@ -68,17 +68,18 @@ export default function MaintenancePage() {
     return () => clearInterval(interval);
   }, []);
 
-  const [removingChain, setRemovingChain] = useState<string | null>(null);
+  const [removingChainDc, setRemovingChainDc] = useState<string | null>(null);
 
-  const handleRemoveChain = async (chain: string) => {
-    if (!confirm(`¿Seguro que quieres sacar la chain "${chain}" de mantenimiento?`)) {
+  const handleRemoveChainDc = async (chain: string, dc: string) => {
+    if (!confirm(`¿Seguro que quieres sacar la chain "${chain}" del DC "${dc}" de mantenimiento?`)) {
       return;
     }
 
     try {
-      setRemovingChain(chain);
+      const key = `${chain}_${dc}`;
+      setRemovingChainDc(key);
 
-      const response = await fetch(`/api/maintenance/chain/${encodeURIComponent(chain)}`, {
+      const response = await fetch(`/api/maintenance/chain/${encodeURIComponent(chain)}/${encodeURIComponent(dc)}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
@@ -100,20 +101,22 @@ export default function MaintenancePage() {
       console.error('Error removing chain from maintenance:', err);
       alert(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
-      setRemovingChain(null);
+      setRemovingChainDc(null);
     }
   };
 
-  const groupedByChain: GroupedByChain = maintenanceRacks.reduce((acc, rack) => {
+  const groupedByChainDc: GroupedByChainDc = maintenanceRacks.reduce((acc, rack) => {
     const chain = rack.chain || 'Sin Chain';
-    if (!acc[chain]) {
-      acc[chain] = [];
+    const dc = rack.dc || 'Sin DC';
+    const key = `${chain}_${dc}`;
+    if (!acc[key]) {
+      acc[key] = [];
     }
-    acc[chain].push(rack);
+    acc[key].push(rack);
     return acc;
-  }, {} as GroupedByChain);
+  }, {} as GroupedByChainDc);
 
-  const chains = Object.keys(groupedByChain).sort();
+  const chainDcKeys = Object.keys(groupedByChainDc).sort();
 
   if (loading) {
     return (
@@ -170,13 +173,15 @@ export default function MaintenancePage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {chains.map(chain => {
-              const racks = groupedByChain[chain];
+            {chainDcKeys.map(key => {
+              const racks = groupedByChainDc[key];
               const firstRack = racks[0];
+              const chain = firstRack.chain || 'Sin Chain';
+              const dc = firstRack.dc || 'Sin DC';
 
               return (
                 <div
-                  key={chain}
+                  key={key}
                   className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden"
                 >
                   <div className="bg-gradient-to-r from-amber-50 to-amber-100 border-b border-amber-200 p-6">
@@ -203,7 +208,7 @@ export default function MaintenancePage() {
                           <div className="flex items-center gap-2 text-slate-700">
                             <Server className="w-4 h-4 text-amber-600" />
                             <span className="font-medium">DC:</span>
-                            <span>{firstRack.dc || 'N/A'}</span>
+                            <span>{dc}</span>
                           </div>
                         </div>
 
@@ -228,11 +233,11 @@ export default function MaintenancePage() {
                       </div>
 
                       <button
-                        onClick={() => handleRemoveChain(chain)}
-                        disabled={removingChain === chain}
+                        onClick={() => handleRemoveChainDc(chain, dc)}
+                        disabled={removingChainDc === key}
                         className="ml-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        {removingChain === chain ? (
+                        {removingChainDc === key ? (
                           <>
                             <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                             Procesando...
