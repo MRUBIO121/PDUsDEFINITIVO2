@@ -1484,10 +1484,21 @@ app.post('/api/maintenance/chain', async (req, res) => {
       });
     }
 
+    // Group by rackId to avoid inserting multiple records for the same physical rack
+    const rackMap = new Map();
+    chainRacks.forEach(rack => {
+      const rackId = rack.rackId || rack.id || `${rack.site}_${rack.dc}_${rack.chain}_${rack.node}`;
+      if (!rackMap.has(rackId)) {
+        rackMap.set(rackId, rack);
+      }
+    });
+
+    const uniqueRacks = Array.from(rackMap.values());
+
     const pool = await sql.connect(sqlConfig);
     let insertedCount = 0;
 
-    for (const rack of chainRacks) {
+    for (const rack of uniqueRacks) {
       try {
         const rackId = rack.rackId || rack.id || `${rack.site}_${rack.dc}_${rack.chain}_${rack.node}`;
         const pduId = rack.id || rackId;
@@ -1522,12 +1533,12 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     await pool.close();
 
-    logger.info(`Chain ${chain} from DC ${dc} added to maintenance (${insertedCount}/${chainRacks.length} racks)`);
+    logger.info(`Chain ${chain} from DC ${dc} added to maintenance (${insertedCount}/${uniqueRacks.length} racks)`);
 
     res.json({
       success: true,
       message: `Chain ${chain} from DC ${dc} added to maintenance (${insertedCount} racks)`,
-      data: { chain, dc, racksAdded: insertedCount, totalRacks: chainRacks.length },
+      data: { chain, dc, racksAdded: insertedCount, totalRacks: uniqueRacks.length },
       timestamp: new Date().toISOString()
     });
 
