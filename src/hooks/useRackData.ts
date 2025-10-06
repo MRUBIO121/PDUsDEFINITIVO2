@@ -50,7 +50,7 @@ export function useRackData({ forceShowAllRacks = false }: UseRackDataProps = {}
       setLoading(true);
 
       const [powerResponse, maintenanceResponse] = await Promise.all([
-        fetch('/api/power-data'),
+        fetch('/api/racks/energy'),
         fetch('/api/maintenance')
       ]);
 
@@ -63,8 +63,9 @@ export function useRackData({ forceShowAllRacks = false }: UseRackDataProps = {}
       const powerData = await powerResponse.json();
       console.log('📦 [useRackData] powerData:', powerData);
 
-      const rackGroupsData = powerData.rackGroups || [];
+      const rackGroupsData = powerData.data || [];
       console.log('📊 [useRackData] rackGroupsData length:', rackGroupsData.length);
+      console.log('📊 [useRackData] powerData.success:', powerData.success);
 
       setOriginalRackGroups(rackGroupsData);
 
