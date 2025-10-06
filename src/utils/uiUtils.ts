@@ -5,10 +5,12 @@ export function getMetricStatusColor(percentage: number, thresholds: { warning: 
 }
 
 export function getAmperageStatusColor(
-  amperage: number,
-  maxAmperage: number,
+  rack: any,
   thresholds: { warning: number; critical: number }
 ): string {
+  const amperage = rack.amperage || 0;
+  const maxAmperage = rack.maxAmperage || 0;
+
   if (maxAmperage === 0) return 'text-red-600';
   const percentage = (amperage / maxAmperage) * 100;
   return getMetricStatusColor(percentage, thresholds);
