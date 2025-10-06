@@ -1,184 +1,289 @@
 import { useState, useEffect } from 'react';
+import { RackData } from '../types';
+import { groupRacksByCountry, filterRacks } from '../utils/dataProcessing';
 
-export interface PDU {
-  id: string;
-  rackId: string;
-  site: string;
-  dc: string;
-  chain: string;
-  country: string;
-  amperage: number;
-  maxAmperage: number;
-  power: number;
-  maxPower: number;
-  lastUpdate?: string;
-}
-
-interface UseRackDataProps {
+interface UseRackDataOptions {
   forceShowAllRacks?: boolean;
+  showZeroAmperageAlerts?: boolean;
 }
 
-export function useRackData({ forceShowAllRacks = false }: UseRackDataProps = {}) {
-  const [racks, setRacks] = useState<PDU[]>([]);
-  const [originalRackGroups, setOriginalRackGroups] = useState<PDU[][]>([]);
+interface UseRackDataReturn {
+  racks: RackData[];
+  groupedRacks: { [country: string]: { [site: string]: { [dc: string]: RackData[][] } } };
+  originalRackGroups: RackData[][];
+  maintenanceRacks: Set<string>;
+  loading: boolean;
+  error: string | null;
+  expandedCountryIds: Set<string>;
+  expandedSiteIds: Set<string>;
+  expandedDcIds: Set<string>;
+  activeStatusFilter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance';
+  activeCountryFilter: string;
+  activeSiteFilter: string;
+  activeDcFilter: string;
+  availableCountries: string[];
+  availableSites: string[];
+  availableDcs: string[];
+  activeMetricFilter: string;
+  showZeroAmperageAlerts: boolean;
+  toggleCountryExpansion: (country: string) => void;
+  toggleSiteExpansion: (site: string) => void;
+  toggleDcExpansion: (dc: string) => void;
+  setActiveStatusFilter: (filter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance') => void;
+  setActiveCountryFilter: (country: string) => void;
+  setActiveSiteFilter: (site: string) => void;
+  setActiveDcFilter: (dc: string) => void;
+  setActiveMetricFilter: (metric: string) => void;
+  setShowZeroAmperageAlerts: (show: boolean) => void;
+  refreshData: () => void;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  searchField: string;
+  setSearchField: (field: string) => void;
+}
+
+export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn {
+  const { forceShowAllRacks = false, showZeroAmperageAlerts: initialShowZeroAmperageAlerts = true } = options;
+  
+  const [racks, setRacks] = useState<RackData[]>([]);
+  const [originalRackGroups, setOriginalRackGroups] = useState<RackData[][]>([]);
   const [maintenanceRacks, setMaintenanceRacks] = useState<Set<string>>(new Set());
-  const [groupedRacks, setGroupedRacks] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [expandedCountryIds, setExpandedCountryIds] = useState<Set<string>>(new Set());
   const [expandedSiteIds, setExpandedSiteIds] = useState<Set<string>>(new Set());
   const [expandedDcIds, setExpandedDcIds] = useState<Set<string>>(new Set());
-
-  const [activeStatusFilter, setActiveStatusFilter] = useState<string>('all');
+  const [activeStatusFilter, setActiveStatusFilter] = useState<'all' | 'critical' | 'warning' | 'normal' | 'maintenance'>('all');
   const [activeCountryFilter, setActiveCountryFilter] = useState<string>('all');
   const [activeSiteFilter, setActiveSiteFilter] = useState<string>('all');
   const [activeDcFilter, setActiveDcFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchField, setSearchField] = useState<string>('all');
   const [activeMetricFilter, setActiveMetricFilter] = useState<string>('all');
-  const [showZeroAmperageAlerts, setShowZeroAmperageAlerts] = useState(false);
+  const [showZeroAmperageAlerts, setShowZeroAmperageAlerts] = useState<boolean>(initialShowZeroAmperageAlerts);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchField, setSearchField] = useState('all');
-
-  const [availableCountries, setAvailableCountries] = useState<string[]>([]);
-  const [availableSites, setAvailableSites] = useState<string[]>([]);
-  const [availableDcs, setAvailableDcs] = useState<string[]>([]);
-
-  const fetchData = async () => {
+  const fetchRacks = async () => {
     try {
-      console.log('🔄 [useRackData] Starting fetchData');
       setLoading(true);
-
-      const [powerResponse, maintenanceResponse] = await Promise.all([
-        fetch('/api/racks/energy'),
-        fetch('/api/maintenance')
-      ]);
-
-      console.log('📡 [useRackData] powerResponse.ok:', powerResponse.ok);
-
-      if (!powerResponse.ok) {
-        throw new Error(`HTTP ${powerResponse.status}`);
-      }
-
-      const powerData = await powerResponse.json();
-      console.log('📦 [useRackData] powerData:', powerData);
-
-      const rackGroupsData = powerData.data || [];
-      console.log('📊 [useRackData] rackGroupsData length:', rackGroupsData.length);
-      console.log('📊 [useRackData] powerData.success:', powerData.success);
-
-      setOriginalRackGroups(rackGroupsData);
-
-      const flatRacks: PDU[] = [];
-      rackGroupsData.forEach((group: PDU[]) => {
-        flatRacks.push(...group);
-      });
-      setRacks(flatRacks);
-
-      if (maintenanceResponse.ok) {
-        const maintenanceData = await maintenanceResponse.json();
-        const maintenanceSet = new Set<string>();
-        (maintenanceData.entries || []).forEach((entry: any) => {
-          maintenanceSet.add(entry.rackId);
-        });
-        setMaintenanceRacks(maintenanceSet);
-      }
-
-      const grouped: any = {};
-      console.log('🔨 [useRackData] Building grouped structure...');
-
-      rackGroupsData.forEach((group: PDU[]) => {
-        if (group.length === 0) return;
-
-        const firstPdu = group[0];
-        const country = firstPdu.country || 'Unknown';
-        const site = firstPdu.site || 'Unknown';
-        const dc = firstPdu.dc || 'Unknown';
-        const chain = firstPdu.chain || 'Unknown';
-
-        if (!grouped[country]) grouped[country] = {};
-        if (!grouped[country][site]) grouped[country][site] = {};
-        if (!grouped[country][site][dc]) grouped[country][site][dc] = {};
-        if (!grouped[country][site][dc][chain]) grouped[country][site][dc][chain] = [];
-
-        grouped[country][site][dc][chain].push(group);
-      });
-
-      console.log('📋 [useRackData] Grouped structure:', grouped);
-      console.log('📋 [useRackData] Grouped keys:', Object.keys(grouped));
-      console.log('📋 [useRackData] Grouped type:', typeof grouped);
-      console.log('📋 [useRackData] Grouped is null?', grouped === null);
-
-      setGroupedRacks(grouped);
-      console.log('✅ [useRackData] setGroupedRacks called with:', grouped);
-
-      const countries = new Set<string>();
-      const sites = new Set<string>();
-      const dcs = new Set<string>();
-
-      flatRacks.forEach(pdu => {
-        if (pdu.country) countries.add(pdu.country);
-        if (pdu.site) sites.add(pdu.site);
-        if (pdu.dc) dcs.add(pdu.dc);
-      });
-
-      setAvailableCountries(Array.from(countries).sort());
-      setAvailableSites(Array.from(sites).sort());
-      setAvailableDcs(Array.from(dcs).sort());
-
       setError(null);
-      console.log('✅ [useRackData] fetchData completed successfully');
+
+      // Add timestamp to prevent caching
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/racks/energy?t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to fetch rack data');
+      }
+      
+      // Store original rack groups as they come from the API
+      const rackGroups = Array.isArray(data.data) ? data.data : [];
+      setOriginalRackGroups(rackGroups);
+      
+      // Transform the nested array structure into a flat array
+      const flatRacks: RackData[] = [];
+      if (Array.isArray(rackGroups)) {
+        rackGroups.forEach((rackGroup: RackData[]) => {
+          if (Array.isArray(rackGroup)) {
+            flatRacks.push(...rackGroup);
+          }
+        });
+      }
+      
+      // Set all racks to show "España" as country
+      flatRacks.forEach(rack => {
+        rack.country = 'España';
+      });
+      
+      // Normalize site names - unify Cantabria sites
+      flatRacks.forEach(rack => {
+        if (rack.site && rack.site.toLowerCase().includes('cantabria')) {
+          rack.site = 'Cantabria';
+        }
+      });
+      
+      setRacks(flatRacks);
+      
+      // 🔍 DEBUG: Log data received from backend
+      console.log('🔍 DEBUG - flatRacks received from backend:', flatRacks.length, 'total racks');
+      const alertingRacks = flatRacks.filter(rack => rack.status !== 'normal');
+      console.log('🔍 DEBUG - Racks with alerts:', alertingRacks.length);
+      if (alertingRacks.length > 0) {
+        console.log('🔍 DEBUG - First few alerting racks:', alertingRacks.slice(0, 5).map(rack => ({
+          id: rack.id,
+          logicalRackId: rack.logicalRackId,
+          name: rack.name,
+          status: rack.status,
+          reasons: rack.reasons,
+          temperature: rack.temperature,
+          sensorTemperature: rack.sensorTemperature,
+          current: rack.current
+        })));
+      }
     } catch (err) {
-      console.error('❌ [useRackData] Error in fetchData:', err);
-      setError(err instanceof Error ? err.message : 'Error desconocido');
-      setGroupedRacks({});
+      console.error('Error fetching racks:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error occurred');
     } finally {
       setLoading(false);
-      console.log('🏁 [useRackData] fetchData finally block');
+    }
+  };
+
+  const fetchMaintenanceRacks = async () => {
+    try {
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/maintenance?t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+
+      if (!response.ok) {
+        console.error('Failed to fetch maintenance racks');
+        return;
+      }
+
+      const data = await response.json();
+      if (data.success && Array.isArray(data.data)) {
+        const maintenanceSet = new Set<string>();
+
+        data.data.forEach((entry: any) => {
+          if (Array.isArray(entry.racks)) {
+            entry.racks.forEach((rack: any) => {
+              if (rack.rack_id) {
+                maintenanceSet.add(rack.rack_id);
+              }
+              if (rack.pdu_id && rack.pdu_id !== rack.rack_id) {
+                maintenanceSet.add(rack.pdu_id);
+              }
+            });
+          }
+        });
+
+        console.log('🔍 Maintenance racks loaded:', Array.from(maintenanceSet));
+        setMaintenanceRacks(maintenanceSet);
+      }
+    } catch (err) {
+      console.error('Error fetching maintenance racks:', err);
     }
   };
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [forceShowAllRacks]);
+    fetchRacks();
+    fetchMaintenanceRacks();
 
-  const toggleCountryExpansion = (countryId: string) => {
+    // Set up polling every 30 seconds
+    const interval = setInterval(() => {
+      fetchRacks();
+      fetchMaintenanceRacks();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const toggleCountryExpansion = (country: string) => {
     setExpandedCountryIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(countryId)) {
-        newSet.delete(countryId);
+      if (newSet.has(country)) {
+        newSet.delete(country);
       } else {
-        newSet.add(countryId);
+        newSet.add(country);
       }
       return newSet;
     });
   };
 
-  const toggleSiteExpansion = (siteId: string) => {
+  const toggleSiteExpansion = (site: string) => {
     setExpandedSiteIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(siteId)) {
-        newSet.delete(siteId);
+      if (newSet.has(site)) {
+        newSet.delete(site);
       } else {
-        newSet.add(siteId);
+        newSet.add(site);
       }
       return newSet;
     });
   };
 
-  const toggleDcExpansion = (dcId: string) => {
+  const toggleDcExpansion = (dc: string) => {
     setExpandedDcIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(dcId)) {
-        newSet.delete(dcId);
+      if (newSet.has(dc)) {
+        newSet.delete(dc);
       } else {
-        newSet.add(dcId);
+        newSet.add(dc);
       }
       return newSet;
     });
   };
+
+  const handleStatusFilterChange = (filter: 'all' | 'critical' | 'warning') => {
+    if (activeStatusFilter === filter) {
+      setActiveStatusFilter('all'); // Toggle off if already active
+    } else {
+      setActiveStatusFilter(filter);
+    }
+  };
+
+  const handleCountryFilterChange = (country: string) => {
+    setActiveCountryFilter(country);
+    // Reset lower-level filters when country changes
+    setActiveSiteFilter('all');
+    setActiveDcFilter('all');
+  };
+
+  const handleSiteFilterChange = (site: string) => {
+    setActiveSiteFilter(site);
+    // Reset DC filter when site changes
+    setActiveDcFilter('all');
+  };
+
+  const handleDcFilterChange = (dc: string) => {
+    setActiveDcFilter(dc);
+  };
+
+  // Derive available filter options dynamically
+  const availableCountries = Array.from(new Set(racks.map(rack => rack.country || 'N/A'))).sort();
+  
+  const availableSites = Array.from(new Set(
+    racks
+      .filter(rack => activeCountryFilter === 'all' || rack.country === activeCountryFilter)
+      .map(rack => rack.site || 'N/A')
+  )).sort();
+  
+  const availableDcs = Array.from(new Set(
+    racks
+      .filter(rack => 
+        (activeCountryFilter === 'all' || rack.country === activeCountryFilter) &&
+        (activeSiteFilter === 'all' || rack.site === activeSiteFilter)
+      )
+      .map(rack => rack.dc || 'N/A')
+  )).sort();
+
+  // Filter and group the racks
+  const filteredRacks = filterRacks(
+    racks,
+    activeStatusFilter,
+    activeCountryFilter,
+    activeSiteFilter,
+    activeDcFilter,
+    searchQuery,
+    searchField,
+    activeMetricFilter,
+    forceShowAllRacks,
+    showZeroAmperageAlerts,
+    maintenanceRacks
+  );
+  const groupedRacks = groupRacksByCountry(filteredRacks);
 
   return {
     racks,
@@ -194,24 +299,27 @@ export function useRackData({ forceShowAllRacks = false }: UseRackDataProps = {}
     activeCountryFilter,
     activeSiteFilter,
     activeDcFilter,
-    showZeroAmperageAlerts,
-    setShowZeroAmperageAlerts,
     availableCountries,
     availableSites,
     availableDcs,
     toggleCountryExpansion,
     toggleSiteExpansion,
     toggleDcExpansion,
-    setActiveStatusFilter,
-    setActiveCountryFilter,
-    setActiveSiteFilter,
-    setActiveDcFilter,
+    setActiveStatusFilter: handleStatusFilterChange,
+    setActiveCountryFilter: handleCountryFilterChange,
+    setActiveSiteFilter: handleSiteFilterChange,
+    setActiveDcFilter: handleDcFilterChange,
     activeMetricFilter,
     setActiveMetricFilter,
     searchQuery,
+    showZeroAmperageAlerts,
+    setShowZeroAmperageAlerts,
     setSearchQuery,
     searchField,
     setSearchField,
-    refreshData: fetchData
+    refreshData: () => {
+      fetchRacks();
+      fetchMaintenanceRacks();
+    },
   };
 }

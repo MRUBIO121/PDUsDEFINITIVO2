@@ -1,23 +1,9 @@
-export interface Thresholds {
-  warning: number;
-  critical: number;
-}
+import { ThresholdData } from '../types';
 
-export const defaultThresholds: Thresholds = {
-  warning: 80,
-  critical: 90
-};
-
-export function getThresholdValue(
-  thresholds: Thresholds,
-  type: 'warning' | 'critical'
-): number {
-  return thresholds[type] || defaultThresholds[type];
-}
-
-export function isAboveThreshold(
-  value: number,
-  threshold: number
-): boolean {
-  return value >= threshold;
+/**
+ * Retrieves a threshold value by key
+ */
+export function getThresholdValue(thresholds: ThresholdData[], key: string): number | undefined {
+  const threshold = thresholds.find(t => t.key === key);
+  return threshold?.value;
 }
