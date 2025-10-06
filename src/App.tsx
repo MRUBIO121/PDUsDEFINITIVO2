@@ -497,7 +497,17 @@ function App() {
         throw new Error(data.message || 'Failed to send chain to maintenance');
       }
 
-      alert(`El chain "${chain}" del DC "${dc}" ha sido enviado a mantenimiento (${data.data.racksAdded} racks).`);
+      const { racksAdded, racksFailed, totalRacks, totalPdusFiltered } = data.data;
+      let message = `Chain "${chain}" del DC "${dc}" enviado a mantenimiento.\n\n`;
+      message += `✅ ${racksAdded} racks añadidos exitosamente`;
+      if (racksFailed > 0) {
+        message += `\n⚠️ ${racksFailed} racks ya estaban en mantenimiento (omitidos)`;
+      }
+      if (totalPdusFiltered && totalPdusFiltered !== totalRacks) {
+        message += `\n\n📊 Detalles: ${totalPdusFiltered} PDUs filtrados → ${totalRacks} racks físicos únicos`;
+      }
+
+      alert(message);
       refreshData();
     } catch (error) {
       console.error('Error sending chain to maintenance:', error);

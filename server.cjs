@@ -1634,20 +1634,27 @@ app.post('/api/maintenance/chain', async (req, res) => {
     }
 
     // Filter racks that belong to this chain in the specified datacenter
+    console.log(`🔍 Starting filter for chain "${sanitizedChain}" in DC "${sanitizedDc}"`);
+    console.log(`🔍 Total power data entries to filter: ${allPowerData.length}`);
+
     const chainRacks = allPowerData.filter(rack => {
       const rackChain = String(rack.chain).trim();
       const rackDc = String(rack.dc).trim();
-      const matches = rackChain === sanitizedChain && rackDc === sanitizedDc;
-
-      // Log only first few for debugging
-      if (allPowerData.indexOf(rack) < 5) {
-        console.log(`🔍 Rack ${rack.rackId || rack.id}: chain="${rackChain}" (match: ${rackChain === sanitizedChain}), dc="${rackDc}" (match: ${rackDc === sanitizedDc})`);
-      }
+      const chainMatch = rackChain === sanitizedChain;
+      const dcMatch = rackDc === sanitizedDc;
+      const matches = chainMatch && dcMatch;
 
       return matches;
     });
 
-    console.log(`🔍 Filtered racks for chain ${sanitizedChain} in DC ${sanitizedDc}: ${chainRacks.length}`);
+    console.log(`🔍 Filtered racks for chain "${sanitizedChain}" in DC "${sanitizedDc}": ${chainRacks.length}`);
+
+    // Log detailed breakdown of what was found
+    const chainOnlyMatches = allPowerData.filter(r => String(r.chain).trim() === sanitizedChain).length;
+    const dcOnlyMatches = allPowerData.filter(r => String(r.dc).trim() === sanitizedDc).length;
+    console.log(`🔍 Racks with chain "${sanitizedChain}" (any DC): ${chainOnlyMatches}`);
+    console.log(`🔍 Racks with DC "${sanitizedDc}" (any chain): ${dcOnlyMatches}`);
+    console.log(`🔍 Racks with BOTH chain "${sanitizedChain}" AND DC "${sanitizedDc}": ${chainRacks.length}`);
 
     if (chainRacks.length === 0) {
       return res.status(404).json({
@@ -1677,7 +1684,8 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     const uniqueRacks = Array.from(rackMap.values());
 
-    console.log(`🔍 Unique racks after grouping: ${uniqueRacks.length}`);
+    console.log(`🔍 Unique racks after grouping by rackId: ${uniqueRacks.length}`);
+    console.log(`🔍 Breakdown: ${chainRacks.length} PDUs filtered → ${uniqueRacks.length} unique physical racks`);
 
     if (uniqueRacks.length === 0) {
       return res.status(400).json({
@@ -1761,18 +1769,21 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     await pool.close();
 
-    logger.info(`Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance (${insertedCount}/${uniqueRacks.length} racks)`);
+    const successMessage = `Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance`;
+    console.log(`✅ ${successMessage}: ${insertedCount} racks added, ${failedCount} failed/skipped`);
+    logger.info(`${successMessage} (${insertedCount}/${uniqueRacks.length} racks)`);
 
     res.json({
       success: true,
-      message: `Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance`,
+      message: `${successMessage}: ${insertedCount} racks added successfully${failedCount > 0 ? `, ${failedCount} skipped (already in maintenance)` : ''}`,
       data: {
         entryId,
         chain: sanitizedChain,
         dc: sanitizedDc,
         racksAdded: insertedCount,
         racksFailed: failedCount,
-        totalRacks: uniqueRacks.length
+        totalRacks: uniqueRacks.length,
+        totalPdusFiltered: chainRacks.length
       },
       timestamp: new Date().toISOString()
     });
