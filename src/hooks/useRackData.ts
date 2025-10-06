@@ -156,15 +156,20 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       const data = await response.json();
       if (data.success && Array.isArray(data.data)) {
         const maintenanceSet = new Set<string>();
-        data.data.forEach((rack: any) => {
-          if (rack.rack_id) {
-            maintenanceSet.add(rack.rack_id);
-          }
-          // Also add pdu_id if different from rack_id
-          if (rack.pdu_id && rack.pdu_id !== rack.rack_id) {
-            maintenanceSet.add(rack.pdu_id);
+
+        data.data.forEach((entry: any) => {
+          if (Array.isArray(entry.racks)) {
+            entry.racks.forEach((rack: any) => {
+              if (rack.rack_id) {
+                maintenanceSet.add(rack.rack_id);
+              }
+              if (rack.pdu_id && rack.pdu_id !== rack.rack_id) {
+                maintenanceSet.add(rack.pdu_id);
+              }
+            });
           }
         });
+
         console.log('🔍 Maintenance racks loaded:', Array.from(maintenanceSet));
         setMaintenanceRacks(maintenanceSet);
       }
