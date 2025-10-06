@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2 } from 'lucide-react';
+import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface RackDetail {
   rack_id: string;
@@ -34,6 +34,19 @@ export default function MaintenancePage() {
   const [error, setError] = useState<string | null>(null);
   const [removingEntryId, setRemovingEntryId] = useState<string | null>(null);
   const [removingRackId, setRemovingRackId] = useState<string | null>(null);
+  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (entryId: string) => {
+    setExpandedEntries(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(entryId)) {
+        newSet.delete(entryId);
+      } else {
+        newSet.add(entryId);
+      }
+      return newSet;
+    });
+  };
 
   const fetchMaintenanceEntries = async () => {
     try {
@@ -233,6 +246,7 @@ export default function MaintenancePage() {
               const bgColor = isChainEntry ? 'from-amber-50 to-amber-100 border-amber-200' : 'from-blue-50 to-blue-100 border-blue-200';
               const iconColor = isChainEntry ? 'text-amber-700' : 'text-blue-700';
               const textColor = isChainEntry ? 'text-amber-900' : 'text-blue-900';
+              const isExpanded = expandedEntries.has(entry.id);
 
               return (
                 <div
@@ -254,6 +268,21 @@ export default function MaintenancePage() {
                           }`}>
                             {isChainEntry ? 'Chain Completa' : 'Rack Individual'}
                           </span>
+                          <button
+                            onClick={() => toggleExpanded(entry.id)}
+                            className={`ml-2 p-2 rounded-lg transition-colors ${
+                              isChainEntry
+                                ? 'hover:bg-amber-200 text-amber-700'
+                                : 'hover:bg-blue-200 text-blue-700'
+                            }`}
+                            title={isExpanded ? 'Ocultar racks' : 'Mostrar racks'}
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="w-5 h-5" />
+                            ) : (
+                              <ChevronDown className="w-5 h-5" />
+                            )}
+                          </button>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -322,12 +351,13 @@ export default function MaintenancePage() {
                     </div>
                   </div>
 
-                  <div className="p-6">
-                    <h3 className="font-semibold text-slate-900 mb-4">
-                      {isChainEntry ? `Racks en esta chain (${entry.racks.length})` : 'Detalle del Rack'}
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {entry.racks.map(rack => (
+                  {isExpanded && (
+                    <div className="p-6">
+                      <h3 className="font-semibold text-slate-900 mb-4">
+                        {isChainEntry ? `Racks en esta chain (${entry.racks.length})` : 'Detalle del Rack'}
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {entry.racks.map(rack => (
                         <div
                           key={rack.rack_id}
                           className="border border-slate-200 rounded-lg p-4 bg-slate-50 relative group"
@@ -375,10 +405,11 @@ export default function MaintenancePage() {
                               </div>
                             )}
                           </div>
-                        </div>
-                      ))}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
