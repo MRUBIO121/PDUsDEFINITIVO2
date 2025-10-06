@@ -1635,14 +1635,14 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     // Filter racks that belong to this chain in the specified datacenter
     const chainRacks = allPowerData.filter(rack => {
-      const rackChain = String(rack.chain).trim();
-      const rackDc = String(rack.dc).trim();
-      const matches = rackChain === sanitizedChain && rackDc === sanitizedDc;
+      const rackChain = String(rack.chain || '').trim().toLowerCase();
+      const rackDc = String(rack.dc || '').trim().toLowerCase();
+      const targetChain = sanitizedChain.toLowerCase();
+      const targetDc = sanitizedDc.toLowerCase();
+      const matches = rackChain === targetChain && rackDc === targetDc;
 
-      // Log only first few for debugging
-      if (allPowerData.indexOf(rack) < 5) {
-        console.log(`🔍 Rack ${rack.rackId || rack.id}: chain="${rackChain}" (match: ${rackChain === sanitizedChain}), dc="${rackDc}" (match: ${rackDc === sanitizedDc})`);
-      }
+      // Log rack details for debugging
+      console.log(`🔍 Evaluating rack ${rack.rackId || rack.id}: chain="${rack.chain}" (normalized: "${rackChain}"), dc="${rack.dc}" (normalized: "${rackDc}"), match: ${matches}`);
 
       return matches;
     });
@@ -1760,6 +1760,15 @@ app.post('/api/maintenance/chain', async (req, res) => {
     }
 
     await pool.close();
+
+    // Log detailed summary
+    console.log(`✅ Chain maintenance entry created:`);
+    console.log(`   Chain: ${sanitizedChain}`);
+    console.log(`   DC: ${sanitizedDc}`);
+    console.log(`   Racks inserted: ${insertedCount}`);
+    console.log(`   Racks failed: ${failedCount}`);
+    console.log(`   Total unique racks: ${uniqueRacks.length}`);
+    console.log(`   Rack IDs: ${uniqueRacks.map(r => r.sanitizedRackId).join(', ')}`);
 
     logger.info(`Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance (${insertedCount}/${uniqueRacks.length} racks)`);
 
