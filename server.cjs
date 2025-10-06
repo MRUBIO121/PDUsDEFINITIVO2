@@ -1602,10 +1602,18 @@ app.post('/api/maintenance/chain', async (req, res) => {
     }
 
     // Filter racks that belong to this chain in the specified datacenter
-    const chainRacks = allPowerData.filter(rack =>
-      String(rack.chain) === sanitizedChain &&
-      rack.dc === sanitizedDc
-    );
+    const chainRacks = allPowerData.filter(rack => {
+      const rackChain = String(rack.chain).trim();
+      const rackDc = String(rack.dc).trim();
+      const matches = rackChain === sanitizedChain && rackDc === sanitizedDc;
+
+      // Log only first few for debugging
+      if (allPowerData.indexOf(rack) < 5) {
+        console.log(`🔍 Rack ${rack.rackId || rack.id}: chain="${rackChain}" (match: ${rackChain === sanitizedChain}), dc="${rackDc}" (match: ${rackDc === sanitizedDc})`);
+      }
+
+      return matches;
+    });
 
     console.log(`🔍 Filtered racks for chain ${sanitizedChain} in DC ${sanitizedDc}: ${chainRacks.length}`);
 
@@ -1675,6 +1683,8 @@ app.post('/api/maintenance/chain', async (req, res) => {
       try {
         const rackId = rack.sanitizedRackId;
         const pduId = String(rack.id || rackId);
+
+        console.log(`➕ Adding rack to maintenance: ${rackId}, chain: ${String(rack.chain).trim()}, dc: ${String(rack.dc).trim()}`);
 
         // Check if this rack is already in maintenance
         const existingCheck = await pool.request()
