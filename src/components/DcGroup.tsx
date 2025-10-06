@@ -49,9 +49,6 @@ export default function DcGroup({
   onSendChainToMaintenance,
   maintenanceRacks
 }: DcGroupProps) {
-  
-  // Debug: Log DC group data
-  console.log('🔍 DEBUG DcGroup:', dc, 'has', rackGroups.length, 'racks');
 
   // Calculate total racks for this DC from original data (unfiltered)
   const totalRacksForDc = (originalRackGroups || []).filter(rackGroup => {

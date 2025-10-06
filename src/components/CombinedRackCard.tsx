@@ -49,17 +49,7 @@ export default function CombinedRackCard({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showMenu]);
-  // 🔍 DEBUG: Log rack data received by component
-  React.useEffect(() => {
-    const rackId = racks[0]?.rackId || racks[0]?.id;
-    console.log(`🔍 DEBUG - CombinedRackCard for rack ${rackId}:`, {
-      rackId,
-      overallStatus,
-      rackCount: racks.length,
-      individualStatuses: racks.map(r => ({ id: r.id, status: r.status, reasons: r.reasons }))
-    });
-  }, [racks, overallStatus]);
-  
+
   // Helper function to determine metric background color based on alerts
   const getMetricBgColor = (rack: RackData, metricType: 'amperage' | 'temperature' | 'humidity'): string => {
     // Check for critical alerts first (higher priority)

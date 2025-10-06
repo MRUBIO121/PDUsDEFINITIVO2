@@ -112,23 +112,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       });
       
       setRacks(flatRacks);
-      
-      // 🔍 DEBUG: Log data received from backend
-      console.log('🔍 DEBUG - flatRacks received from backend:', flatRacks.length, 'total racks');
-      const alertingRacks = flatRacks.filter(rack => rack.status !== 'normal');
-      console.log('🔍 DEBUG - Racks with alerts:', alertingRacks.length);
-      if (alertingRacks.length > 0) {
-        console.log('🔍 DEBUG - First few alerting racks:', alertingRacks.slice(0, 5).map(rack => ({
-          id: rack.id,
-          logicalRackId: rack.logicalRackId,
-          name: rack.name,
-          status: rack.status,
-          reasons: rack.reasons,
-          temperature: rack.temperature,
-          sensorTemperature: rack.sensorTemperature,
-          current: rack.current
-        })));
-      }
     } catch (err) {
       console.error('Error fetching racks:', err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
@@ -156,21 +139,35 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       const data = await response.json();
       if (data.success && Array.isArray(data.data)) {
         const maintenanceSet = new Set<string>();
+        let totalRackDetails = 0;
 
-        data.data.forEach((entry: any) => {
+        console.log(`\n========== CARGANDO RACKS EN MANTENIMIENTO (FRONTEND) ==========`);
+        console.log(`📋 Entradas de mantenimiento: ${data.data.length}`);
+
+        data.data.forEach((entry: any, entryIndex: number) => {
           if (Array.isArray(entry.racks)) {
+            console.log(`\nEntrada #${entryIndex + 1} (${entry.entry_type}): ${entry.racks.length} registros`);
+            if (entryIndex === 0 && entry.racks.length > 0) {
+              console.log(`   Ejemplo rack_id: "${entry.racks[0].rack_id}"`);
+            }
+
             entry.racks.forEach((rack: any) => {
+              totalRackDetails++;
+              // Only use rack_id as the unique identifier for maintenance racks
+              // This prevents counting multiple PDUs from the same physical rack as separate maintenance entries
               if (rack.rack_id) {
                 maintenanceSet.add(rack.rack_id);
-              }
-              if (rack.pdu_id && rack.pdu_id !== rack.rack_id) {
-                maintenanceSet.add(rack.pdu_id);
               }
             });
           }
         });
 
-        console.log('🔍 Maintenance racks loaded:', Array.from(maintenanceSet));
+        console.log(`\n✅ RESULTADO:`);
+        console.log(`   Total registros en DB: ${totalRackDetails}`);
+        console.log(`   Racks únicos (Set): ${maintenanceSet.size}`);
+        console.log(`   Primeros 5 IDs: [${Array.from(maintenanceSet).slice(0, 5).join(', ')}]`);
+        console.log(`================================================================\n`);
+
         setMaintenanceRacks(maintenanceSet);
       }
     } catch (err) {

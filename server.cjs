@@ -1634,8 +1634,8 @@ app.post('/api/maintenance/chain', async (req, res) => {
     }
 
     // Filter racks that belong to this chain in the specified datacenter
-    console.log(`🔍 Starting filter for chain "${sanitizedChain}" in DC "${sanitizedDc}"`);
-    console.log(`🔍 Total power data entries to filter: ${allPowerData.length}`);
+    console.log(`\n========== ENVIANDO CHAIN A MANTENIMIENTO ==========`);
+    console.log(`📋 Chain: "${sanitizedChain}" | DC: "${sanitizedDc}"`);
 
     const chainRacks = allPowerData.filter(rack => {
       const rackChain = String(rack.chain).trim();
@@ -1647,14 +1647,16 @@ app.post('/api/maintenance/chain', async (req, res) => {
       return matches;
     });
 
-    console.log(`🔍 Filtered racks for chain "${sanitizedChain}" in DC "${sanitizedDc}": ${chainRacks.length}`);
+    console.log(`📊 PDUs filtrados del API: ${chainRacks.length}`);
 
-    // Log detailed breakdown of what was found
-    const chainOnlyMatches = allPowerData.filter(r => String(r.chain).trim() === sanitizedChain).length;
-    const dcOnlyMatches = allPowerData.filter(r => String(r.dc).trim() === sanitizedDc).length;
-    console.log(`🔍 Racks with chain "${sanitizedChain}" (any DC): ${chainOnlyMatches}`);
-    console.log(`🔍 Racks with DC "${sanitizedDc}" (any chain): ${dcOnlyMatches}`);
-    console.log(`🔍 Racks with BOTH chain "${sanitizedChain}" AND DC "${sanitizedDc}": ${chainRacks.length}`);
+    // Show sample of what was found
+    if (chainRacks.length > 0) {
+      console.log(`📝 Ejemplo del primer PDU:`);
+      console.log(`   - id: ${chainRacks[0].id}`);
+      console.log(`   - rackId: ${chainRacks[0].rackId}`);
+      console.log(`   - chain: ${chainRacks[0].chain}`);
+      console.log(`   - dc: ${chainRacks[0].dc}`);
+    }
 
     if (chainRacks.length === 0) {
       return res.status(404).json({
@@ -1666,7 +1668,9 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     // Group by rackId to avoid inserting multiple records for the same physical rack
     const rackMap = new Map();
-    chainRacks.forEach(rack => {
+    console.log(`\n🔄 Agrupando PDUs por rackId físico...`);
+
+    chainRacks.forEach((rack, index) => {
       // Sanitize and validate rack ID
       let rackId = null;
 
@@ -1674,6 +1678,11 @@ app.post('/api/maintenance/chain', async (req, res) => {
         rackId = String(rack.rackId).trim();
       } else if (rack.id && String(rack.id).trim()) {
         rackId = String(rack.id).trim();
+      }
+
+      // Debug first few entries
+      if (index < 3) {
+        console.log(`   PDU #${index + 1}: id="${rack.id}" → rackId="${rackId}"`);
       }
 
       // Only add racks with valid IDs
@@ -1684,8 +1693,9 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     const uniqueRacks = Array.from(rackMap.values());
 
-    console.log(`🔍 Unique racks after grouping by rackId: ${uniqueRacks.length}`);
-    console.log(`🔍 Breakdown: ${chainRacks.length} PDUs filtered → ${uniqueRacks.length} unique physical racks`);
+    console.log(`\n✅ Resultado del agrupamiento:`);
+    console.log(`   ${chainRacks.length} PDUs → ${uniqueRacks.length} racks físicos únicos`);
+    console.log(`   Racks únicos: [${Array.from(rackMap.keys()).slice(0, 5).join(', ')}${rackMap.size > 5 ? '...' : ''}]`);
 
     if (uniqueRacks.length === 0) {
       return res.status(400).json({
@@ -1719,12 +1729,12 @@ app.post('/api/maintenance/chain', async (req, res) => {
     let insertedCount = 0;
     let failedCount = 0;
 
+    console.log(`\n💾 Insertando racks en la base de datos...`);
+
     for (const rack of uniqueRacks) {
       try {
         const rackId = rack.sanitizedRackId;
         const pduId = String(rack.id || rackId);
-
-        console.log(`➕ Adding rack to maintenance: ${rackId}, chain: ${String(rack.chain).trim()}, dc: ${String(rack.dc).trim()}`);
 
         // Check if this rack is already in maintenance
         const existingCheck = await pool.request()
@@ -1736,7 +1746,6 @@ app.post('/api/maintenance/chain', async (req, res) => {
           `);
 
         if (existingCheck.recordset[0].count > 0) {
-          console.log(`⚠️ Rack ${rackId} already in maintenance, skipping`);
           failedCount++;
           continue;
         }
@@ -1769,8 +1778,13 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     await pool.close();
 
+    console.log(`\n✅ RESULTADO FINAL:`);
+    console.log(`   Insertados: ${insertedCount}`);
+    console.log(`   Ya en mantenimiento (omitidos): ${failedCount}`);
+    console.log(`   Total procesados: ${uniqueRacks.length}`);
+    console.log(`====================================================\n`);
+
     const successMessage = `Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance`;
-    console.log(`✅ ${successMessage}: ${insertedCount} racks added, ${failedCount} failed/skipped`);
     logger.info(`${successMessage} (${insertedCount}/${uniqueRacks.length} racks)`);
 
     res.json({
