@@ -74,7 +74,8 @@ function App() {
     Object.values(groupedRacks).forEach(siteGroups => {
       Object.values(siteGroups).forEach(dcGroups => {
         Object.values(dcGroups).forEach(logicalGroups => {
-          // Filter out maintenance racks from alertas view
+          // In alertas view: filter out maintenance racks visually (they won't show)
+          // In principal view: show all racks including maintenance (displayed in blue)
           if (activeView === 'alertas') {
             const nonMaintenanceGroups = logicalGroups.filter(group => {
               const rackId = group[0]?.rackId || group[0]?.id;
@@ -82,6 +83,7 @@ function App() {
             });
             rackGroups.push(...nonMaintenanceGroups);
           } else {
+            // Principal view: show ALL racks (maintenance racks will be rendered in blue)
             rackGroups.push(...logicalGroups);
           }
         });
@@ -153,21 +155,27 @@ function App() {
 
     filteredRackGroups.forEach(rackGroup => {
       const rackId = rackGroup[0].rackId || rackGroup[0].id;
-      
+      const isInMaintenance = maintenanceRacks.has(rackId);
+
+      // Skip racks in maintenance - they shouldn't count in alerts
+      if (isInMaintenance) {
+        return;
+      }
+
       // Determine overall status for this rack group
-      const overallStatus = rackGroup.some(r => r.status === 'critical') 
-        ? 'critical' 
-        : rackGroup.some(r => r.status === 'warning') 
-        ? 'warning' 
+      const overallStatus = rackGroup.some(r => r.status === 'critical')
+        ? 'critical'
+        : rackGroup.some(r => r.status === 'warning')
+        ? 'warning'
         : 'normal';
-      
+
       // Count racks by overall status
       if (overallStatus === 'critical') {
         criticalRacks.add(rackId);
       } else if (overallStatus === 'warning') {
         warningRacks.add(rackId);
       }
-      
+
       // Count individual PDUs and track racks with specific metric alerts
       rackGroup.forEach(pdu => {
         if (pdu.reasons && pdu.reasons.length > 0) {
@@ -236,7 +244,7 @@ function App() {
     rackSummary.warning.humidity = warningRacksByMetric.humidity.size;
 
     return { rackSummary, pduSummary };
-  }, [filteredRackGroups]);
+  }, [filteredRackGroups, maintenanceRacks]);
 
   // Calculate GLOBAL alert summary statistics (for header display - always unfiltered)
   const globalAlertSummary = React.useMemo(() => {
@@ -260,8 +268,16 @@ function App() {
       }
     };
 
-    // Count individual PDUs with alerts (for header display)
+    // Count individual PDUs with alerts (for header display) - EXCLUDE maintenance racks
     racks.forEach(pdu => {
+      const rackId = pdu.rackId || pdu.id;
+      const isInMaintenance = maintenanceRacks.has(rackId);
+
+      // Skip PDUs that are in maintenance
+      if (isInMaintenance) {
+        return;
+      }
+
       if (pdu.reasons && pdu.reasons.length > 0) {
         pdu.reasons.forEach(reason => {
           // Count PDUs with critical alerts
@@ -327,11 +343,17 @@ function App() {
 
     originalRackGroups.forEach(rackGroup => {
       const rackId = rackGroup[0].rackId || rackGroup[0].id;
-      
+      const isInMaintenance = maintenanceRacks.has(rackId);
+
+      // Skip racks in maintenance - they shouldn't count in alerts
+      if (isInMaintenance) {
+        return;
+      }
+
       // Check what types of alerts this rack group has
       const hasCriticalPDU = rackGroup.some(r => r.status === 'critical');
       const hasWarningPDU = rackGroup.some(r => r.status === 'warning');
-      
+
       // Count racks independently for each alert type they have
       if (hasCriticalPDU) {
         criticalRacks.add(rackId);
@@ -341,7 +363,7 @@ function App() {
         warningRacks.add(rackId);
         allAlertingRacks.add(rackId);
       }
-      
+
       // Count racks with specific metric alerts
       rackGroup.forEach(pdu => {
         if (pdu.reasons && pdu.reasons.length > 0) {
@@ -391,7 +413,7 @@ function App() {
       totalAlertingPdus: pduSummary.critical.total + pduSummary.warning.total,
       totalAlertingRacks: allAlertingRacks.size // Total unique racks with any type of alert
     };
-  }, [originalRackGroups, racks]);
+  }, [originalRackGroups, racks, maintenanceRacks]);
 
   const handleThresholdSaveSuccess = () => {
     refreshThresholds();
