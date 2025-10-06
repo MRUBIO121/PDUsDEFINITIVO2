@@ -96,28 +96,38 @@ function App() {
           return;
         }
 
-        Object.values(dcGroups).forEach((logicalGroups, idx3) => {
-          console.log(`🔍 [filteredRackGroups] Processing logicalGroups ${idx1}.${idx2}.${idx3}:`, logicalGroups, 'Type:', typeof logicalGroups, 'isArray:', Array.isArray(logicalGroups));
+        Object.values(dcGroups).forEach((chainGroups, idx3) => {
+          console.log(`🔍 [filteredRackGroups] Processing chainGroups ${idx1}.${idx2}.${idx3}:`, chainGroups, 'Type:', typeof chainGroups, 'isArray:', Array.isArray(chainGroups));
 
-          if (!Array.isArray(logicalGroups)) {
-            console.warn(`⚠️ [filteredRackGroups] logicalGroups is not an array at ${idx1}.${idx2}.${idx3}`);
+          // chainGroups is another nested object, iterate one more level
+          if (!chainGroups || typeof chainGroups !== 'object') {
+            console.warn(`⚠️ [filteredRackGroups] Invalid chainGroups at ${idx1}.${idx2}.${idx3}`);
             return;
           }
 
-          // In alertas view: filter out maintenance racks visually (they won't show)
-          // In principal view: show all racks including maintenance (displayed in blue)
-          if (activeView === 'alertas') {
-            const nonMaintenanceGroups = logicalGroups.filter(group => {
-              const rackId = group[0]?.rackId || group[0]?.id;
-              return !maintenanceRacks.has(rackId);
-            });
-            console.log(`📝 [filteredRackGroups] Adding ${nonMaintenanceGroups.length} non-maintenance groups`);
-            rackGroups.push(...nonMaintenanceGroups);
-          } else {
-            // Principal view: show ALL racks (maintenance racks will be rendered in blue)
-            console.log(`📝 [filteredRackGroups] Adding ${logicalGroups.length} groups (all racks)`);
-            rackGroups.push(...logicalGroups);
-          }
+          Object.values(chainGroups).forEach((logicalGroups, idx4) => {
+            console.log(`🔍 [filteredRackGroups] Processing logicalGroups ${idx1}.${idx2}.${idx3}.${idx4}:`, logicalGroups, 'Type:', typeof logicalGroups, 'isArray:', Array.isArray(logicalGroups));
+
+            if (!Array.isArray(logicalGroups)) {
+              console.warn(`⚠️ [filteredRackGroups] logicalGroups is not an array at ${idx1}.${idx2}.${idx3}.${idx4}`);
+              return;
+            }
+
+            // In alertas view: filter out maintenance racks visually (they won't show)
+            // In principal view: show all racks including maintenance (displayed in blue)
+            if (activeView === 'alertas') {
+              const nonMaintenanceGroups = logicalGroups.filter(group => {
+                const rackId = group[0]?.rackId || group[0]?.id;
+                return !maintenanceRacks.has(rackId);
+              });
+              console.log(`📝 [filteredRackGroups] Adding ${nonMaintenanceGroups.length} non-maintenance groups`);
+              rackGroups.push(...nonMaintenanceGroups);
+            } else {
+              // Principal view: show ALL racks (maintenance racks will be rendered in blue)
+              console.log(`📝 [filteredRackGroups] Adding ${logicalGroups.length} groups (all racks)`);
+              rackGroups.push(...logicalGroups);
+            }
+          });
         });
       });
     });
