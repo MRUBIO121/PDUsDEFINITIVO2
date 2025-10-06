@@ -434,11 +434,12 @@ function getThresholdValue(thresholds, key) {
 
 /**
  * Get list of rack IDs currently in maintenance mode
+ * Works with new maintenance_rack_details table
  */
 async function getMaintenanceRackIds(pool) {
   try {
     const result = await pool.request().query(`
-      SELECT rack_id FROM maintenance_racks
+      SELECT DISTINCT rack_id FROM maintenance_rack_details
     `);
     return new Set(result.recordset.map(r => r.rack_id));
   } catch (error) {
@@ -1252,51 +1253,72 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
 // MAINTENANCE MODE ENDPOINTS
 // ============================================
 
-// Get all racks in maintenance
+// Get all maintenance entries with their racks
 app.get('/api/maintenance', async (req, res) => {
   try {
     const pool = await sql.connect(sqlConfig);
 
-    const result = await pool.request().query(`
+    // Get all maintenance entries
+    const entriesResult = await pool.request().query(`
       SELECT
         id,
+        entry_type,
         rack_id,
         chain,
+        site,
+        dc,
+        reason,
+        started_at,
+        started_by,
+        created_at
+      FROM maintenance_entries
+      ORDER BY started_at DESC
+    `);
+
+    // Get all rack details
+    const detailsResult = await pool.request().query(`
+      SELECT
+        maintenance_entry_id,
+        rack_id,
         pdu_id,
         name,
         country,
         site,
         dc,
         phase,
+        chain,
         node,
-        serial,
-        reason,
-        started_at,
-        started_by,
-        created_at
-      FROM maintenance_racks
-      ORDER BY chain, started_at DESC
+        serial
+      FROM maintenance_rack_details
     `);
 
     await pool.close();
 
-    const maintenanceRacks = result.recordset || [];
+    const entries = entriesResult.recordset || [];
+    const details = detailsResult.recordset || [];
+
+    // Map details to their entries
+    const maintenanceData = entries.map(entry => ({
+      ...entry,
+      racks: details.filter(d => d.maintenance_entry_id === entry.id)
+    }));
 
     res.json({
       success: true,
-      data: maintenanceRacks,
-      message: 'Maintenance racks retrieved successfully',
-      count: maintenanceRacks.length,
+      data: maintenanceData,
+      message: 'Maintenance entries retrieved successfully',
+      count: entries.length,
+      totalRacks: details.length,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('❌ Error fetching maintenance racks:', error);
-    logger.error('Maintenance racks fetch failed', { error: error.message });
+    console.error('❌ Error fetching maintenance entries:', error);
+    logger.error('Maintenance entries fetch failed', { error: error.message });
 
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch maintenance racks',
+      message: 'Failed to fetch maintenance entries',
       error: error.message,
       timestamp: new Date().toISOString()
     });
@@ -1309,8 +1331,8 @@ app.post('/api/maintenance/rack', async (req, res) => {
     const {
       rackId,
       rackData,
-      reason = 'Scheduled maintenance',
-      startedBy = 'System'
+      reason = 'Mantenimiento programado',
+      startedBy = 'Sistema'
     } = req.body;
 
     if (!rackId) {
@@ -1321,7 +1343,35 @@ app.post('/api/maintenance/rack', async (req, res) => {
       });
     }
 
+    // Validate rackId is a non-empty string
+    const sanitizedRackId = String(rackId || '').trim();
+    if (!sanitizedRackId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid rackId: must be a non-empty string',
+        timestamp: new Date().toISOString()
+      });
+    }
+
     const pool = await sql.connect(sqlConfig);
+
+    // Check if rack is already in maintenance
+    const existingCheck = await pool.request()
+      .input('rack_id', sql.NVarChar, sanitizedRackId)
+      .query(`
+        SELECT COUNT(*) as count
+        FROM maintenance_rack_details
+        WHERE rack_id = @rack_id
+      `);
+
+    if (existingCheck.recordset[0].count > 0) {
+      await pool.close();
+      return res.status(409).json({
+        success: false,
+        message: `Rack ${sanitizedRackId} is already in maintenance`,
+        timestamp: new Date().toISOString()
+      });
+    }
 
     // Use rack data from request body if provided, otherwise try to find it
     let rack = rackData;
@@ -1330,23 +1380,21 @@ app.post('/api/maintenance/rack', async (req, res) => {
     // If rack data not provided, try to find it in alerts table
     if (!rack) {
       const rackDbData = await pool.request()
-        .input('rack_id', sql.NVarChar, rackId)
+        .input('rack_id', sql.NVarChar, sanitizedRackId)
         .query(`
-          SELECT TOP 1 * FROM (
-            SELECT
-              pdu_id,
-              rack_id,
-              name,
-              country,
-              site,
-              dc,
-              phase,
-              chain,
-              node,
-              serial
-            FROM active_critical_alerts
-            WHERE rack_id = @rack_id OR pdu_id = @rack_id
-          ) AS temp
+          SELECT TOP 1
+            pdu_id,
+            rack_id,
+            name,
+            country,
+            site,
+            dc,
+            phase,
+            chain,
+            node,
+            serial
+          FROM active_critical_alerts
+          WHERE rack_id = @rack_id OR pdu_id = @rack_id
         `);
 
       if (rackDbData.recordset.length === 0) {
@@ -1362,44 +1410,56 @@ app.post('/api/maintenance/rack', async (req, res) => {
       chain = rack.chain;
     }
 
-    if (!chain) {
-      await pool.close();
-      return res.status(400).json({
-        success: false,
-        message: 'Rack does not have chain information',
-        timestamp: new Date().toISOString()
-      });
-    }
+    const dc = rack.dc || 'Unknown';
+    const site = rack.site || 'Unknown';
 
-    const insertResult = await pool.request()
-      .input('rack_id', sql.NVarChar, rackId)
-      .input('chain', sql.NVarChar, chain)
-      .input('pdu_id', sql.NVarChar, rack.pdu_id || rack.id || rackId)
-      .input('name', sql.NVarChar, rack.name || rackId)
-      .input('country', sql.NVarChar, rack.country || 'Unknown')
-      .input('site', sql.NVarChar, rack.site || 'Unknown')
-      .input('dc', sql.NVarChar, rack.dc || 'Unknown')
-      .input('phase', sql.NVarChar, rack.phase || 'Unknown')
-      .input('node', sql.NVarChar, rack.node || 'Unknown')
-      .input('serial', sql.NVarChar, rack.serial || 'Unknown')
+    // Create maintenance entry
+    const entryId = require('crypto').randomUUID();
+
+    await pool.request()
+      .input('entry_id', sql.UniqueIdentifier, entryId)
+      .input('entry_type', sql.NVarChar, 'individual_rack')
+      .input('rack_id', sql.NVarChar, sanitizedRackId)
+      .input('chain', sql.NVarChar, String(chain || 'Unknown'))
+      .input('site', sql.NVarChar, site)
+      .input('dc', sql.NVarChar, dc)
       .input('reason', sql.NVarChar, reason)
       .input('started_by', sql.NVarChar, startedBy)
       .query(`
-        IF NOT EXISTS (SELECT 1 FROM maintenance_racks WHERE rack_id = @rack_id)
-        BEGIN
-          INSERT INTO maintenance_racks
-          (rack_id, chain, pdu_id, name, country, site, dc, phase, node, serial, reason, started_by)
-          VALUES
-          (@rack_id, @chain, @pdu_id, @name, @country, @site, @dc, @phase, @node, @serial, @reason, @started_by)
-        END
+        INSERT INTO maintenance_entries
+        (id, entry_type, rack_id, chain, site, dc, reason, started_by)
+        VALUES
+        (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @started_by)
+      `);
+
+    // Insert rack details
+    await pool.request()
+      .input('entry_id', sql.UniqueIdentifier, entryId)
+      .input('rack_id', sql.NVarChar, sanitizedRackId)
+      .input('pdu_id', sql.NVarChar, String(rack.pdu_id || rack.id || sanitizedRackId))
+      .input('name', sql.NVarChar, String(rack.name || sanitizedRackId))
+      .input('country', sql.NVarChar, String(rack.country || 'Unknown'))
+      .input('site', sql.NVarChar, site)
+      .input('dc', sql.NVarChar, dc)
+      .input('phase', sql.NVarChar, String(rack.phase || 'Unknown'))
+      .input('chain', sql.NVarChar, String(chain || 'Unknown'))
+      .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
+      .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
+      .query(`
+        INSERT INTO maintenance_rack_details
+        (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial)
+        VALUES
+        (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial)
       `);
 
     await pool.close();
 
+    logger.info(`Rack ${sanitizedRackId} added to maintenance individually`);
+
     res.json({
       success: true,
-      message: `Rack ${rackId} added to maintenance`,
-      data: { rackId, chain },
+      message: `Rack ${sanitizedRackId} added to maintenance`,
+      data: { rackId: sanitizedRackId, chain, dc, entryId },
       timestamp: new Date().toISOString()
     });
 
@@ -1414,22 +1474,33 @@ app.post('/api/maintenance/rack', async (req, res) => {
   }
 });
 
-// Add all racks from a chain to maintenance (using SQL Server)
+// Add all racks from a chain to maintenance
 app.post('/api/maintenance/chain', async (req, res) => {
   try {
     const {
       chain,
       site,
       dc,
-      rackData,
-      reason = 'Scheduled maintenance',
-      startedBy = 'System'
+      reason = 'Mantenimiento programado de chain',
+      startedBy = 'Sistema'
     } = req.body;
 
     if (!chain || !dc) {
       return res.status(400).json({
         success: false,
         message: 'chain and dc are required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Validate and sanitize inputs
+    const sanitizedChain = String(chain || '').trim();
+    const sanitizedDc = String(dc || '').trim();
+
+    if (!sanitizedChain || !sanitizedDc) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid chain or dc values',
         timestamp: new Date().toISOString()
       });
     }
@@ -1472,25 +1543,16 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     // Filter racks that belong to this chain in the specified datacenter
     const chainRacks = allPowerData.filter(rack =>
-      String(rack.chain) === String(chain) &&
-      rack.dc === dc
+      String(rack.chain) === sanitizedChain &&
+      rack.dc === sanitizedDc
     );
 
-    console.log(`🔍 DEBUG - Total racks from API: ${allPowerData.length}`);
-    console.log(`🔍 DEBUG - Filtered racks for chain ${chain} in DC ${dc}: ${chainRacks.length}`);
-    console.log(`🔍 DEBUG - First 5 filtered racks:`, chainRacks.slice(0, 5).map(r => ({
-      id: r.id,
-      rackId: r.rackId,
-      chain: r.chain,
-      dc: r.dc,
-      site: r.site,
-      name: r.rackName || r.name
-    })));
+    console.log(`🔍 Filtered racks for chain ${sanitizedChain} in DC ${sanitizedDc}: ${chainRacks.length}`);
 
     if (chainRacks.length === 0) {
       return res.status(404).json({
         success: false,
-        message: `No racks found for chain ${chain} in DC ${dc}`,
+        message: `No racks found for chain ${sanitizedChain} in DC ${sanitizedDc}`,
         timestamp: new Date().toISOString()
       });
     }
@@ -1498,61 +1560,118 @@ app.post('/api/maintenance/chain', async (req, res) => {
     // Group by rackId to avoid inserting multiple records for the same physical rack
     const rackMap = new Map();
     chainRacks.forEach(rack => {
-      const rackId = rack.rackId || rack.id || `${rack.site}_${rack.dc}_${rack.chain}_${rack.node}`;
-      if (!rackMap.has(rackId)) {
-        rackMap.set(rackId, rack);
+      // Sanitize and validate rack ID
+      let rackId = null;
+
+      if (rack.rackId && String(rack.rackId).trim()) {
+        rackId = String(rack.rackId).trim();
+      } else if (rack.id && String(rack.id).trim()) {
+        rackId = String(rack.id).trim();
+      }
+
+      // Only add racks with valid IDs
+      if (rackId && !rackMap.has(rackId)) {
+        rackMap.set(rackId, { ...rack, sanitizedRackId: rackId });
       }
     });
 
     const uniqueRacks = Array.from(rackMap.values());
 
-    console.log(`🔍 DEBUG - Unique racks after grouping: ${uniqueRacks.length}`);
-    console.log(`🔍 DEBUG - Unique rackIds:`, uniqueRacks.map(r => r.rackId || r.id));
+    console.log(`🔍 Unique racks after grouping: ${uniqueRacks.length}`);
+
+    if (uniqueRacks.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: `No valid racks found for chain ${sanitizedChain} in DC ${sanitizedDc}`,
+        timestamp: new Date().toISOString()
+      });
+    }
 
     const pool = await sql.connect(sqlConfig);
+
+    // Create a single maintenance entry for the entire chain
+    const entryId = require('crypto').randomUUID();
+
+    await pool.request()
+      .input('entry_id', sql.UniqueIdentifier, entryId)
+      .input('entry_type', sql.NVarChar, 'chain')
+      .input('chain', sql.NVarChar, sanitizedChain)
+      .input('site', sql.NVarChar, site || 'Unknown')
+      .input('dc', sql.NVarChar, sanitizedDc)
+      .input('reason', sql.NVarChar, reason)
+      .input('started_by', sql.NVarChar, startedBy)
+      .query(`
+        INSERT INTO maintenance_entries
+        (id, entry_type, rack_id, chain, site, dc, reason, started_by)
+        VALUES
+        (@entry_id, @entry_type, NULL, @chain, @site, @dc, @reason, @started_by)
+      `);
+
+    // Insert all racks as details of this maintenance entry
     let insertedCount = 0;
+    let failedCount = 0;
 
     for (const rack of uniqueRacks) {
       try {
-        const rackId = rack.rackId || rack.id || `${rack.site}_${rack.dc}_${rack.chain}_${rack.node}`;
-        const pduId = rack.id || rackId;
+        const rackId = rack.sanitizedRackId;
+        const pduId = String(rack.id || rackId);
+
+        // Check if this rack is already in maintenance
+        const existingCheck = await pool.request()
+          .input('rack_id', sql.NVarChar, rackId)
+          .query(`
+            SELECT COUNT(*) as count
+            FROM maintenance_rack_details
+            WHERE rack_id = @rack_id
+          `);
+
+        if (existingCheck.recordset[0].count > 0) {
+          console.log(`⚠️ Rack ${rackId} already in maintenance, skipping`);
+          failedCount++;
+          continue;
+        }
 
         await pool.request()
+          .input('entry_id', sql.UniqueIdentifier, entryId)
           .input('rack_id', sql.NVarChar, rackId)
-          .input('chain', sql.NVarChar, String(rack.chain || 'Unknown'))
           .input('pdu_id', sql.NVarChar, pduId)
-          .input('name', sql.NVarChar, rack.rackName || rack.name || 'Unknown')
+          .input('name', sql.NVarChar, String(rack.rackName || rack.name || 'Unknown'))
           .input('country', sql.NVarChar, 'España')
-          .input('site', sql.NVarChar, rack.site || 'Unknown')
-          .input('dc', sql.NVarChar, rack.dc || 'Unknown')
-          .input('phase', sql.NVarChar, rack.phase || 'Unknown')
+          .input('site', sql.NVarChar, String(rack.site || 'Unknown'))
+          .input('dc', sql.NVarChar, sanitizedDc)
+          .input('phase', sql.NVarChar, String(rack.phase || 'Unknown'))
+          .input('chain', sql.NVarChar, sanitizedChain)
           .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
-          .input('serial', sql.NVarChar, rack.serial || 'Unknown')
-          .input('reason', sql.NVarChar, reason)
-          .input('started_by', sql.NVarChar, startedBy)
+          .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
           .query(`
-            IF NOT EXISTS (SELECT 1 FROM maintenance_racks WHERE rack_id = @rack_id)
-            BEGIN
-              INSERT INTO maintenance_racks
-              (rack_id, chain, pdu_id, name, country, site, dc, phase, node, serial, reason, started_by)
-              VALUES
-              (@rack_id, @chain, @pdu_id, @name, @country, @site, @dc, @phase, @node, @serial, @reason, @started_by)
-            END
+            INSERT INTO maintenance_rack_details
+            (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial)
+            VALUES
+            (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial)
           `);
+
         insertedCount++;
       } catch (insertError) {
-        logger.error(`Failed to insert rack to maintenance:`, insertError);
+        failedCount++;
+        logger.error(`Failed to insert rack ${rack.sanitizedRackId} to maintenance:`, insertError);
       }
     }
 
     await pool.close();
 
-    logger.info(`Chain ${chain} from DC ${dc} added to maintenance (${insertedCount}/${uniqueRacks.length} racks)`);
+    logger.info(`Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance (${insertedCount}/${uniqueRacks.length} racks)`);
 
     res.json({
       success: true,
-      message: `Chain ${chain} from DC ${dc} added to maintenance (${insertedCount} racks)`,
-      data: { chain, dc, racksAdded: insertedCount, totalRacks: uniqueRacks.length },
+      message: `Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance`,
+      data: {
+        entryId,
+        chain: sanitizedChain,
+        dc: sanitizedDc,
+        racksAdded: insertedCount,
+        racksFailed: failedCount,
+        totalRacks: uniqueRacks.length
+      },
       timestamp: new Date().toISOString()
     });
 
@@ -1569,49 +1688,179 @@ app.post('/api/maintenance/chain', async (req, res) => {
   }
 });
 
-// Remove rack(s) from maintenance by chain and dc (using SQL Server)
-app.delete('/api/maintenance/chain/:chain/:dc', async (req, res) => {
+// Remove a single rack from maintenance
+app.delete('/api/maintenance/rack/:rackId', async (req, res) => {
   try {
-    const { chain, dc } = req.params;
+    const { rackId } = req.params;
 
-    if (!chain || !dc) {
+    if (!rackId) {
       return res.status(400).json({
         success: false,
-        message: 'chain and dc parameters are required',
+        message: 'rackId parameter is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const sanitizedRackId = String(rackId).trim();
+
+    const pool = await sql.connect(sqlConfig);
+
+    // Get the maintenance entry ID for this rack
+    const entryResult = await pool.request()
+      .input('rack_id', sql.NVarChar, sanitizedRackId)
+      .query(`
+        SELECT maintenance_entry_id, entry_type
+        FROM maintenance_rack_details mrd
+        JOIN maintenance_entries me ON mrd.maintenance_entry_id = me.id
+        WHERE mrd.rack_id = @rack_id
+      `);
+
+    if (entryResult.recordset.length === 0) {
+      await pool.close();
+      return res.status(404).json({
+        success: false,
+        message: `Rack ${sanitizedRackId} is not in maintenance`,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const entryId = entryResult.recordset[0].maintenance_entry_id;
+    const entryType = entryResult.recordset[0].entry_type;
+
+    // Delete the rack detail
+    await pool.request()
+      .input('rack_id', sql.NVarChar, sanitizedRackId)
+      .query(`
+        DELETE FROM maintenance_rack_details
+        WHERE rack_id = @rack_id
+      `);
+
+    // If this was an individual rack entry, delete the entry too
+    // If it was a chain entry, check if there are any racks left
+    if (entryType === 'individual_rack') {
+      await pool.request()
+        .input('entry_id', sql.UniqueIdentifier, entryId)
+        .query(`
+          DELETE FROM maintenance_entries
+          WHERE id = @entry_id
+        `);
+    } else {
+      // Check if the chain entry has any remaining racks
+      const remainingRacks = await pool.request()
+        .input('entry_id', sql.UniqueIdentifier, entryId)
+        .query(`
+          SELECT COUNT(*) as count
+          FROM maintenance_rack_details
+          WHERE maintenance_entry_id = @entry_id
+        `);
+
+      // If no racks remain, delete the entry
+      if (remainingRacks.recordset[0].count === 0) {
+        await pool.request()
+          .input('entry_id', sql.UniqueIdentifier, entryId)
+          .query(`
+            DELETE FROM maintenance_entries
+            WHERE id = @entry_id
+          `);
+      }
+    }
+
+    await pool.close();
+
+    logger.info(`Rack ${sanitizedRackId} removed from maintenance`);
+
+    res.json({
+      success: true,
+      message: `Rack ${sanitizedRackId} removed from maintenance`,
+      data: { rackId: sanitizedRackId },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error removing rack from maintenance:', error);
+    logger.error('Remove rack from maintenance failed', { error: error.message, rackId: req.params.rackId });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove rack from maintenance',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Remove an entire maintenance entry (individual rack or full chain) by entry ID
+app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
+  try {
+    const { entryId } = req.params;
+
+    if (!entryId) {
+      return res.status(400).json({
+        success: false,
+        message: 'entryId parameter is required',
         timestamp: new Date().toISOString()
       });
     }
 
     const pool = await sql.connect(sqlConfig);
 
-    const result = await pool.request()
-      .input('chain', sql.NVarChar, chain)
-      .input('dc', sql.NVarChar, dc)
+    // Get entry info before deleting
+    const entryInfo = await pool.request()
+      .input('entry_id', sql.UniqueIdentifier, entryId)
       .query(`
-        DELETE FROM maintenance_racks
-        WHERE chain = @chain AND dc = @dc
+        SELECT entry_type, rack_id, chain, dc,
+               (SELECT COUNT(*) FROM maintenance_rack_details WHERE maintenance_entry_id = @entry_id) as rack_count
+        FROM maintenance_entries
+        WHERE id = @entry_id
+      `);
+
+    if (entryInfo.recordset.length === 0) {
+      await pool.close();
+      return res.status(404).json({
+        success: false,
+        message: 'Maintenance entry not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const entry = entryInfo.recordset[0];
+
+    // Delete the maintenance entry (CASCADE will delete all related rack details)
+    await pool.request()
+      .input('entry_id', sql.UniqueIdentifier, entryId)
+      .query(`
+        DELETE FROM maintenance_entries
+        WHERE id = @entry_id
       `);
 
     await pool.close();
 
-    const deletedCount = result.rowsAffected[0];
+    const message = entry.entry_type === 'chain'
+      ? `Chain ${entry.chain} from DC ${entry.dc} removed from maintenance (${entry.rack_count} racks)`
+      : `Rack ${entry.rack_id} removed from maintenance`;
 
-    logger.info(`Chain ${chain} from DC ${dc} removed from maintenance (${deletedCount} racks deleted)`);
+    logger.info(message);
 
     res.json({
       success: true,
-      message: `Chain ${chain} from DC ${dc} removed from maintenance (${deletedCount} racks)`,
-      data: { chain, dc, racksRemoved: deletedCount },
+      message,
+      data: {
+        entryId,
+        entryType: entry.entry_type,
+        chain: entry.chain,
+        dc: entry.dc,
+        racksRemoved: entry.rack_count
+      },
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('❌ Error removing chain from maintenance:', error);
-    logger.error('Remove from maintenance failed', { error: error.message, chain: req.params.chain });
+    console.error('❌ Error removing maintenance entry:', error);
+    logger.error('Remove maintenance entry failed', { error: error.message, entryId: req.params.entryId });
 
     res.status(500).json({
       success: false,
-      message: 'Failed to remove chain from maintenance',
+      message: 'Failed to remove maintenance entry',
       error: error.message,
       timestamp: new Date().toISOString()
     });
