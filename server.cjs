@@ -449,6 +449,23 @@ async function getMaintenanceRackIds(pool) {
 }
 
 /**
+ * Helper function to ensure database connection is active
+ * Reconnects if connection is closed or invalid
+ */
+async function ensureConnection(pool) {
+  try {
+    if (!pool || !pool.connected) {
+      console.log('🔄 Connection lost, reconnecting to database...');
+      return await sql.connect(sqlConfig);
+    }
+    return pool;
+  } catch (error) {
+    console.error('❌ Failed to reconnect to database:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Manages active critical alerts in the database
  * Inserts new critical alerts and removes resolved ones
  * Excludes racks that are in maintenance mode
@@ -468,24 +485,55 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
     });
 
     // Process PDUs in batches to avoid connection timeout issues
-    const BATCH_SIZE = 50;
+    const BATCH_SIZE = 20;
     let processedCount = 0;
     let errorCount = 0;
+    let reconnectCount = 0;
 
     for (let i = 0; i < currentCriticalPdus.length; i += BATCH_SIZE) {
       const batch = currentCriticalPdus.slice(i, i + BATCH_SIZE);
+
+      // Ensure connection is valid before each batch
+      try {
+        pool = await ensureConnection(pool);
+      } catch (reconnectError) {
+        console.error('❌ Failed to ensure connection for batch, skipping batch:', reconnectError.message);
+        errorCount += batch.length;
+        continue;
+      }
 
       for (const pdu of batch) {
         // Process each alert reason for this PDU
         for (const reason of pdu.reasons) {
           if (reason.startsWith('critical_')) {
             try {
+              // Verify connection before each operation
+              if (!pool.connected) {
+                pool = await ensureConnection(pool);
+                reconnectCount++;
+              }
+
               await processCriticalAlert(pool, pdu, reason, thresholds);
               processedCount++;
             } catch (alertError) {
               errorCount++;
-              console.error(`❌ Error processing critical alert for PDU ${pdu.id}:`, alertError.message);
-              // Continue processing other alerts even if one fails
+
+              // Check if error is connection-related
+              if (alertError.code === 'ECONNCLOSED' || alertError.code === 'ENOTOPEN') {
+                console.error(`❌ Connection error for PDU ${pdu.id}, attempting reconnect...`);
+                try {
+                  pool = await sql.connect(sqlConfig);
+                  reconnectCount++;
+                  // Retry the operation once
+                  await processCriticalAlert(pool, pdu, reason, thresholds);
+                  processedCount++;
+                  errorCount--;
+                } catch (retryError) {
+                  console.error(`❌ Retry failed for PDU ${pdu.id}:`, retryError.message);
+                }
+              } else {
+                console.error(`❌ Error processing critical alert for PDU ${pdu.id}:`, alertError.message);
+              }
             }
           }
         }
@@ -493,16 +541,24 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
 
       // Small delay between batches to avoid overwhelming the database
       if (i + BATCH_SIZE < currentCriticalPdus.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
     }
+
+    console.log(`✅ Processed ${processedCount} alerts (${errorCount} errors, ${reconnectCount} reconnections)`);
 
     // Clean up resolved alerts (only if pool is still valid)
     if (pool && pool.connected) {
       try {
         await cleanupResolvedAlerts(pool, currentCriticalPdus);
       } catch (cleanupError) {
-        console.error('❌ Error during cleanup, but continuing:', cleanupError.message);
+        console.error('❌ Error during cleanup, attempting reconnect...');
+        try {
+          pool = await sql.connect(sqlConfig);
+          await cleanupResolvedAlerts(pool, currentCriticalPdus);
+        } catch (retryError) {
+          console.error('❌ Cleanup retry failed:', retryError.message);
+        }
       }
     }
 
@@ -525,9 +581,13 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
  */
 async function processCriticalAlert(pool, pdu, reason, thresholds) {
   try {
-    // Verify pool exists
+    // Verify pool exists and is connected
     if (!pool) {
       throw new Error('Database pool is null');
+    }
+
+    if (!pool.connected) {
+      throw new Error('Database connection is closed');
     }
 
     // Extract metric type and field from reason
