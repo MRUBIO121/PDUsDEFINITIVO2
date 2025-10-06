@@ -315,7 +315,7 @@ export default function MaintenancePage() {
                         ) : (
                           <>
                             <Wrench className="w-4 h-4" />
-                            Finalizar {isChainEntry ? 'Chain' : 'Mantenimiento'}
+                            Finalizar Mantenimiento
                           </>
                         )}
                       </button>
