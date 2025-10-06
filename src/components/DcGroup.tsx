@@ -207,7 +207,7 @@ export default function DcGroup({
 
       {/* Racks Grid for this DC */}
       {isExpanded && (
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 pb-6">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 px-6 pb-6">
           {rackGroups.map((rackGroup, index) => {
             // Always use CombinedRackCard to show all PDUs consistently
             const overallStatus = rackGroup.some(r => r.status === 'critical') 

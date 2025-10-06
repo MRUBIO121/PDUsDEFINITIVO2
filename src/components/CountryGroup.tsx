@@ -99,9 +99,9 @@ export default function CountryGroup({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow space-y-6 p-6 mb-6 border border-gray-200">
+    <div className="bg-white rounded-lg shadow space-y-6 mb-6 border border-gray-200">
       {/* Country Header */}
-      <div>
+      <div className="p-6">
         <div className="flex items-center justify-between cursor-pointer" onClick={() => onToggleExpand(country)}>
           <div className="flex items-center">
             <div className="bg-blue-600 rounded-full mr-4 p-2">
@@ -230,7 +230,7 @@ export default function CountryGroup({
       
       {/* Site Groups within this Country */}
       {isExpanded && (
-        <div className="space-y-4">
+        <div className="space-y-4 px-6 pb-6">
           {Object.entries(siteGroups).map(([site, dcGroups]) => (
             <SiteGroup
               key={site}
