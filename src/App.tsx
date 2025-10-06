@@ -433,6 +433,8 @@ function App() {
       return;
     }
 
+    const trimmedReason = (reason || 'Mantenimiento programado').slice(0, 200);
+
     try {
       const response = await fetch('/api/maintenance/rack', {
         method: 'POST',
@@ -442,7 +444,7 @@ function App() {
         body: JSON.stringify({
           rackId,
           rackData,
-          reason: reason || 'Mantenimiento programado',
+          reason: trimmedReason,
           startedBy: 'Usuario'
         })
       });
@@ -472,6 +474,8 @@ function App() {
       return;
     }
 
+    const trimmedReason = (reason || 'Mantenimiento programado').slice(0, 200);
+
     try {
       const response = await fetch('/api/maintenance/chain', {
         method: 'POST',
@@ -482,7 +486,7 @@ function App() {
           chain,
           dc,
           rackData,
-          reason: reason || 'Mantenimiento programado',
+          reason: trimmedReason,
           startedBy: 'Usuario'
         })
       });
