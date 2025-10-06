@@ -981,14 +981,46 @@ app.get('/api/racks/energy', async (req, res) => {
     const rackGroups = [];
     const rackMap = new Map();
 
+    // Track PDUs to detect duplicates
+    const pduTracker = new Map(); // pdu.id -> { rackId, dc, site, chain }
+
     filteredData.forEach(pdu => {
       const rackId = pdu.rackId || pdu.id;
+      const pduId = pdu.id;
+
+      // Check for duplicate PDU IDs across different racks or datacenters
+      if (pduTracker.has(pduId)) {
+        const existing = pduTracker.get(pduId);
+        console.warn(`⚠️ DUPLICATE PDU DETECTED: PDU ${pduId} appears in multiple locations:`);
+        console.warn(`   Existing: rack=${existing.rackId}, dc=${existing.dc}, site=${existing.site}, chain=${existing.chain}`);
+        console.warn(`   Current:  rack=${rackId}, dc=${pdu.dc}, site=${pdu.site}, chain=${pdu.chain}`);
+      } else {
+        pduTracker.set(pduId, {
+          rackId: rackId,
+          dc: pdu.dc,
+          site: pdu.site,
+          chain: pdu.chain
+        });
+      }
 
       if (!rackMap.has(rackId)) {
         rackMap.set(rackId, []);
       }
 
       rackMap.get(rackId).push(pdu);
+    });
+
+    // Check for racks appearing in multiple datacenters
+    const rackDcTracker = new Map(); // rackId -> Set of DCs
+    Array.from(rackMap.values()).forEach(rackGroup => {
+      const rackId = rackGroup[0].rackId || rackGroup[0].id;
+      const dcs = new Set(rackGroup.map(pdu => pdu.dc));
+
+      if (dcs.size > 1) {
+        console.warn(`⚠️ RACK IN MULTIPLE DCS: Rack ${rackId} appears in multiple datacenters: ${Array.from(dcs).join(', ')}`);
+      }
+
+      rackDcTracker.set(rackId, dcs);
     });
 
     // Convertir el Map en arrays
