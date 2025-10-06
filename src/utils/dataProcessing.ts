@@ -119,8 +119,8 @@ export function groupRacksByDc(racks: RackData[]): { [dc: string]: RackData[][] 
  * Filters racks based on multiple criteria
  */
 export function filterRacks(
-  racks: RackData[], 
-  statusFilter: 'all' | 'critical' | 'warning',
+  racks: RackData[],
+  statusFilter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance',
   countryFilter: string = 'all',
   siteFilter: string = 'all',
   dcFilter: string = 'all',
@@ -128,7 +128,8 @@ export function filterRacks(
   searchField: string = 'all',
   metricFilter: string = 'all',
   showAllRacks: boolean = false,
-  showZeroAmperageAlerts: boolean = true
+  showZeroAmperageAlerts: boolean = true,
+  maintenanceRacks: Set<string> = new Set()
 ): RackData[] {
   let filteredRacks = racks;
   
@@ -205,16 +206,29 @@ export function filterRacks(
     // In "Principal" mode: show all racks regardless of status
     // Apply status filter only if a specific status is selected
     if (statusFilter !== 'all') {
-      filteredRacks = filteredRacks.filter(rack => rack.status === statusFilter);
+      if (statusFilter === 'maintenance') {
+        // Filter to show only racks in maintenance
+        filteredRacks = filteredRacks.filter(rack => {
+          const rackId = rack.rackId || rack.id;
+          return maintenanceRacks.has(rackId);
+        });
+      } else {
+        // Filter by normal status (exclude maintenance racks)
+        filteredRacks = filteredRacks.filter(rack => {
+          const rackId = rack.rackId || rack.id;
+          const isInMaintenance = maintenanceRacks.has(rackId);
+          return !isInMaintenance && rack.status === statusFilter;
+        });
+      }
     }
     // If statusFilter is 'all', show all racks (no status filtering)
   } else {
     // In "Alertas" mode: show complete racks that have at least one PDU with alerts
-    
+
     // In "Alertas" mode: only show PDUs that have alerts (critical or warning status)
     // Never show PDUs with normal status in alerts view
     filteredRacks = filteredRacks.filter(rack => rack.status === 'critical' || rack.status === 'warning');
-    
+
     // Filter out zero amperage alerts if the toggle is disabled
     if (!showZeroAmperageAlerts) {
       filteredRacks = filteredRacks.filter(rack => {
@@ -223,15 +237,15 @@ export function filterRacks(
         if (!rack.reasons || rack.reasons.length === 0) {
           return true; // Keep racks with no reasons
         }
-        
+
         const hasZeroAmperageAlert = rack.reasons.includes('critical_amperage_zero_reading');
         const hasOtherAlerts = rack.reasons.some(reason => reason !== 'critical_amperage_zero_reading');
-        
+
         // Keep if: no zero amperage alert OR has other alerts in addition to zero amperage
         return !hasZeroAmperageAlert || hasOtherAlerts;
       });
     }
-    
+
     // Apply additional status filter if specified
     if (statusFilter !== 'all') {
       filteredRacks = filteredRacks.filter(rack => rack.status === statusFilter);

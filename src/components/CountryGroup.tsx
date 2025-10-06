@@ -23,8 +23,8 @@ interface CountryGroupProps {
     warningHigh: number
   ) => string;
   getAmperageStatusColor: (rack: RackData) => string;
-  activeStatusFilter: 'all' | 'critical' | 'warning';
-  onStatusFilterChange: (filter: 'all' | 'critical' | 'warning') => void;
+  activeStatusFilter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance';
+  onStatusFilterChange: (filter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance') => void;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
   onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
   onSendChainToMaintenance?: (chain: string, site: string, dc: string, rackData?: any) => void;

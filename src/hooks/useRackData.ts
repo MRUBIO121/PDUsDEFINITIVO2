@@ -17,7 +17,7 @@ interface UseRackDataReturn {
   expandedCountryIds: Set<string>;
   expandedSiteIds: Set<string>;
   expandedDcIds: Set<string>;
-  activeStatusFilter: 'all' | 'critical' | 'warning';
+  activeStatusFilter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance';
   activeCountryFilter: string;
   activeSiteFilter: string;
   activeDcFilter: string;
@@ -29,7 +29,7 @@ interface UseRackDataReturn {
   toggleCountryExpansion: (country: string) => void;
   toggleSiteExpansion: (site: string) => void;
   toggleDcExpansion: (dc: string) => void;
-  setActiveStatusFilter: (filter: 'all' | 'critical' | 'warning') => void;
+  setActiveStatusFilter: (filter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance') => void;
   setActiveCountryFilter: (country: string) => void;
   setActiveSiteFilter: (site: string) => void;
   setActiveDcFilter: (dc: string) => void;
@@ -53,7 +53,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   const [expandedCountryIds, setExpandedCountryIds] = useState<Set<string>>(new Set());
   const [expandedSiteIds, setExpandedSiteIds] = useState<Set<string>>(new Set());
   const [expandedDcIds, setExpandedDcIds] = useState<Set<string>>(new Set());
-  const [activeStatusFilter, setActiveStatusFilter] = useState<'all' | 'critical' | 'warning'>('all');
+  const [activeStatusFilter, setActiveStatusFilter] = useState<'all' | 'critical' | 'warning' | 'normal' | 'maintenance'>('all');
   const [activeCountryFilter, setActiveCountryFilter] = useState<string>('all');
   const [activeSiteFilter, setActiveSiteFilter] = useState<string>('all');
   const [activeDcFilter, setActiveDcFilter] = useState<string>('all');
@@ -271,16 +271,17 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
 
   // Filter and group the racks
   const filteredRacks = filterRacks(
-    racks, 
-    activeStatusFilter, 
-    activeCountryFilter, 
-    activeSiteFilter, 
+    racks,
+    activeStatusFilter,
+    activeCountryFilter,
+    activeSiteFilter,
     activeDcFilter,
     searchQuery,
     searchField,
     activeMetricFilter,
     forceShowAllRacks,
-    showZeroAmperageAlerts
+    showZeroAmperageAlerts,
+    maintenanceRacks
   );
   const groupedRacks = groupRacksByCountry(filteredRacks);
 

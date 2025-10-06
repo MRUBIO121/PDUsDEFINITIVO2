@@ -22,8 +22,8 @@ interface SiteGroupProps {
     warningHigh: number
   ) => string;
   getAmperageStatusColor: (rack: RackData) => string;
-  activeStatusFilter: 'all' | 'critical' | 'warning';
-  onStatusFilterChange: (filter: 'all' | 'critical' | 'warning') => void;
+  activeStatusFilter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance';
+  onStatusFilterChange: (filter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance') => void;
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
   onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
   onSendChainToMaintenance?: (chain: string, site: string, dc: string, rackData?: any) => void;
@@ -140,61 +140,66 @@ export default function SiteGroup({
                 }
 
                 if (count === 0 || (activeView === 'alertas' && status === 'normal')) return null;
-                
-                // Critical and Warning are buttons, Normal is just a display
-                if (status === 'critical' || status === 'warning') {
-                  const isActive = activeStatusFilter === status;
-                  return (
-                    <button
-                      key={status}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onStatusFilterChange(status as 'critical' | 'warning');
-                      }}
-                      className={`flex items-center space-x-1 rounded-full border px-3 py-1 transition-all duration-200 hover:shadow-md ${
-                        isActive 
-                          ? status === 'critical' 
-                            ? 'bg-red-100 border-red-500 shadow-md' 
-                            : 'bg-yellow-100 border-yellow-500 shadow-md'
-                          : 'bg-white hover:bg-gray-50'
-                      }`}
-                      title={`Filtrar por ${getStatusText(status).toLowerCase()}`}
-                    >
-                      <div className={`w-2 h-2 rounded-full ${getStatusColor(status)} ${
-                        status !== 'normal' ? 'animate-pulse' : ''
-                      }`}></div>
-                      <span className={`font-medium text-xs ${
-                        isActive 
-                          ? status === 'critical' 
-                            ? 'text-red-800' 
-                            : 'text-yellow-800'
-                          : 'text-gray-700'
-                      }`}>
-                        {count}
-                      </span>
-                      <span className={`text-xs ${
-                        isActive 
-                          ? status === 'critical' 
-                            ? 'text-red-600' 
-                            : 'text-yellow-600'
-                          : 'text-gray-500'
-                      }`}>
-                        {getStatusText(status).toLowerCase()}
-                      </span>
-                    </button>
-                  );
+
+                // All status counts are now clickable buttons
+                const isActive = activeStatusFilter === status;
+
+                // Define colors based on status
+                let bgActiveClass = 'bg-gray-100';
+                let borderActiveClass = 'border-gray-500';
+                let textActiveClass = 'text-gray-800';
+                let textSecondaryActiveClass = 'text-gray-600';
+
+                if (status === 'critical') {
+                  bgActiveClass = 'bg-red-100';
+                  borderActiveClass = 'border-red-500';
+                  textActiveClass = 'text-red-800';
+                  textSecondaryActiveClass = 'text-red-600';
+                } else if (status === 'warning') {
+                  bgActiveClass = 'bg-yellow-100';
+                  borderActiveClass = 'border-yellow-500';
+                  textActiveClass = 'text-yellow-800';
+                  textSecondaryActiveClass = 'text-yellow-600';
+                } else if (status === 'normal') {
+                  bgActiveClass = 'bg-green-100';
+                  borderActiveClass = 'border-green-500';
+                  textActiveClass = 'text-green-800';
+                  textSecondaryActiveClass = 'text-green-600';
+                } else if (status === 'maintenance') {
+                  bgActiveClass = 'bg-blue-100';
+                  borderActiveClass = 'border-blue-500';
+                  textActiveClass = 'text-blue-800';
+                  textSecondaryActiveClass = 'text-blue-600';
                 }
-                
+
                 return (
-                  <div key={status} className="flex items-center space-x-1 bg-white rounded-full border px-3 py-1">
-                    <div className={`w-2 h-2 rounded-full ${getStatusColor(status)}`}></div>
-                    <span className="font-medium text-gray-700 text-xs">
+                  <button
+                    key={status}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStatusFilterChange(status as 'critical' | 'warning' | 'normal' | 'maintenance');
+                    }}
+                    className={`flex items-center space-x-1 rounded-full border px-3 py-1 transition-all duration-200 hover:shadow-md ${
+                      isActive
+                        ? `${bgActiveClass} ${borderActiveClass} shadow-md`
+                        : 'bg-white hover:bg-gray-50'
+                    }`}
+                    title={`Filtrar por ${getStatusText(status).toLowerCase()}`}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${getStatusColor(status)} ${
+                      status === 'critical' || status === 'warning' ? 'animate-pulse' : ''
+                    }`}></div>
+                    <span className={`font-medium text-xs ${
+                      isActive ? textActiveClass : 'text-gray-700'
+                    }`}>
                       {count}
                     </span>
-                    <span className="text-gray-500 text-xs">
+                    <span className={`text-xs ${
+                      isActive ? textSecondaryActiveClass : 'text-gray-500'
+                    }`}>
                       {getStatusText(status).toLowerCase()}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
