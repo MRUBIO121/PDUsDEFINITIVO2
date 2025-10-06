@@ -484,7 +484,6 @@ function App() {
         },
         body: JSON.stringify({
           chain,
-          site,
           dc,
           rackData,
           reason: trimmedReason,
