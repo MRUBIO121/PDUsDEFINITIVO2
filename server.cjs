@@ -1697,7 +1697,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
           .input('pdu_id', sql.NVarChar, pduId)
           .input('name', sql.NVarChar, String(rack.rackName || rack.name || 'Unknown'))
           .input('country', sql.NVarChar, 'España')
-          .input('site', sql.NVarChar, String(rack.site || 'Unknown'))
+          .input('site', sql.NVarChar, site || String(rack.site || 'Unknown'))
           .input('dc', sql.NVarChar, sanitizedDc)
           .input('phase', sql.NVarChar, String(rack.phase || 'Unknown'))
           .input('chain', sql.NVarChar, sanitizedChain)
