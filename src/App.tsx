@@ -82,9 +82,28 @@ function App() {
     }
 
     const rackGroups: RackData[][] = [];
-    Object.values(groupedRacks).forEach(siteGroups => {
-      Object.values(siteGroups).forEach(dcGroups => {
-        Object.values(dcGroups).forEach(logicalGroups => {
+    Object.values(groupedRacks).forEach((siteGroups, idx1) => {
+      console.log(`🔍 [filteredRackGroups] Processing siteGroups ${idx1}:`, siteGroups, 'Type:', typeof siteGroups);
+      if (!siteGroups || typeof siteGroups !== 'object') {
+        console.warn(`⚠️ [filteredRackGroups] Invalid siteGroups at ${idx1}`);
+        return;
+      }
+
+      Object.values(siteGroups).forEach((dcGroups, idx2) => {
+        console.log(`🔍 [filteredRackGroups] Processing dcGroups ${idx1}.${idx2}:`, dcGroups, 'Type:', typeof dcGroups);
+        if (!dcGroups || typeof dcGroups !== 'object') {
+          console.warn(`⚠️ [filteredRackGroups] Invalid dcGroups at ${idx1}.${idx2}`);
+          return;
+        }
+
+        Object.values(dcGroups).forEach((logicalGroups, idx3) => {
+          console.log(`🔍 [filteredRackGroups] Processing logicalGroups ${idx1}.${idx2}.${idx3}:`, logicalGroups, 'Type:', typeof logicalGroups, 'isArray:', Array.isArray(logicalGroups));
+
+          if (!Array.isArray(logicalGroups)) {
+            console.warn(`⚠️ [filteredRackGroups] logicalGroups is not an array at ${idx1}.${idx2}.${idx3}`);
+            return;
+          }
+
           // In alertas view: filter out maintenance racks visually (they won't show)
           // In principal view: show all racks including maintenance (displayed in blue)
           if (activeView === 'alertas') {
@@ -92,9 +111,11 @@ function App() {
               const rackId = group[0]?.rackId || group[0]?.id;
               return !maintenanceRacks.has(rackId);
             });
+            console.log(`📝 [filteredRackGroups] Adding ${nonMaintenanceGroups.length} non-maintenance groups`);
             rackGroups.push(...nonMaintenanceGroups);
           } else {
             // Principal view: show ALL racks (maintenance racks will be rendered in blue)
+            console.log(`📝 [filteredRackGroups] Adding ${logicalGroups.length} groups (all racks)`);
             rackGroups.push(...logicalGroups);
           }
         });
