@@ -1027,8 +1027,8 @@ function App() {
               />
             )}
 
-            {/* Search Bar - Only show when threshold manager is closed */}
-            {!showThresholds && !showRackThresholdsModal && (
+            {/* Search Bar - Only show when threshold manager is closed and NOT in maintenance view */}
+            {!showThresholds && !showRackThresholdsModal && activeView !== 'mantenimiento' && (
               <div className="bg-white rounded-lg shadow mb-6 p-4">
                 <div className="flex items-center space-x-4 flex-wrap gap-2">
                   <label htmlFor="search-input" className="text-sm font-medium text-gray-700 whitespace-nowrap">
@@ -1097,8 +1097,8 @@ function App() {
               </div>
             )}
 
-            {/* Geographical Filters - Only show when threshold manager is closed */}
-            {!showThresholds && !showRackThresholdsModal && (
+            {/* Geographical Filters - Only show when threshold manager is closed and NOT in maintenance view */}
+            {!showThresholds && !showRackThresholdsModal && activeView !== 'mantenimiento' && (
               <div className="bg-white rounded-lg shadow mb-6 p-4">
                 <div className="space-y-6">
                   <h3 className="text-lg font-medium text-gray-900">
