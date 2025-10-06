@@ -221,7 +221,7 @@ export default function SiteGroup({
       
       {/* DC Groups within this Site */}
       {isExpanded && (
-        <div className="space-y-4 px-6 pb-6">
+        <div className="space-y-4 pb-6">
           {Object.entries(dcGroups).map(([dc, logicalRackGroups]) => (
             <DcGroup
               key={dc}
