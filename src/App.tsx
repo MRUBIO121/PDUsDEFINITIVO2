@@ -70,6 +70,17 @@ function App() {
   // Flatten groupedRacks to get all logical rack groups (filtered by current view/filters)
   // Flatten groupedRacks to get all rack groups (filtered by current view/filters)
   const filteredRackGroups = React.useMemo(() => {
+    console.log('🔍 [filteredRackGroups] Starting useMemo');
+    console.log('🔍 [filteredRackGroups] groupedRacks:', groupedRacks);
+    console.log('🔍 [filteredRackGroups] groupedRacks type:', typeof groupedRacks);
+    console.log('🔍 [filteredRackGroups] groupedRacks is null?', groupedRacks === null);
+    console.log('🔍 [filteredRackGroups] groupedRacks is undefined?', groupedRacks === undefined);
+
+    if (!groupedRacks || typeof groupedRacks !== 'object') {
+      console.warn('⚠️ [filteredRackGroups] groupedRacks is invalid, returning empty array');
+      return [];
+    }
+
     const rackGroups: RackData[][] = [];
     Object.values(groupedRacks).forEach(siteGroups => {
       Object.values(siteGroups).forEach(dcGroups => {
@@ -89,6 +100,7 @@ function App() {
         });
       });
     });
+    console.log('✅ [filteredRackGroups] Processed rackGroups:', rackGroups.length);
     return rackGroups;
   }, [groupedRacks, activeView, maintenanceRacks]);
 

@@ -46,6 +46,7 @@ export function useRackData({ forceShowAllRacks = false }: UseRackDataProps = {}
 
   const fetchData = async () => {
     try {
+      console.log('🔄 [useRackData] Starting fetchData');
       setLoading(true);
 
       const [powerResponse, maintenanceResponse] = await Promise.all([
@@ -53,12 +54,17 @@ export function useRackData({ forceShowAllRacks = false }: UseRackDataProps = {}
         fetch('/api/maintenance')
       ]);
 
+      console.log('📡 [useRackData] powerResponse.ok:', powerResponse.ok);
+
       if (!powerResponse.ok) {
         throw new Error(`HTTP ${powerResponse.status}`);
       }
 
       const powerData = await powerResponse.json();
+      console.log('📦 [useRackData] powerData:', powerData);
+
       const rackGroupsData = powerData.rackGroups || [];
+      console.log('📊 [useRackData] rackGroupsData length:', rackGroupsData.length);
 
       setOriginalRackGroups(rackGroupsData);
 
@@ -78,6 +84,8 @@ export function useRackData({ forceShowAllRacks = false }: UseRackDataProps = {}
       }
 
       const grouped: any = {};
+      console.log('🔨 [useRackData] Building grouped structure...');
+
       rackGroupsData.forEach((group: PDU[]) => {
         if (group.length === 0) return;
 
@@ -95,7 +103,13 @@ export function useRackData({ forceShowAllRacks = false }: UseRackDataProps = {}
         grouped[country][site][dc][chain].push(group);
       });
 
+      console.log('📋 [useRackData] Grouped structure:', grouped);
+      console.log('📋 [useRackData] Grouped keys:', Object.keys(grouped));
+      console.log('📋 [useRackData] Grouped type:', typeof grouped);
+      console.log('📋 [useRackData] Grouped is null?', grouped === null);
+
       setGroupedRacks(grouped);
+      console.log('✅ [useRackData] setGroupedRacks called with:', grouped);
 
       const countries = new Set<string>();
       const sites = new Set<string>();
@@ -112,11 +126,14 @@ export function useRackData({ forceShowAllRacks = false }: UseRackDataProps = {}
       setAvailableDcs(Array.from(dcs).sort());
 
       setError(null);
+      console.log('✅ [useRackData] fetchData completed successfully');
     } catch (err) {
+      console.error('❌ [useRackData] Error in fetchData:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
       setGroupedRacks({});
     } finally {
       setLoading(false);
+      console.log('🏁 [useRackData] fetchData finally block');
     }
   };
 
