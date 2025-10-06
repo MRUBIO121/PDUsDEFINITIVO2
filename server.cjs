@@ -58,22 +58,125 @@ const sqlConfig = {
   pool: {
     max: 20,
     min: 2,
-    idleTimeoutMillis: 60000
+    idleTimeoutMillis: 60000,
+    acquireTimeoutMillis: 30000
   }
 };
 
-// Test SQL connection on startup
-async function testSqlConnection() {
+// Global connection pool instance
+let globalPool = null;
+let isConnecting = false;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 3;
+
+/**
+ * Get or create the global database connection pool
+ * Implements connection pooling with automatic reconnection
+ */
+async function getPool() {
+  // If pool exists and is connected, return it
+  if (globalPool && globalPool.connected) {
+    return globalPool;
+  }
+
+  // If already connecting, wait for connection to complete
+  if (isConnecting) {
+    let attempts = 0;
+    while (isConnecting && attempts < 30) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+    if (globalPool && globalPool.connected) {
+      return globalPool;
+    }
+  }
+
+  // Create new connection
+  isConnecting = true;
   try {
-    const pool = await sql.connect(sqlConfig);
-    await pool.close();
+    console.log('🔄 Establishing database connection...');
+    globalPool = await sql.connect(sqlConfig);
+
+    // Set up connection event handlers
+    globalPool.on('error', (err) => {
+      console.error('❌ Database pool error:', err.message);
+      logger.error('Database pool error', { error: err.message });
+      globalPool = null;
+    });
+
+    console.log('✅ Database connection established');
+    reconnectAttempts = 0;
+    isConnecting = false;
+    return globalPool;
   } catch (error) {
-    console.error('❌ SQL Server connection failed:', error.message);
-    logger.error('SQL connection failed', { error: error.message });
+    isConnecting = false;
+    reconnectAttempts++;
+    console.error(`❌ Failed to connect to database (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}):`, error.message);
+    logger.error('Database connection failed', { error: error.message, attempt: reconnectAttempts });
+
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      console.log(`⏳ Retrying in ${reconnectAttempts * 2} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, reconnectAttempts * 2000));
+      return getPool();
+    }
+
+    throw error;
   }
 }
 
-testSqlConnection();
+/**
+ * Execute a database query with automatic retry on connection failure
+ */
+async function executeQuery(queryFn, retries = 2) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const pool = await getPool();
+
+      // Verify connection is still valid
+      if (!pool || !pool.connected) {
+        throw new Error('Database connection is not available');
+      }
+
+      return await queryFn(pool);
+    } catch (error) {
+      lastError = error;
+
+      // Check if error is connection-related
+      if (error.code === 'ECONNCLOSED' || error.code === 'ENOTOPEN' || error.message.includes('Connection is closed')) {
+        console.error(`⚠️ Connection error on attempt ${attempt + 1}/${retries + 1}:`, error.message);
+
+        // Reset global pool to force reconnection
+        globalPool = null;
+
+        if (attempt < retries) {
+          console.log(`🔄 Retrying query after connection reset...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+          continue;
+        }
+      }
+
+      // For non-connection errors or final retry, throw immediately
+      throw error;
+    }
+  }
+
+  throw lastError;
+}
+
+// Initialize connection pool on startup
+async function initializeDatabaseConnection() {
+  try {
+    await getPool();
+    console.log('✅ Database initialization complete');
+  } catch (error) {
+    console.error('❌ Database initialization failed:', error.message);
+    logger.error('Database initialization failed', { error: error.message });
+  }
+}
+
+initializeDatabaseConnection();
 
 // Middleware Configuration
 app.use(helmet({
@@ -167,24 +270,23 @@ async function fetchThresholdsFromDatabase() {
     if (isCacheValid(thresholdsCache)) {
       return thresholdsCache.data;
     }
-    const pool = await sql.connect(sqlConfig);
 
-    const result = await pool.request().query(`
-      SELECT threshold_key as [key], value, unit, description, created_at as createdAt, updated_at as updatedAt
-      FROM dbo.threshold_configs
-      ORDER BY threshold_key
-    `);
-    
-    await pool.close();
-    
+    const result = await executeQuery(async (pool) => {
+      return await pool.request().query(`
+        SELECT threshold_key as [key], value, unit, description, created_at as createdAt, updated_at as updatedAt
+        FROM dbo.threshold_configs
+        ORDER BY threshold_key
+      `);
+    });
+
     const thresholds = result.recordset || [];
-    
+
     // Update cache
     thresholdsCache.data = thresholds;
     thresholdsCache.timestamp = Date.now();
-    
+
     return thresholds;
-    
+
   } catch (error) {
     console.error('❌ Error fetching thresholds from database:', error);
     logger.error('Database threshold fetch failed', { error: error.message });
@@ -195,33 +297,33 @@ async function fetchThresholdsFromDatabase() {
 // Function to save thresholds to SQL Server
 async function saveThresholdsToDatabase(thresholds) {
   try {
-    const pool = await sql.connect(sqlConfig);
+    const updatedCount = await executeQuery(async (pool) => {
+      let count = 0;
 
-    let updatedCount = 0;
+      for (const [key, value] of Object.entries(thresholds)) {
+        const result = await pool.request()
+          .input('key', sql.NVarChar, key)
+          .input('value', sql.Decimal(18, 4), value)
+          .query(`
+            UPDATE dbo.threshold_configs
+            SET value = @value, updated_at = GETDATE()
+            WHERE threshold_key = @key
+          `);
 
-    for (const [key, value] of Object.entries(thresholds)) {
-      const result = await pool.request()
-        .input('key', sql.NVarChar, key)
-        .input('value', sql.Decimal(18, 4), value)
-        .query(`
-          UPDATE dbo.threshold_configs
-          SET value = @value, updated_at = GETDATE()
-          WHERE threshold_key = @key
-        `);
-
-      if (result.rowsAffected[0] > 0) {
-        updatedCount++;
+        if (result.rowsAffected[0] > 0) {
+          count++;
+        }
       }
-    }
 
-    await pool.close();
+      return count;
+    });
 
     // Clear cache to force reload
     thresholdsCache.data = null;
     thresholdsCache.timestamp = null;
 
     return updatedCount;
-    
+
   } catch (error) {
     console.error('❌ Error saving thresholds to database:', error);
     logger.error('Database threshold save failed', { error: error.message });
@@ -234,18 +336,16 @@ async function loadAllRackSpecificThresholds(rackIds) {
   try {
     if (rackIds.length === 0) return new Map();
 
-    const pool = await sql.connect(sqlConfig);
+    const result = await executeQuery(async (pool) => {
+      // Create a table-valued parameter or use IN clause
+      const rackIdsList = rackIds.map(id => `'${id.replace("'", "''")}'`).join(',');
 
-    // Create a table-valued parameter or use IN clause
-    const rackIdsList = rackIds.map(id => `'${id.replace("'", "''")}'`).join(',');
-
-    const result = await pool.request().query(`
-      SELECT rack_id, threshold_key, value, unit
-      FROM dbo.rack_threshold_overrides
-      WHERE rack_id IN (${rackIdsList})
-    `);
-
-    await pool.close();
+      return await pool.request().query(`
+        SELECT rack_id, threshold_key, value, unit
+        FROM dbo.rack_threshold_overrides
+        WHERE rack_id IN (${rackIdsList})
+      `);
+    });
 
     // Organize by rack_id
     const rackThresholdsMap = new Map();
@@ -436,11 +536,13 @@ function getThresholdValue(thresholds, key) {
  * Get list of rack IDs currently in maintenance mode
  * Works with new maintenance_rack_details table
  */
-async function getMaintenanceRackIds(pool) {
+async function getMaintenanceRackIds() {
   try {
-    const result = await pool.request().query(`
-      SELECT DISTINCT rack_id FROM maintenance_rack_details
-    `);
+    const result = await executeQuery(async (pool) => {
+      return await pool.request().query(`
+        SELECT DISTINCT rack_id FROM maintenance_rack_details
+      `);
+    });
     return new Set(result.recordset.map(r => r.rack_id));
   } catch (error) {
     console.error('⚠️ Error fetching maintenance racks:', error.message);
@@ -450,19 +552,10 @@ async function getMaintenanceRackIds(pool) {
 
 /**
  * Helper function to ensure database connection is active
- * Reconnects if connection is closed or invalid
+ * Now uses the global pool management
  */
-async function ensureConnection(pool) {
-  try {
-    if (!pool || !pool.connected) {
-      console.log('🔄 Connection lost, reconnecting to database...');
-      return await sql.connect(sqlConfig);
-    }
-    return pool;
-  } catch (error) {
-    console.error('❌ Failed to reconnect to database:', error.message);
-    throw error;
-  }
+async function ensureConnection() {
+  return await getPool();
 }
 
 /**
@@ -471,12 +564,9 @@ async function ensureConnection(pool) {
  * Excludes racks that are in maintenance mode
  */
 async function manageActiveCriticalAlerts(allPdus, thresholds) {
-  let pool = null;
   try {
-    pool = await sql.connect(sqlConfig);
-
     // Get racks currently in maintenance
-    const maintenanceRackIds = await getMaintenanceRackIds(pool);
+    const maintenanceRackIds = await getMaintenanceRackIds();
 
     // Get current critical PDUs with their reasons, excluding maintenance racks
     const currentCriticalPdus = allPdus.filter(pdu => {
@@ -485,55 +575,23 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
     });
 
     // Process PDUs in batches to avoid connection timeout issues
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 10;
     let processedCount = 0;
     let errorCount = 0;
-    let reconnectCount = 0;
 
     for (let i = 0; i < currentCriticalPdus.length; i += BATCH_SIZE) {
       const batch = currentCriticalPdus.slice(i, i + BATCH_SIZE);
-
-      // Ensure connection is valid before each batch
-      try {
-        pool = await ensureConnection(pool);
-      } catch (reconnectError) {
-        console.error('❌ Failed to ensure connection for batch, skipping batch:', reconnectError.message);
-        errorCount += batch.length;
-        continue;
-      }
 
       for (const pdu of batch) {
         // Process each alert reason for this PDU
         for (const reason of pdu.reasons) {
           if (reason.startsWith('critical_')) {
             try {
-              // Verify connection before each operation
-              if (!pool.connected) {
-                pool = await ensureConnection(pool);
-                reconnectCount++;
-              }
-
-              await processCriticalAlert(pool, pdu, reason, thresholds);
+              await processCriticalAlert(pdu, reason, thresholds);
               processedCount++;
             } catch (alertError) {
               errorCount++;
-
-              // Check if error is connection-related
-              if (alertError.code === 'ECONNCLOSED' || alertError.code === 'ENOTOPEN') {
-                console.error(`❌ Connection error for PDU ${pdu.id}, attempting reconnect...`);
-                try {
-                  pool = await sql.connect(sqlConfig);
-                  reconnectCount++;
-                  // Retry the operation once
-                  await processCriticalAlert(pool, pdu, reason, thresholds);
-                  processedCount++;
-                  errorCount--;
-                } catch (retryError) {
-                  console.error(`❌ Retry failed for PDU ${pdu.id}:`, retryError.message);
-                }
-              } else {
-                console.error(`❌ Error processing critical alert for PDU ${pdu.id}:`, alertError.message);
-              }
+              console.error(`❌ Error processing critical alert for PDU ${pdu.id}:`, alertError.message);
             }
           }
         }
@@ -541,55 +599,29 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
 
       // Small delay between batches to avoid overwhelming the database
       if (i + BATCH_SIZE < currentCriticalPdus.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 
-    console.log(`✅ Processed ${processedCount} alerts (${errorCount} errors, ${reconnectCount} reconnections)`);
+    console.log(`✅ Processed ${processedCount} alerts (${errorCount} errors)`);
 
-    // Clean up resolved alerts (only if pool is still valid)
-    if (pool && pool.connected) {
-      try {
-        await cleanupResolvedAlerts(pool, currentCriticalPdus);
-      } catch (cleanupError) {
-        console.error('❌ Error during cleanup, attempting reconnect...');
-        try {
-          pool = await sql.connect(sqlConfig);
-          await cleanupResolvedAlerts(pool, currentCriticalPdus);
-        } catch (retryError) {
-          console.error('❌ Cleanup retry failed:', retryError.message);
-        }
-      }
+    // Clean up resolved alerts
+    try {
+      await cleanupResolvedAlerts(currentCriticalPdus);
+    } catch (cleanupError) {
+      console.error('❌ Error during cleanup:', cleanupError.message);
     }
 
   } catch (error) {
     console.error('❌ Error managing active critical alerts:', error);
-  } finally {
-    // Always close the pool if it was opened
-    if (pool && pool.connected) {
-      try {
-        await pool.close();
-      } catch (closeError) {
-        console.error('❌ Error closing pool:', closeError.message);
-      }
-    }
   }
 }
 
 /**
  * Processes a single critical alert for a PDU
  */
-async function processCriticalAlert(pool, pdu, reason, thresholds) {
+async function processCriticalAlert(pdu, reason, thresholds) {
   try {
-    // Verify pool exists and is connected
-    if (!pool) {
-      throw new Error('Database pool is null');
-    }
-
-    if (!pool.connected) {
-      throw new Error('Database connection is closed');
-    }
-
     // Extract metric type and field from reason
     const metricInfo = extractMetricInfo(reason, pdu);
 
@@ -600,65 +632,65 @@ async function processCriticalAlert(pool, pdu, reason, thresholds) {
 
     const { metricType, alertField, alertValue, thresholdExceeded } = metricInfo;
 
-    // Check if this alert already exists
-    const existingAlert = await pool.request()
-      .input('pdu_id', sql.NVarChar, pdu.id)
-      .input('metric_type', sql.NVarChar, metricType)
-      .input('alert_reason', sql.NVarChar, reason)
-      .query(`
-        SELECT id FROM active_critical_alerts 
-        WHERE pdu_id = @pdu_id AND metric_type = @metric_type AND alert_reason = @alert_reason
-      `);
-    
-    if (existingAlert.recordset.length > 0) {
-      // Update existing alert
-      await pool.request()
+    await executeQuery(async (pool) => {
+      // Check if this alert already exists
+      const existingAlert = await pool.request()
         .input('pdu_id', sql.NVarChar, pdu.id)
         .input('metric_type', sql.NVarChar, metricType)
         .input('alert_reason', sql.NVarChar, reason)
-        .input('alert_value', sql.Decimal(18, 4), alertValue)
-        .input('threshold_exceeded', sql.Decimal(18, 4), thresholdExceeded)
         .query(`
-          UPDATE active_critical_alerts 
-          SET alert_value = @alert_value, 
-              threshold_exceeded = @threshold_exceeded,
-              last_updated_at = GETDATE()
+          SELECT id FROM active_critical_alerts
           WHERE pdu_id = @pdu_id AND metric_type = @metric_type AND alert_reason = @alert_reason
         `);
-      
-      // Updated alert
-    } else {
-      // Insert new alert
-      await pool.request()
-        .input('pdu_id', sql.NVarChar, pdu.id)
-        .input('rack_id', sql.NVarChar, pdu.rackId || pdu.id)
-        .input('name', sql.NVarChar, pdu.name)
-        .input('country', sql.NVarChar, pdu.country)
-        .input('site', sql.NVarChar, pdu.site)
-        .input('dc', sql.NVarChar, pdu.dc)
-        .input('phase', sql.NVarChar, pdu.phase)
-        .input('chain', sql.NVarChar, pdu.chain)
-        .input('node', sql.NVarChar, pdu.node)
-        .input('serial', sql.NVarChar, pdu.serial)
-        .input('metric_type', sql.NVarChar, metricType)
-        .input('alert_reason', sql.NVarChar, reason)
-        .input('alert_value', sql.Decimal(18, 4), alertValue)
-        .input('alert_field', sql.NVarChar, alertField)
-        .input('threshold_exceeded', sql.Decimal(18, 4), thresholdExceeded)
-        .query(`
-          INSERT INTO active_critical_alerts 
-          (pdu_id, rack_id, name, country, site, dc, phase, chain, node, serial, 
-           metric_type, alert_reason, alert_value, alert_field, threshold_exceeded)
-          VALUES 
-          (@pdu_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial,
-           @metric_type, @alert_reason, @alert_value, @alert_field, @threshold_exceeded)
-        `);
-      
-      // New alert inserted
-    }
-    
+
+      if (existingAlert.recordset.length > 0) {
+        // Update existing alert
+        await pool.request()
+          .input('pdu_id', sql.NVarChar, pdu.id)
+          .input('metric_type', sql.NVarChar, metricType)
+          .input('alert_reason', sql.NVarChar, reason)
+          .input('alert_value', sql.Decimal(18, 4), alertValue)
+          .input('threshold_exceeded', sql.Decimal(18, 4), thresholdExceeded)
+          .query(`
+            UPDATE active_critical_alerts
+            SET alert_value = @alert_value,
+                threshold_exceeded = @threshold_exceeded,
+                last_updated_at = GETDATE()
+            WHERE pdu_id = @pdu_id AND metric_type = @metric_type AND alert_reason = @alert_reason
+          `);
+      } else {
+        // Insert new alert
+        await pool.request()
+          .input('pdu_id', sql.NVarChar, pdu.id)
+          .input('rack_id', sql.NVarChar, pdu.rackId || pdu.id)
+          .input('name', sql.NVarChar, pdu.name)
+          .input('country', sql.NVarChar, pdu.country)
+          .input('site', sql.NVarChar, pdu.site)
+          .input('dc', sql.NVarChar, pdu.dc)
+          .input('phase', sql.NVarChar, pdu.phase)
+          .input('chain', sql.NVarChar, pdu.chain)
+          .input('node', sql.NVarChar, pdu.node)
+          .input('serial', sql.NVarChar, pdu.serial)
+          .input('metric_type', sql.NVarChar, metricType)
+          .input('alert_reason', sql.NVarChar, reason)
+          .input('alert_value', sql.Decimal(18, 4), alertValue)
+          .input('alert_field', sql.NVarChar, alertField)
+          .input('threshold_exceeded', sql.Decimal(18, 4), thresholdExceeded)
+          .query(`
+            INSERT INTO active_critical_alerts
+            (pdu_id, rack_id, name, country, site, dc, phase, chain, node, serial,
+             metric_type, alert_reason, alert_value, alert_field, threshold_exceeded)
+            VALUES
+            (@pdu_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial,
+             @metric_type, @alert_reason, @alert_value, @alert_field, @threshold_exceeded)
+          `);
+      }
+
+      return true;
+    });
+
   } catch (error) {
-    console.error(`❌ Error processing critical alert for PDU ${pdu.id}:`, error);
+    throw new Error(`Failed to process critical alert for PDU ${pdu.id}: ${error.message}`);
   }
 }
 
@@ -721,69 +753,46 @@ function getThresholdFromReason(reason) {
 /**
  * Removes alerts from database for PDUs that are no longer critical
  */
-async function cleanupResolvedAlerts(pool, currentCriticalPdus) {
+async function cleanupResolvedAlerts(currentCriticalPdus) {
   try {
-    // Verify pool exists and is connected
-    if (!pool || !pool.connected) {
-      console.log('⚠️ Database pool not available or disconnected for cleanup, skipping...');
-      return;
-    }
+    await executeQuery(async (pool) => {
+      const currentCriticalPduIds = currentCriticalPdus.map(pdu => pdu.id);
 
-    const currentCriticalPduIds = currentCriticalPdus.map(pdu => pdu.id);
-
-    if (currentCriticalPduIds.length === 0) {
-      // If no critical PDUs, delete all alerts
-      if (!pool.connected) {
-        console.log('⚠️ Connection lost before cleanup query');
-        return;
+      if (currentCriticalPduIds.length === 0) {
+        // If no critical PDUs, delete all alerts
+        const deleteResult = await pool.request().query(`
+          DELETE FROM active_critical_alerts
+        `);
+        return deleteResult;
       }
 
+      // Create a string of PDU IDs for the NOT IN clause
+      const pduIdsList = currentCriticalPduIds.map(id => `'${id.replace("'", "''")}'`).join(',');
+
+      // Delete alerts for PDUs that are no longer critical
       const deleteResult = await pool.request().query(`
         DELETE FROM active_critical_alerts
+        WHERE pdu_id NOT IN (${pduIdsList})
       `);
 
-      // Cleaned up all resolved alerts
-      return;
-    }
+      // Also clean up alerts for PDUs that are still critical but no longer have the specific reason
+      for (const criticalPdu of currentCriticalPdus) {
+        const currentReasons = criticalPdu.reasons.filter(r => r.startsWith('critical_'));
 
-    // Create a string of PDU IDs for the NOT IN clause
-    const pduIdsList = currentCriticalPduIds.map(id => `'${id.replace("'", "''")}'`).join(',');
+        if (currentReasons.length > 0) {
+          const reasonsList = currentReasons.map(reason => `'${reason.replace("'", "''")}'`).join(',');
 
-    // Delete alerts for PDUs that are no longer critical
-    if (!pool.connected) {
-      console.log('⚠️ Connection lost before main cleanup query');
-      return;
-    }
-
-    const deleteResult = await pool.request().query(`
-      DELETE FROM active_critical_alerts
-      WHERE pdu_id NOT IN (${pduIdsList})
-    `);
-
-    // Cleaned up resolved alerts
-
-    // Also clean up alerts for PDUs that are still critical but no longer have the specific reason
-    for (const criticalPdu of currentCriticalPdus) {
-      if (!pool.connected) {
-        console.log('⚠️ Connection lost during specific cleanup loop, stopping...');
-        break;
+          await pool.request()
+            .input('pdu_id', sql.NVarChar, criticalPdu.id)
+            .query(`
+              DELETE FROM active_critical_alerts
+              WHERE pdu_id = @pdu_id AND alert_reason NOT IN (${reasonsList})
+            `);
+        }
       }
 
-      const currentReasons = criticalPdu.reasons.filter(r => r.startsWith('critical_'));
-
-      if (currentReasons.length > 0) {
-        const reasonsList = currentReasons.map(reason => `'${reason.replace("'", "''")}'`).join(',');
-
-        const cleanupResult = await pool.request()
-          .input('pdu_id', sql.NVarChar, criticalPdu.id)
-          .query(`
-            DELETE FROM active_critical_alerts
-            WHERE pdu_id = @pdu_id AND alert_reason NOT IN (${reasonsList})
-          `);
-
-        // Cleaned up specific alerts
-      }
-    }
+      return deleteResult;
+    });
 
   } catch (error) {
     console.error('❌ Error cleaning up resolved alerts:', error);
@@ -962,9 +971,7 @@ app.get('/api/racks/energy', async (req, res) => {
     const processedData = await processRackData(combinedData, thresholds);
 
     // Get maintenance rack IDs to filter them out
-    const pool = await sql.connect(sqlConfig);
-    const maintenanceRackIds = await getMaintenanceRackIds(pool);
-    await pool.close();
+    const maintenanceRackIds = await getMaintenanceRackIds();
 
     // Filter out racks in maintenance mode
     const filteredData = processedData.filter(pdu => {
@@ -1161,37 +1168,34 @@ app.put('/api/thresholds', async (req, res) => {
 app.get('/api/racks/:rackId/thresholds', async (req, res) => {
   try {
     const { rackId } = req.params;
-    
-    const pool = await sql.connect(sqlConfig);
-    
-    // Get global thresholds
-    const globalResult = await pool.request().query(`
-      SELECT threshold_key as [key], value, unit, description, created_at as createdAt, updated_at as updatedAt
-      FROM dbo.threshold_configs
-      ORDER BY threshold_key
-    `);
-    
-    // Get rack-specific thresholds
-    const rackResult = await pool.request()
-      .input('rackId', sql.NVarChar, rackId)
-      .query(`
+
+    const results = await executeQuery(async (pool) => {
+      // Get global thresholds
+      const globalResult = await pool.request().query(`
         SELECT threshold_key as [key], value, unit, description, created_at as createdAt, updated_at as updatedAt
-        FROM dbo.rack_threshold_overrides
-        WHERE rack_id = @rackId
+        FROM dbo.threshold_configs
         ORDER BY threshold_key
       `);
-    
-    await pool.close();
-    
-    const globalThresholds = globalResult.recordset || [];
-    const rackSpecificThresholds = rackResult.recordset || [];
-    
+
+      // Get rack-specific thresholds
+      const rackResult = await pool.request()
+        .input('rackId', sql.NVarChar, rackId)
+        .query(`
+          SELECT threshold_key as [key], value, unit, description, created_at as createdAt, updated_at as updatedAt
+          FROM dbo.rack_threshold_overrides
+          WHERE rack_id = @rackId
+          ORDER BY threshold_key
+        `);
+
+      return {
+        global: globalResult.recordset || [],
+        rackSpecific: rackResult.recordset || []
+      };
+    });
+
     res.json({
       success: true,
-      data: {
-        global: globalThresholds,
-        rackSpecific: rackSpecificThresholds
-      },
+      data: results,
       message: `Thresholds retrieved successfully for rack ${rackId}`,
       timestamp: new Date().toISOString()
     });
@@ -1214,7 +1218,7 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
   try {
     const { rackId } = req.params;
     const { thresholds } = req.body;
-    
+
     if (!thresholds || typeof thresholds !== 'object') {
       return res.status(400).json({
         success: false,
@@ -1222,10 +1226,10 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
         timestamp: new Date().toISOString()
       });
     }
-    
+
     // Define valid threshold keys
     const validKeys = [
-      'critical_temperature_low', 'critical_temperature_high', 
+      'critical_temperature_low', 'critical_temperature_high',
       'warning_temperature_low', 'warning_temperature_high',
       'critical_humidity_low', 'critical_humidity_high',
       'warning_humidity_low', 'warning_humidity_high',
@@ -1234,7 +1238,7 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
       'critical_amperage_low_3_phase', 'critical_amperage_high_3_phase',
       'warning_amperage_low_3_phase', 'warning_amperage_high_3_phase'
     ];
-    
+
     // Filter out invalid keys
     const filteredThresholds = {};
     Object.entries(thresholds).forEach(([key, value]) => {
@@ -1244,7 +1248,7 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
         console.log(`⚠️ Ignoring invalid threshold key: ${key}`);
       }
     });
-    
+
     if (Object.keys(filteredThresholds).length === 0) {
       return res.status(400).json({
         success: false,
@@ -1252,37 +1256,38 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
         timestamp: new Date().toISOString()
       });
     }
-    
-    const pool = await sql.connect(sqlConfig);
-    let updatedCount = 0;
-    
-    for (const [key, value] of Object.entries(filteredThresholds)) {
-      // Get the unit from global threshold_configs
-      const unitResult = await pool.request()
-        .input('key', sql.NVarChar, key)
-        .query(`SELECT unit FROM dbo.threshold_configs WHERE threshold_key = @key`);
 
-      const unit = unitResult.recordset.length > 0 ? unitResult.recordset[0].unit : null;
+    const updatedCount = await executeQuery(async (pool) => {
+      let count = 0;
 
-      const result = await pool.request()
-        .input('rackId', sql.NVarChar, rackId)
-        .input('key', sql.NVarChar, key)
-        .input('value', sql.Decimal(18, 4), value)
-        .input('unit', sql.NVarChar, unit)
-        .query(`
-          MERGE dbo.rack_threshold_overrides AS target
-          USING (SELECT @rackId as rack_id, @key as threshold_key, @value as value, @unit as unit) AS source
-          ON target.rack_id = source.rack_id AND target.threshold_key = source.threshold_key
-          WHEN MATCHED THEN
-            UPDATE SET value = source.value, unit = source.unit, updated_at = GETDATE()
-          WHEN NOT MATCHED THEN
-            INSERT (rack_id, threshold_key, value, unit) VALUES (source.rack_id, source.threshold_key, source.value, source.unit);
-        `);
+      for (const [key, value] of Object.entries(filteredThresholds)) {
+        // Get the unit from global threshold_configs
+        const unitResult = await pool.request()
+          .input('key', sql.NVarChar, key)
+          .query(`SELECT unit FROM dbo.threshold_configs WHERE threshold_key = @key`);
 
-      updatedCount++;
-    }
+        const unit = unitResult.recordset.length > 0 ? unitResult.recordset[0].unit : null;
 
-    await pool.close();
+        await pool.request()
+          .input('rackId', sql.NVarChar, rackId)
+          .input('key', sql.NVarChar, key)
+          .input('value', sql.Decimal(18, 4), value)
+          .input('unit', sql.NVarChar, unit)
+          .query(`
+            MERGE dbo.rack_threshold_overrides AS target
+            USING (SELECT @rackId as rack_id, @key as threshold_key, @value as value, @unit as unit) AS source
+            ON target.rack_id = source.rack_id AND target.threshold_key = source.threshold_key
+            WHEN MATCHED THEN
+              UPDATE SET value = source.value, unit = source.unit, updated_at = GETDATE()
+            WHEN NOT MATCHED THEN
+              INSERT (rack_id, threshold_key, value, unit) VALUES (source.rack_id, source.threshold_key, source.value, source.unit);
+          `);
+
+        count++;
+      }
+
+      return count;
+    });
     
     res.json({
       success: true,
@@ -1309,15 +1314,13 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
   try {
     const { rackId } = req.params;
 
-    const pool = await sql.connect(sqlConfig);
-
-    const result = await pool.request()
-      .input('rackId', sql.NVarChar, rackId)
-      .query(`
-        DELETE FROM dbo.rack_threshold_overrides WHERE rack_id = @rackId
-      `);
-
-    await pool.close();
+    const result = await executeQuery(async (pool) => {
+      return await pool.request()
+        .input('rackId', sql.NVarChar, rackId)
+        .query(`
+          DELETE FROM dbo.rack_threshold_overrides WHERE rack_id = @rackId
+        `);
+    });
 
     const deletedCount = result.rowsAffected[0];
     
@@ -1348,46 +1351,48 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
 // Get all maintenance entries with their racks
 app.get('/api/maintenance', async (req, res) => {
   try {
-    const pool = await sql.connect(sqlConfig);
+    const results = await executeQuery(async (pool) => {
+      // Get all maintenance entries
+      const entriesResult = await pool.request().query(`
+        SELECT
+          id,
+          entry_type,
+          rack_id,
+          chain,
+          site,
+          dc,
+          reason,
+          started_at,
+          started_by,
+          created_at
+        FROM maintenance_entries
+        ORDER BY started_at DESC
+      `);
 
-    // Get all maintenance entries
-    const entriesResult = await pool.request().query(`
-      SELECT
-        id,
-        entry_type,
-        rack_id,
-        chain,
-        site,
-        dc,
-        reason,
-        started_at,
-        started_by,
-        created_at
-      FROM maintenance_entries
-      ORDER BY started_at DESC
-    `);
+      // Get all rack details
+      const detailsResult = await pool.request().query(`
+        SELECT
+          maintenance_entry_id,
+          rack_id,
+          pdu_id,
+          name,
+          country,
+          site,
+          dc,
+          phase,
+          chain,
+          node,
+          serial
+        FROM maintenance_rack_details
+      `);
 
-    // Get all rack details
-    const detailsResult = await pool.request().query(`
-      SELECT
-        maintenance_entry_id,
-        rack_id,
-        pdu_id,
-        name,
-        country,
-        site,
-        dc,
-        phase,
-        chain,
-        node,
-        serial
-      FROM maintenance_rack_details
-    `);
+      return {
+        entries: entriesResult.recordset || [],
+        details: detailsResult.recordset || []
+      };
+    });
 
-    await pool.close();
-
-    const entries = entriesResult.recordset || [];
-    const details = detailsResult.recordset || [];
+    const { entries, details } = results;
 
     // Map details to their entries
     const maintenanceData = entries.map(entry => ({
@@ -1445,19 +1450,98 @@ app.post('/api/maintenance/rack', async (req, res) => {
       });
     }
 
-    const pool = await sql.connect(sqlConfig);
+    const result = await executeQuery(async (pool) => {
+      // Check if rack is already in maintenance
+      const existingCheck = await pool.request()
+        .input('rack_id', sql.NVarChar, sanitizedRackId)
+        .query(`
+          SELECT COUNT(*) as count
+          FROM maintenance_rack_details
+          WHERE rack_id = @rack_id
+        `);
 
-    // Check if rack is already in maintenance
-    const existingCheck = await pool.request()
-      .input('rack_id', sql.NVarChar, sanitizedRackId)
-      .query(`
-        SELECT COUNT(*) as count
-        FROM maintenance_rack_details
-        WHERE rack_id = @rack_id
-      `);
+      if (existingCheck.recordset[0].count > 0) {
+        return { error: 'already_exists' };
+      }
 
-    if (existingCheck.recordset[0].count > 0) {
-      await pool.close();
+      // Use rack data from request body if provided, otherwise try to find it
+      let rack = rackData;
+      let chain = rackData?.chain;
+
+      // If rack data not provided, try to find it in alerts table
+      if (!rack) {
+        const rackDbData = await pool.request()
+          .input('rack_id', sql.NVarChar, sanitizedRackId)
+          .query(`
+            SELECT TOP 1
+              pdu_id,
+              rack_id,
+              name,
+              country,
+              site,
+              dc,
+              phase,
+              chain,
+              node,
+              serial
+            FROM active_critical_alerts
+            WHERE rack_id = @rack_id OR pdu_id = @rack_id
+          `);
+
+        if (rackDbData.recordset.length === 0) {
+          return { error: 'not_found' };
+        }
+
+        rack = rackDbData.recordset[0];
+        chain = rack.chain;
+      }
+
+      const dc = rack.dc || 'Unknown';
+      const site = rack.site || 'Unknown';
+
+      // Create maintenance entry
+      const entryId = require('crypto').randomUUID();
+
+      await pool.request()
+        .input('entry_id', sql.UniqueIdentifier, entryId)
+        .input('entry_type', sql.NVarChar, 'individual_rack')
+        .input('rack_id', sql.NVarChar, sanitizedRackId)
+        .input('chain', sql.NVarChar, String(chain || 'Unknown'))
+        .input('site', sql.NVarChar, site)
+        .input('dc', sql.NVarChar, dc)
+        .input('reason', sql.NVarChar, reason)
+        .input('started_by', sql.NVarChar, startedBy)
+        .query(`
+          INSERT INTO maintenance_entries
+          (id, entry_type, rack_id, chain, site, dc, reason, started_by)
+          VALUES
+          (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @started_by)
+        `);
+
+      // Insert rack details
+      await pool.request()
+        .input('entry_id', sql.UniqueIdentifier, entryId)
+        .input('rack_id', sql.NVarChar, sanitizedRackId)
+        .input('pdu_id', sql.NVarChar, String(rack.pdu_id || rack.id || sanitizedRackId))
+        .input('name', sql.NVarChar, String(rack.name || sanitizedRackId))
+        .input('country', sql.NVarChar, String(rack.country || 'Unknown'))
+        .input('site', sql.NVarChar, site)
+        .input('dc', sql.NVarChar, dc)
+        .input('phase', sql.NVarChar, String(rack.phase || 'Unknown'))
+        .input('chain', sql.NVarChar, String(chain || 'Unknown'))
+        .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
+        .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
+        .query(`
+          INSERT INTO maintenance_rack_details
+          (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial)
+          VALUES
+          (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial)
+        `);
+
+      return { success: true, entryId, chain, dc };
+    });
+
+    if (result.error === 'already_exists') {
       return res.status(409).json({
         success: false,
         message: `Rack ${sanitizedRackId} is already in maintenance`,
@@ -1465,93 +1549,20 @@ app.post('/api/maintenance/rack', async (req, res) => {
       });
     }
 
-    // Use rack data from request body if provided, otherwise try to find it
-    let rack = rackData;
-    let chain = rackData?.chain;
-
-    // If rack data not provided, try to find it in alerts table
-    if (!rack) {
-      const rackDbData = await pool.request()
-        .input('rack_id', sql.NVarChar, sanitizedRackId)
-        .query(`
-          SELECT TOP 1
-            pdu_id,
-            rack_id,
-            name,
-            country,
-            site,
-            dc,
-            phase,
-            chain,
-            node,
-            serial
-          FROM active_critical_alerts
-          WHERE rack_id = @rack_id OR pdu_id = @rack_id
-        `);
-
-      if (rackDbData.recordset.length === 0) {
-        await pool.close();
-        return res.status(404).json({
-          success: false,
-          message: 'Rack not found. Please provide rack data in request body.',
-          timestamp: new Date().toISOString()
-        });
-      }
-
-      rack = rackDbData.recordset[0];
-      chain = rack.chain;
+    if (result.error === 'not_found') {
+      return res.status(404).json({
+        success: false,
+        message: 'Rack not found. Please provide rack data in request body.',
+        timestamp: new Date().toISOString()
+      });
     }
-
-    const dc = rack.dc || 'Unknown';
-    const site = rack.site || 'Unknown';
-
-    // Create maintenance entry
-    const entryId = require('crypto').randomUUID();
-
-    await pool.request()
-      .input('entry_id', sql.UniqueIdentifier, entryId)
-      .input('entry_type', sql.NVarChar, 'individual_rack')
-      .input('rack_id', sql.NVarChar, sanitizedRackId)
-      .input('chain', sql.NVarChar, String(chain || 'Unknown'))
-      .input('site', sql.NVarChar, site)
-      .input('dc', sql.NVarChar, dc)
-      .input('reason', sql.NVarChar, reason)
-      .input('started_by', sql.NVarChar, startedBy)
-      .query(`
-        INSERT INTO maintenance_entries
-        (id, entry_type, rack_id, chain, site, dc, reason, started_by)
-        VALUES
-        (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @started_by)
-      `);
-
-    // Insert rack details
-    await pool.request()
-      .input('entry_id', sql.UniqueIdentifier, entryId)
-      .input('rack_id', sql.NVarChar, sanitizedRackId)
-      .input('pdu_id', sql.NVarChar, String(rack.pdu_id || rack.id || sanitizedRackId))
-      .input('name', sql.NVarChar, String(rack.name || sanitizedRackId))
-      .input('country', sql.NVarChar, String(rack.country || 'Unknown'))
-      .input('site', sql.NVarChar, site)
-      .input('dc', sql.NVarChar, dc)
-      .input('phase', sql.NVarChar, String(rack.phase || 'Unknown'))
-      .input('chain', sql.NVarChar, String(chain || 'Unknown'))
-      .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
-      .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
-      .query(`
-        INSERT INTO maintenance_rack_details
-        (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial)
-        VALUES
-        (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial)
-      `);
-
-    await pool.close();
 
     logger.info(`Rack ${sanitizedRackId} added to maintenance individually`);
 
     res.json({
       success: true,
       message: `Rack ${sanitizedRackId} added to maintenance`,
-      data: { rackId: sanitizedRackId, chain, dc, entryId },
+      data: { rackId: sanitizedRackId, chain: result.chain, dc: result.dc, entryId: result.entryId },
       timestamp: new Date().toISOString()
     });
 
@@ -1705,97 +1716,97 @@ app.post('/api/maintenance/chain', async (req, res) => {
       });
     }
 
-    const pool = await sql.connect(sqlConfig);
+    const result = await executeQuery(async (pool) => {
+      // Create a single maintenance entry for the entire chain
+      const entryId = require('crypto').randomUUID();
 
-    // Create a single maintenance entry for the entire chain
-    const entryId = require('crypto').randomUUID();
+      await pool.request()
+        .input('entry_id', sql.UniqueIdentifier, entryId)
+        .input('entry_type', sql.NVarChar, 'chain')
+        .input('chain', sql.NVarChar, sanitizedChain)
+        .input('site', sql.NVarChar, site || 'Unknown')
+        .input('dc', sql.NVarChar, sanitizedDc)
+        .input('reason', sql.NVarChar, reason)
+        .input('started_by', sql.NVarChar, startedBy)
+        .query(`
+          INSERT INTO maintenance_entries
+          (id, entry_type, rack_id, chain, site, dc, reason, started_by)
+          VALUES
+          (@entry_id, @entry_type, NULL, @chain, @site, @dc, @reason, @started_by)
+        `);
 
-    await pool.request()
-      .input('entry_id', sql.UniqueIdentifier, entryId)
-      .input('entry_type', sql.NVarChar, 'chain')
-      .input('chain', sql.NVarChar, sanitizedChain)
-      .input('site', sql.NVarChar, site || 'Unknown')
-      .input('dc', sql.NVarChar, sanitizedDc)
-      .input('reason', sql.NVarChar, reason)
-      .input('started_by', sql.NVarChar, startedBy)
-      .query(`
-        INSERT INTO maintenance_entries
-        (id, entry_type, rack_id, chain, site, dc, reason, started_by)
-        VALUES
-        (@entry_id, @entry_type, NULL, @chain, @site, @dc, @reason, @started_by)
-      `);
+      // Insert all racks as details of this maintenance entry
+      let insertedCount = 0;
+      let failedCount = 0;
 
-    // Insert all racks as details of this maintenance entry
-    let insertedCount = 0;
-    let failedCount = 0;
+      console.log(`\n💾 Insertando racks en la base de datos...`);
 
-    console.log(`\n💾 Insertando racks en la base de datos...`);
+      for (const rack of uniqueRacks) {
+        try {
+          const rackId = rack.sanitizedRackId;
+          const pduId = String(rack.id || rackId);
 
-    for (const rack of uniqueRacks) {
-      try {
-        const rackId = rack.sanitizedRackId;
-        const pduId = String(rack.id || rackId);
+          // Check if this rack is already in maintenance
+          const existingCheck = await pool.request()
+            .input('rack_id', sql.NVarChar, rackId)
+            .query(`
+              SELECT COUNT(*) as count
+              FROM maintenance_rack_details
+              WHERE rack_id = @rack_id
+            `);
 
-        // Check if this rack is already in maintenance
-        const existingCheck = await pool.request()
-          .input('rack_id', sql.NVarChar, rackId)
-          .query(`
-            SELECT COUNT(*) as count
-            FROM maintenance_rack_details
-            WHERE rack_id = @rack_id
-          `);
+          if (existingCheck.recordset[0].count > 0) {
+            failedCount++;
+            continue;
+          }
 
-        if (existingCheck.recordset[0].count > 0) {
+          await pool.request()
+            .input('entry_id', sql.UniqueIdentifier, entryId)
+            .input('rack_id', sql.NVarChar, rackId)
+            .input('pdu_id', sql.NVarChar, pduId)
+            .input('name', sql.NVarChar, String(rack.rackName || rack.name || 'Unknown'))
+            .input('country', sql.NVarChar, 'España')
+            .input('site', sql.NVarChar, site || String(rack.site || 'Unknown'))
+            .input('dc', sql.NVarChar, sanitizedDc)
+            .input('phase', sql.NVarChar, String(rack.phase || 'Unknown'))
+            .input('chain', sql.NVarChar, sanitizedChain)
+            .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
+            .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
+            .query(`
+              INSERT INTO maintenance_rack_details
+              (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial)
+              VALUES
+              (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial)
+            `);
+
+          insertedCount++;
+        } catch (insertError) {
           failedCount++;
-          continue;
+          logger.error(`Failed to insert rack ${rack.sanitizedRackId} to maintenance:`, insertError);
         }
-
-        await pool.request()
-          .input('entry_id', sql.UniqueIdentifier, entryId)
-          .input('rack_id', sql.NVarChar, rackId)
-          .input('pdu_id', sql.NVarChar, pduId)
-          .input('name', sql.NVarChar, String(rack.rackName || rack.name || 'Unknown'))
-          .input('country', sql.NVarChar, 'España')
-          .input('site', sql.NVarChar, site || String(rack.site || 'Unknown'))
-          .input('dc', sql.NVarChar, sanitizedDc)
-          .input('phase', sql.NVarChar, String(rack.phase || 'Unknown'))
-          .input('chain', sql.NVarChar, sanitizedChain)
-          .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
-          .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
-          .query(`
-            INSERT INTO maintenance_rack_details
-            (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial)
-            VALUES
-            (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial)
-          `);
-
-        insertedCount++;
-      } catch (insertError) {
-        failedCount++;
-        logger.error(`Failed to insert rack ${rack.sanitizedRackId} to maintenance:`, insertError);
       }
-    }
 
-    await pool.close();
+      return { entryId, insertedCount, failedCount };
+    });
 
     console.log(`\n✅ RESULTADO FINAL:`);
-    console.log(`   Insertados: ${insertedCount}`);
-    console.log(`   Ya en mantenimiento (omitidos): ${failedCount}`);
+    console.log(`   Insertados: ${result.insertedCount}`);
+    console.log(`   Ya en mantenimiento (omitidos): ${result.failedCount}`);
     console.log(`   Total procesados: ${uniqueRacks.length}`);
     console.log(`====================================================\n`);
 
     const successMessage = `Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance`;
-    logger.info(`${successMessage} (${insertedCount}/${uniqueRacks.length} racks)`);
+    logger.info(`${successMessage} (${result.insertedCount}/${uniqueRacks.length} racks)`);
 
     res.json({
       success: true,
-      message: `${successMessage}: ${insertedCount} racks added successfully${failedCount > 0 ? `, ${failedCount} skipped (already in maintenance)` : ''}`,
+      message: `${successMessage}: ${result.insertedCount} racks added successfully${result.failedCount > 0 ? `, ${result.failedCount} skipped (already in maintenance)` : ''}`,
       data: {
-        entryId,
+        entryId: result.entryId,
         chain: sanitizedChain,
         dc: sanitizedDc,
-        racksAdded: insertedCount,
-        racksFailed: failedCount,
+        racksAdded: result.insertedCount,
+        racksFailed: result.failedCount,
         totalRacks: uniqueRacks.length,
         totalPdusFiltered: chainRacks.length
       },
@@ -1830,69 +1841,72 @@ app.delete('/api/maintenance/rack/:rackId', async (req, res) => {
 
     const sanitizedRackId = String(rackId).trim();
 
-    const pool = await sql.connect(sqlConfig);
+    const result = await executeQuery(async (pool) => {
+      // Get the maintenance entry ID for this rack
+      const entryResult = await pool.request()
+        .input('rack_id', sql.NVarChar, sanitizedRackId)
+        .query(`
+          SELECT maintenance_entry_id, entry_type
+          FROM maintenance_rack_details mrd
+          JOIN maintenance_entries me ON mrd.maintenance_entry_id = me.id
+          WHERE mrd.rack_id = @rack_id
+        `);
 
-    // Get the maintenance entry ID for this rack
-    const entryResult = await pool.request()
-      .input('rack_id', sql.NVarChar, sanitizedRackId)
-      .query(`
-        SELECT maintenance_entry_id, entry_type
-        FROM maintenance_rack_details mrd
-        JOIN maintenance_entries me ON mrd.maintenance_entry_id = me.id
-        WHERE mrd.rack_id = @rack_id
-      `);
+      if (entryResult.recordset.length === 0) {
+        return { error: 'not_found' };
+      }
 
-    if (entryResult.recordset.length === 0) {
-      await pool.close();
-      return res.status(404).json({
-        success: false,
-        message: `Rack ${sanitizedRackId} is not in maintenance`,
-        timestamp: new Date().toISOString()
-      });
-    }
+      const entryId = entryResult.recordset[0].maintenance_entry_id;
+      const entryType = entryResult.recordset[0].entry_type;
 
-    const entryId = entryResult.recordset[0].maintenance_entry_id;
-    const entryType = entryResult.recordset[0].entry_type;
-
-    // Delete the rack detail
-    await pool.request()
-      .input('rack_id', sql.NVarChar, sanitizedRackId)
-      .query(`
-        DELETE FROM maintenance_rack_details
-        WHERE rack_id = @rack_id
-      `);
-
-    // If this was an individual rack entry, delete the entry too
-    // If it was a chain entry, check if there are any racks left
-    if (entryType === 'individual_rack') {
+      // Delete the rack detail
       await pool.request()
-        .input('entry_id', sql.UniqueIdentifier, entryId)
+        .input('rack_id', sql.NVarChar, sanitizedRackId)
         .query(`
-          DELETE FROM maintenance_entries
-          WHERE id = @entry_id
-        `);
-    } else {
-      // Check if the chain entry has any remaining racks
-      const remainingRacks = await pool.request()
-        .input('entry_id', sql.UniqueIdentifier, entryId)
-        .query(`
-          SELECT COUNT(*) as count
-          FROM maintenance_rack_details
-          WHERE maintenance_entry_id = @entry_id
+          DELETE FROM maintenance_rack_details
+          WHERE rack_id = @rack_id
         `);
 
-      // If no racks remain, delete the entry
-      if (remainingRacks.recordset[0].count === 0) {
+      // If this was an individual rack entry, delete the entry too
+      // If it was a chain entry, check if there are any racks left
+      if (entryType === 'individual_rack') {
         await pool.request()
           .input('entry_id', sql.UniqueIdentifier, entryId)
           .query(`
             DELETE FROM maintenance_entries
             WHERE id = @entry_id
           `);
-      }
-    }
+      } else {
+        // Check if the chain entry has any remaining racks
+        const remainingRacks = await pool.request()
+          .input('entry_id', sql.UniqueIdentifier, entryId)
+          .query(`
+            SELECT COUNT(*) as count
+            FROM maintenance_rack_details
+            WHERE maintenance_entry_id = @entry_id
+          `);
 
-    await pool.close();
+        // If no racks remain, delete the entry
+        if (remainingRacks.recordset[0].count === 0) {
+          await pool.request()
+            .input('entry_id', sql.UniqueIdentifier, entryId)
+            .query(`
+              DELETE FROM maintenance_entries
+              WHERE id = @entry_id
+            `);
+        }
+      }
+
+      return { success: true };
+    });
+
+    if (result.error === 'not_found') {
+      return res.status(404).json({
+        success: false,
+        message: `Rack ${sanitizedRackId} is not in maintenance`,
+        timestamp: new Date().toISOString()
+      });
+    }
 
     logger.info(`Rack ${sanitizedRackId} removed from maintenance`);
 
@@ -1929,20 +1943,35 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
       });
     }
 
-    const pool = await sql.connect(sqlConfig);
+    const result = await executeQuery(async (pool) => {
+      // Get entry info before deleting
+      const entryInfo = await pool.request()
+        .input('entry_id', sql.UniqueIdentifier, entryId)
+        .query(`
+          SELECT entry_type, rack_id, chain, dc,
+                 (SELECT COUNT(*) FROM maintenance_rack_details WHERE maintenance_entry_id = @entry_id) as rack_count
+          FROM maintenance_entries
+          WHERE id = @entry_id
+        `);
 
-    // Get entry info before deleting
-    const entryInfo = await pool.request()
-      .input('entry_id', sql.UniqueIdentifier, entryId)
-      .query(`
-        SELECT entry_type, rack_id, chain, dc,
-               (SELECT COUNT(*) FROM maintenance_rack_details WHERE maintenance_entry_id = @entry_id) as rack_count
-        FROM maintenance_entries
-        WHERE id = @entry_id
-      `);
+      if (entryInfo.recordset.length === 0) {
+        return { error: 'not_found' };
+      }
 
-    if (entryInfo.recordset.length === 0) {
-      await pool.close();
+      const entry = entryInfo.recordset[0];
+
+      // Delete the maintenance entry (CASCADE will delete all related rack details)
+      await pool.request()
+        .input('entry_id', sql.UniqueIdentifier, entryId)
+        .query(`
+          DELETE FROM maintenance_entries
+          WHERE id = @entry_id
+        `);
+
+      return { success: true, entry };
+    });
+
+    if (result.error === 'not_found') {
       return res.status(404).json({
         success: false,
         message: 'Maintenance entry not found',
@@ -1950,17 +1979,7 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
       });
     }
 
-    const entry = entryInfo.recordset[0];
-
-    // Delete the maintenance entry (CASCADE will delete all related rack details)
-    await pool.request()
-      .input('entry_id', sql.UniqueIdentifier, entryId)
-      .query(`
-        DELETE FROM maintenance_entries
-        WHERE id = @entry_id
-      `);
-
-    await pool.close();
+    const entry = result.entry;
 
     const message = entry.entry_type === 'chain'
       ? `Chain ${entry.chain} from DC ${entry.dc} removed from maintenance (${entry.rack_count} racks)`
@@ -2009,34 +2028,32 @@ app.get('/api/health', (req, res) => {
 app.post('/api/export/alerts', async (req, res) => {
   try {
 
-    const pool = await sql.connect(sqlConfig);
-
-    // Query active critical alerts from database
-    const result = await pool.request().query(`
-      SELECT
-        pdu_id,
-        rack_id,
-        name,
-        country,
-        site,
-        dc,
-        phase,
-        chain,
-        node,
-        serial,
-        alert_type,
-        metric_type,
-        alert_reason,
-        alert_value,
-        alert_field,
-        threshold_exceeded,
-        alert_started_at,
-        last_updated_at
-      FROM active_critical_alerts
-      ORDER BY alert_started_at DESC
-    `);
-
-    await pool.close();
+    const result = await executeQuery(async (pool) => {
+      // Query active critical alerts from database
+      return await pool.request().query(`
+        SELECT
+          pdu_id,
+          rack_id,
+          name,
+          country,
+          site,
+          dc,
+          phase,
+          chain,
+          node,
+          serial,
+          alert_type,
+          metric_type,
+          alert_reason,
+          alert_value,
+          alert_field,
+          threshold_exceeded,
+          alert_started_at,
+          last_updated_at
+        FROM active_critical_alerts
+        ORDER BY alert_started_at DESC
+      `);
+    });
 
     const alerts = result.recordset || [];
 
@@ -2198,21 +2215,36 @@ const server = app.listen(port, () => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('⏹️ SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    console.log('✅ Process terminated');
-    process.exit(0);
-  });
-});
+async function gracefulShutdown(signal) {
+  console.log(`⏹️ ${signal} received, shutting down gracefully...`);
 
-process.on('SIGINT', () => {
-  console.log('⏹️ SIGINT received, shutting down gracefully...');
-  server.close(() => {
+  // Close server first
+  server.close(async () => {
+    console.log('🔌 HTTP server closed');
+
+    // Close database connection pool
+    if (globalPool && globalPool.connected) {
+      try {
+        await globalPool.close();
+        console.log('🔌 Database connection pool closed');
+      } catch (error) {
+        console.error('❌ Error closing database pool:', error.message);
+      }
+    }
+
     console.log('✅ Process terminated');
     process.exit(0);
   });
-});
+
+  // Force shutdown after 10 seconds
+  setTimeout(() => {
+    console.error('⚠️ Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
