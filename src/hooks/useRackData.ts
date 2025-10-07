@@ -158,15 +158,16 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
           if (Array.isArray(entry.racks)) {
             console.log(`\nEntrada #${entryIndex + 1} (${entry.entry_type}): ${entry.racks.length} registros`);
             if (entryIndex === 0 && entry.racks.length > 0) {
-              console.log(`   Ejemplo rack_id: "${entry.racks[0].rack_id}"`);
+              console.log(`   Ejemplo rack_id: "${entry.racks[0].rack_id}" (type: ${typeof entry.racks[0].rack_id})`);
             }
 
             entry.racks.forEach((rack: any) => {
               totalRackDetails++;
-              // Only use rack_id as the unique identifier for maintenance racks
-              // This prevents counting multiple PDUs from the same physical rack as separate maintenance entries
               if (rack.rack_id) {
-                maintenanceSet.add(rack.rack_id);
+                const rackIdStr = String(rack.rack_id).trim();
+                if (rackIdStr) {
+                  maintenanceSet.add(rackIdStr);
+                }
               }
             });
           }
@@ -176,7 +177,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         console.log(`   Total registros en DB: ${totalRackDetails}`);
         console.log(`   Racks únicos (Set): ${maintenanceSet.size}`);
         console.log(`   Todos los IDs en el Set de mantenimiento:`);
-        console.log(`   [${Array.from(maintenanceSet).join(', ')}]`);
+        console.log(`   [${Array.from(maintenanceSet).slice(0, 20).join(', ')}]${maintenanceSet.size > 20 ? '...' : ''}`);
         console.log(`================================================================\n`);
 
         setMaintenanceRacks(maintenanceSet);

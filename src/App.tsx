@@ -67,8 +67,6 @@ function App() {
   const getThresholdValueWrapper = (key: string) => getThresholdValue(thresholds, key);
   const getAmperageStatusColorWrapper = (rack: any) => getAmperageStatusColor(rack, thresholds);
 
-  // Flatten groupedRacks to get all logical rack groups (filtered by current view/filters)
-  // Flatten groupedRacks to get all rack groups (filtered by current view/filters)
   const filteredRackGroups = React.useMemo(() => {
     const rackGroups: RackData[][] = [];
     let filteredOutCount = 0;
@@ -77,18 +75,16 @@ function App() {
     Object.values(groupedRacks).forEach(siteGroups => {
       Object.values(siteGroups).forEach(dcGroups => {
         Object.values(dcGroups).forEach(logicalGroups => {
-          // In alertas view: filter out maintenance racks visually (they won't show)
-          // In principal view: show all racks including maintenance (displayed in blue)
           if (activeView === 'alertas') {
             const nonMaintenanceGroups = logicalGroups.filter(group => {
               checkedCount++;
-              const rackId = group[0]?.rackId || group[0]?.id;
-              const isInMaintenance = maintenanceRacks.has(rackId);
+              const rackId = String(group[0]?.rackId || '').trim();
+              const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
               if (isInMaintenance) {
                 filteredOutCount++;
-                if (filteredOutCount <= 3) {
-                  console.log(`🔵 Filtering out rack in maintenance: rackId="${rackId}" (type: ${typeof rackId})`);
+                if (filteredOutCount <= 5) {
+                  console.log(`🔵 [Alertas] Filtering out rack in maintenance: rackId="${rackId}"`);
                 }
               }
 
@@ -96,18 +92,20 @@ function App() {
             });
             rackGroups.push(...nonMaintenanceGroups);
           } else {
-            // Principal view: show ALL racks (maintenance racks will be rendered in blue)
             rackGroups.push(...logicalGroups);
           }
         });
       });
     });
 
-    if (activeView === 'alertas' && checkedCount > 0) {
+    if (activeView === 'alertas') {
       console.log(`\n🔍 FILTRADO DE RACKS EN MANTENIMIENTO (Vista Alertas):`);
       console.log(`   Racks verificados: ${checkedCount}`);
       console.log(`   Racks filtrados (en mantenimiento): ${filteredOutCount}`);
       console.log(`   Racks en Set de mantenimiento: ${maintenanceRacks.size}`);
+      if (maintenanceRacks.size > 0) {
+        console.log(`   IDs en el Set (primeros 10): [${Array.from(maintenanceRacks).slice(0, 10).join(', ')}]`);
+      }
     }
 
     return rackGroups;
@@ -175,8 +173,8 @@ function App() {
     };
 
     filteredRackGroups.forEach(rackGroup => {
-      const rackId = rackGroup[0].rackId || rackGroup[0].id;
-      const isInMaintenance = maintenanceRacks.has(rackId);
+      const rackId = String(rackGroup[0].rackId || '').trim();
+      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
       // Skip racks in maintenance - they shouldn't count in alerts
       if (isInMaintenance) {
@@ -291,8 +289,8 @@ function App() {
 
     // Count individual PDUs with alerts (for header display) - EXCLUDE maintenance racks
     racks.forEach(pdu => {
-      const rackId = pdu.rackId || pdu.id;
-      const isInMaintenance = maintenanceRacks.has(rackId);
+      const rackId = String(pdu.rackId || '').trim();
+      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
       // Skip PDUs that are in maintenance
       if (isInMaintenance) {
@@ -363,8 +361,8 @@ function App() {
     };
 
     originalRackGroups.forEach(rackGroup => {
-      const rackId = rackGroup[0].rackId || rackGroup[0].id;
-      const isInMaintenance = maintenanceRacks.has(rackId);
+      const rackId = String(rackGroup[0].rackId || '').trim();
+      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
       // Skip racks in maintenance - they shouldn't count in alerts
       if (isInMaintenance) {

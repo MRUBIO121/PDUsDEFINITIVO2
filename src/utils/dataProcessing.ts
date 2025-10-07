@@ -209,22 +209,20 @@ export function filterRacks(
       if (statusFilter === 'maintenance') {
         // Filter to show only racks in maintenance
         filteredRacks = filteredRacks.filter(rack => {
-          const rackId = rack.rackId || rack.id;
-          return maintenanceRacks.has(rackId);
+          const rackId = String(rack.rackId || '').trim();
+          return rackId && maintenanceRacks.has(rackId);
         });
       } else {
         // Filter by normal status (exclude maintenance racks)
         filteredRacks = filteredRacks.filter(rack => {
-          const rackId = rack.rackId || rack.id;
-          const isInMaintenance = maintenanceRacks.has(rackId);
+          const rackId = String(rack.rackId || '').trim();
+          const isInMaintenance = rackId && maintenanceRacks.has(rackId);
           return !isInMaintenance && rack.status === statusFilter;
         });
       }
     }
     // If statusFilter is 'all', show all racks (no status filtering)
   } else {
-    // In "Alertas" mode: show complete racks that have at least one PDU with alerts
-
     // In "Alertas" mode: only show PDUs that have alerts (critical or warning status)
     // Never show PDUs with normal status in alerts view
     filteredRacks = filteredRacks.filter(rack => rack.status === 'critical' || rack.status === 'warning');
@@ -235,7 +233,7 @@ export function filterRacks(
         // Keep racks that don't have critical_amperage_zero_reading as a reason
         // OR have other alert reasons in addition to critical_amperage_zero_reading
         if (!rack.reasons || rack.reasons.length === 0) {
-          return true; // Keep racks with no reasons
+          return true;
         }
 
         const hasZeroAmperageAlert = rack.reasons.includes('critical_amperage_zero_reading');
