@@ -407,6 +407,26 @@ export default function MaintenancePage() {
                                 <span className="font-medium">PDU ID:</span> {rack.pdu_id}
                               </div>
                             )}
+                            {rack.country && (
+                              <div>
+                                <span className="font-medium">País:</span> {rack.country}
+                              </div>
+                            )}
+                            {rack.site && (
+                              <div>
+                                <span className="font-medium">Sitio:</span> {rack.site}
+                              </div>
+                            )}
+                            {rack.dc && (
+                              <div>
+                                <span className="font-medium">DC:</span> {rack.dc}
+                              </div>
+                            )}
+                            {rack.chain && (
+                              <div>
+                                <span className="font-medium">Chain:</span> {rack.chain}
+                              </div>
+                            )}
                             {rack.phase && (
                               <div>
                                 <span className="font-medium">Fase:</span> {rack.phase}
