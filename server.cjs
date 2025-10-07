@@ -1795,9 +1795,12 @@ app.post('/api/maintenance/chain', async (req, res) => {
     }
 
     if (chainRacks.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: `No racks found for chain ${sanitizedChain} in DC ${sanitizedDc}`,
+      console.log(`⚠️ No se encontraron racks para esta chain`);
+      console.log(`====================================================\n`);
+      return res.status(200).json({
+        success: true,
+        message: `No se encontraron racks para la chain ${sanitizedChain} en DC ${sanitizedDc}. Es posible que la chain esté vacía o que los racks no tengan rackName válido.`,
+        racksAdded: 0,
         timestamp: new Date().toISOString()
       });
     }

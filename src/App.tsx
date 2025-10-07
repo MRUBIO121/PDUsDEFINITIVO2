@@ -504,6 +504,12 @@ function App() {
         throw new Error(data.message || 'Failed to send chain to maintenance');
       }
 
+      // Check if no racks were found
+      if (data.racksAdded === 0 && !data.data) {
+        alert(`⚠️ ${data.message || `No se encontraron racks para la chain "${chain}" en DC "${dc}"`}`);
+        return;
+      }
+
       const { racksAdded, racksFailed, totalRacks, totalPdusFiltered } = data.data;
       let message = `Chain "${chain}" del DC "${dc}" enviado a mantenimiento.\n\n`;
       message += `✅ ${racksAdded} racks únicos añadidos exitosamente`;
