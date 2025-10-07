@@ -19,12 +19,19 @@ Sistema completo de monitoreo en tiempo real para infraestructura de racks y uni
 - **Contadores inteligentes**: Los totales globales se mantienen estáticos, solo cambian los contadores de alertas
 
 ### Modo de Mantenimiento
-- **Gestión de mantenimiento**: Página dedicada para activar/desactivar modo mantenimiento por rack
+- **Gestión de mantenimiento**: Página dedicada para activar/desactivar modo mantenimiento por rack o chain completa
+- **Mantenimiento individual**: Poner racks individuales en mantenimiento
+- **Mantenimiento por chain**: Poner chains completas en mantenimiento (todos los racks de una chain en un DC específico)
+- **Importación masiva**: Importar hasta 1000 racks desde archivo Excel con plantilla predefinida
+- **Descarga de plantilla**: Genera automáticamente plantilla Excel con estructura correcta
 - **Búsqueda avanzada**: Buscar racks por nombre, sitio, país o DC
 - **Filtros geográficos**: Filtrar por país, sitio y data center
 - **Indicador visual**: Racks en mantenimiento se muestran con borde azul y etiqueta "Mantenimiento"
+- **Vista expandible**: Cada entrada de mantenimiento puede expandirse para ver detalles de todos los racks incluidos
+- **Eliminación flexible**: Eliminar racks individuales o entradas completas (chain o individual)
 - **Exclusión de conteos**: Los racks en mantenimiento aparecen en la vista de alertas pero NO cuentan para ningún indicador de alerta
-- **Base de datos persistente**: Los estados de mantenimiento se almacenan en Supabase
+- **Base de datos persistente**: Los estados de mantenimiento se almacenan en SQL Server con información detallada
+- **Auditoría completa**: Registro de quién inició el mantenimiento, cuándo, y la razón
 
 ### Filtrado y Búsqueda
 - **Filtros geográficos**: País, Sitio, Data Center
@@ -173,7 +180,16 @@ pm2 save
 ```http
 GET /api/racks/energy
 ```
-Retorna todos los racks con sus métricas en tiempo real.
+Retorna todos los racks con sus métricas en tiempo real desde la API NENG.
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [...],
+  "timestamp": "2025-10-07T12:00:00.000Z"
+}
+```
 
 ### Health Check
 ```http
@@ -188,11 +204,184 @@ PUT /api/thresholds
 ```
 Gestiona la configuración de umbrales críticos y de advertencia.
 
-### Exportación
+### Mantenimiento - Consultas
+```http
+GET /api/maintenance
+```
+Obtiene todas las entradas de mantenimiento activas con sus detalles.
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "entry_type": "individual_rack | chain",
+      "rack_id": "R-001",
+      "chain": "C1",
+      "site": "Madrid",
+      "dc": "DC1",
+      "reason": "Mantenimiento programado",
+      "started_by": "Usuario",
+      "started_at": "2025-10-07T12:00:00.000Z",
+      "racks": [...]
+    }
+  ]
+}
+```
+
+### Mantenimiento - Rack Individual
+```http
+POST /api/maintenance/rack
+```
+Añade un rack individual al modo mantenimiento.
+
+**Request Body**:
+```json
+{
+  "rackId": "R-001",
+  "reason": "Mantenimiento preventivo",
+  "startedBy": "Usuario"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Rack R-001 added to maintenance",
+  "data": {
+    "rackId": "R-001",
+    "chain": "C1",
+    "dc": "DC1",
+    "entryId": "uuid"
+  }
+}
+```
+
+### Mantenimiento - Chain Completa
+```http
+POST /api/maintenance/chain
+```
+Añade todos los racks de una chain específica en un DC al modo mantenimiento.
+
+**Request Body**:
+```json
+{
+  "chain": "C1",
+  "dc": "DC1",
+  "site": "Madrid",
+  "reason": "Mantenimiento programado de chain",
+  "startedBy": "Usuario"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Chain C1 from DC DC1 added to maintenance",
+  "data": {
+    "entryId": "uuid",
+    "racksAdded": 15,
+    "chain": "C1",
+    "dc": "DC1",
+    "site": "Madrid"
+  }
+}
+```
+
+### Mantenimiento - Eliminar Rack Individual
+```http
+DELETE /api/maintenance/rack/:rackId
+```
+Elimina un rack específico del modo mantenimiento. Si era parte de una chain y era el último rack, elimina también la entrada de la chain.
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Rack R-001 removed from maintenance"
+}
+```
+
+### Mantenimiento - Eliminar Entrada Completa
+```http
+DELETE /api/maintenance/entry/:entryId
+```
+Elimina una entrada completa de mantenimiento (rack individual o chain completa con todos sus racks).
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Chain C1 from DC DC1 removed from maintenance (15 racks)",
+  "data": {
+    "entryId": "uuid",
+    "entryType": "chain",
+    "rackId": null,
+    "chain": "C1",
+    "dc": "DC1",
+    "rackCount": 15
+  }
+}
+```
+
+### Mantenimiento - Descargar Plantilla Excel
+```http
+GET /api/maintenance/template
+```
+Descarga la plantilla Excel pre-configurada para importación masiva de racks.
+
+**Response**: Archivo Excel (`plantilla_mantenimiento_racks.xlsx`)
+
+### Mantenimiento - Importación Masiva Excel
+```http
+POST /api/maintenance/import-excel
+Content-Type: multipart/form-data
+```
+Importa múltiples racks desde un archivo Excel. Máximo 1000 racks por archivo.
+
+**Request**:
+- Form-data con campo `file` conteniendo el archivo Excel (.xlsx o .xls)
+- El archivo debe contener una hoja llamada exactamente "Datos"
+- Columnas requeridas: rack_id, dc
+- Columnas opcionales: chain, pdu_id, name, country, site, phase, node, serial, reason
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Import completed successfully",
+  "data": {
+    "successful": 45,
+    "failed": 2,
+    "duplicates": 3,
+    "errors": [
+      {
+        "row": 5,
+        "rack_id": "R-005",
+        "error": "Duplicate rack_id in file"
+      }
+    ]
+  }
+}
+```
+
+### Exportación - Alertas a Excel
 ```http
 POST /api/export/alerts
 ```
-Genera archivo Excel con todas las alertas activas.
+Genera y descarga archivo Excel con todas las alertas activas.
+
+**Response**: Archivo Excel con columnas:
+- ID PDU, ID Rack, Nombre PDU
+- País, Sitio, Data Center
+- Fase, Chain, Node, N° Serie
+- Corriente, Temperatura, Humedad, Voltaje, Potencia
+- Estado, Razones de Alerta
+- Detectada, Última Actualización
 
 ## Guía Completa de Funcionalidades
 
@@ -334,45 +523,187 @@ Acceso desde menú de 3 puntos en cada tarjeta de rack:
 #### 4.1 Página de Mantenimiento
 Acceso desde botón "Gestión de Mantenimiento" en barra superior:
 
-**Búsqueda de Racks**:
-- Campo de búsqueda en tiempo real
-- Busca por: nombre de rack, sitio, país, DC
-- Resultados instantáneos mientras se escribe
+**Vista de Entradas de Mantenimiento**:
+- Lista de todas las entradas de mantenimiento activas
+- Cada entrada muestra: tipo (individual/chain), identificador, DC, sitio, razón, fecha inicio, iniciado por
+- Vista expandible/colapsable para ver detalles de cada entrada
+- Actualización automática cada 60 segundos
+- Contador total de entradas activas
 
-**Filtros**:
-- Filtro por País
-- Filtro por Sitio
-- Filtro por Data Center
-- Los filtros se pueden combinar con la búsqueda
+**Tipos de Entradas**:
+1. **Individual Rack**: Una sola entrada para un rack específico
+2. **Chain Completa**: Una entrada que agrupa todos los racks de una chain en un DC
 
-**Lista de Racks**:
-- Muestra todos los racks disponibles
-- Información de cada rack: nombre, sitio, país, DC
-- Indicador visual del estado de mantenimiento
+**Información Detallada por Entrada**:
+- **ID único**: Identificador de la entrada de mantenimiento
+- **Tipo**: Individual o Chain
+- **Rack ID / Chain**: Identificador del rack o nombre de la chain
+- **Data Center**: DC donde se encuentra
+- **Sitio**: Ubicación física
+- **Razón**: Motivo del mantenimiento
+- **Iniciado por**: Usuario que activó el mantenimiento
+- **Fecha de inicio**: Timestamp de cuándo se activó
+- **Lista de racks**: Expandible para ver todos los racks incluidos en la entrada
 
-#### 4.2 Activar/Desactivar Mantenimiento
-Para cada rack en la lista:
+#### 4.2 Importación Masiva desde Excel
 
-**Activar Mantenimiento**:
-- Botón "Activar Mantenimiento" visible cuando rack está en operación normal
+**Descarga de Plantilla**:
+1. Hacer clic en botón "Descargar Plantilla Excel" en la página de mantenimiento
+2. Se descarga automáticamente archivo `plantilla_mantenimiento_racks.xlsx`
+3. La plantilla contiene:
+   - Hoja llamada "Datos" (obligatorio)
+   - Encabezados predefinidos en la primera fila
+   - Estructura correcta de columnas
+
+**Estructura de la Plantilla Excel**:
+
+| Columna | Obligatorio | Descripción | Ejemplo |
+|---------|-------------|-------------|---------|
+| rack_id | SI | Identificador único del rack | R-001 |
+| dc | SI | Data Center | DC1 |
+| chain | NO | Chain del rack | C1 |
+| pdu_id | NO | ID del PDU | PDU-001 |
+| name | NO | Nombre descriptivo | Rack Principal |
+| country | NO | País | España |
+| site | NO | Sitio/Ciudad | Madrid |
+| phase | NO | Fase eléctrica | L1 |
+| node | NO | Nodo | N01 |
+| serial | NO | Número de serie | SN123456 |
+| reason | NO | Razón del mantenimiento | Mantenimiento preventivo |
+
+**Proceso de Importación**:
+1. Rellenar la plantilla Excel con los datos de los racks
+2. IMPORTANTE: La hoja debe llamarse exactamente "**Datos**" (con acento)
+3. Máximo 1000 racks por archivo
+4. Hacer clic en botón "Importar desde Excel" en la página de mantenimiento
+5. Seleccionar el archivo Excel rellenado
+6. El sistema procesa el archivo y muestra resumen:
+   - Racks importados exitosamente
+   - Racks fallidos (con razón del error)
+   - Racks duplicados (ya estaban en mantenimiento)
+   - Errores detallados por fila
+
+**Validaciones Automáticas**:
+- Verificación de hoja "Datos"
+- Validación de campos obligatorios (rack_id, dc)
+- Detección de duplicados en el archivo
+- Detección de racks ya en mantenimiento
+- Límite de 1000 racks por importación
+- Validación de formato de archivo (.xlsx o .xls)
+
+**Manejo de Errores Comunes**:
+- **"Excel file must contain a sheet named Datos"**: La hoja debe llamarse exactamente "Datos" (con D mayúscula y acento en la 'a')
+- **"rack_id and dc are required"**: Faltan campos obligatorios en alguna fila
+- **"Duplicate rack_id in file"**: El mismo rack_id aparece múltiples veces en el archivo
+- **"Rack already in maintenance"**: El rack ya estaba en mantenimiento antes de la importación
+- **"Too many racks"**: El archivo contiene más de 1000 racks
+
+**Resultado de la Importación**:
+```
+Importación completada:
+✓ Exitosos: 45 racks
+✗ Fallidos: 2 racks
+⚠ Duplicados: 3 racks
+
+Errores:
+- Fila 5 (R-005): Duplicate rack_id in file
+- Fila 12 (R-012): Rack already in maintenance
+```
+
+#### 4.3 Activar Mantenimiento Manual
+
+**Rack Individual**:
+- Desde la página de mantenimiento o desde el menú de 3 puntos en cada tarjeta
 - Al activar:
-  - El rack se marca con estado de mantenimiento en base de datos
-  - Se muestra con borde azul en todas las vistas
+  - Se crea una entrada de tipo "individual_rack"
+  - El rack se marca con borde azul en todas las vistas
   - Aparece etiqueta "Mantenimiento"
   - Se excluye de contadores de alertas
   - Permanece visible en vista de alertas
 
-**Desactivar Mantenimiento**:
-- Botón "Desactivar Mantenimiento" visible cuando rack está en mantenimiento
-- Al desactivar:
-  - El rack vuelve a operación normal
-  - Se evalúa según métricas y umbrales
-  - Vuelve a contar en indicadores de alertas
+**Chain Completa**:
+- Disponible desde la interfaz de usuario
+- Al activar:
+  - Se crea una entrada de tipo "chain"
+  - Se buscan todos los racks de esa chain en el DC especificado
+  - Todos los racks encontrados se añaden a la entrada
+  - Filtrado inteligente: solo racks con nombres válidos
+  - Consolidación automática: múltiples PDUs del mismo rack físico se agrupan
 
-**Persistencia**:
-- Los estados se guardan en Supabase
-- Persisten entre recargas de página
-- Sincronizados en tiempo real entre todos los usuarios
+**Información Requerida**:
+- **Para rack individual**: rack_id, reason (opcional), startedBy (opcional)
+- **Para chain**: chain, dc, site (opcional), reason (opcional), startedBy (opcional)
+
+#### 4.4 Eliminar de Mantenimiento
+
+**Eliminación Individual de Rack**:
+- Botón de eliminar (X) junto a cada rack en la vista expandida
+- Confirma antes de eliminar
+- Si era el único rack en una entrada de chain, elimina también la entrada
+- Si era parte de una chain con más racks, solo elimina ese rack
+
+**Eliminación de Entrada Completa**:
+- Botón "Eliminar Entrada Completa" (icono de basura)
+- Confirma antes de eliminar
+- Elimina la entrada y TODOS sus racks asociados
+- Útil para:
+  - Eliminar rack individual y su entrada
+  - Eliminar chain completa con todos sus racks de una vez
+
+**Confirmaciones**:
+- **Rack individual**: "¿Seguro que quieres sacar el rack X de mantenimiento?"
+- **Chain completa**: "¿Seguro que quieres sacar toda la chain X de mantenimiento?"
+
+**Efectos de la Eliminación**:
+- El rack vuelve a operación normal
+- Se evalúa según métricas y umbrales
+- Vuelve a contar en indicadores de alertas
+- El borde azul y etiqueta "Mantenimiento" desaparecen
+
+#### 4.5 Vista Expandible de Entradas
+
+**Funcionalidad**:
+- Cada entrada de mantenimiento puede expandirse/colapsarse
+- Botón con icono de chevron (arriba/abajo) para expandir/colapsar
+- Al expandir se muestran todos los racks incluidos en la entrada
+
+**Información por Rack**:
+- ID del rack
+- PDU ID
+- Nombre
+- País
+- Sitio
+- Data Center
+- Fase
+- Chain
+- Node
+- Número de serie
+- Botón para eliminar rack individual
+
+**Estados Visuales**:
+- Indicador de cuántos racks contiene cada entrada
+- Contador actualizado en tiempo real
+- Icono diferente para entradas individuales vs chains
+
+#### 4.6 Persistencia y Sincronización
+
+**Almacenamiento**:
+- Los estados se guardan en SQL Server
+- Tabla `maintenance_entries` para entradas principales
+- Tabla `maintenance_rack_details` para detalles de cada rack
+- Relación uno-a-muchos entre entradas y racks
+
+**Sincronización**:
+- Actualización automática cada 60 segundos
+- Sincronizado entre todos los usuarios conectados
+- Los cambios se reflejan inmediatamente en el dashboard principal
+- No se requiere recargar la página
+
+**Auditoría**:
+- Registro de quién inició cada entrada de mantenimiento
+- Timestamp de cuándo se creó
+- Razón del mantenimiento
+- Historial completo disponible en base de datos
 
 ### Nivel 5: Funciones Avanzadas
 
@@ -511,7 +842,9 @@ Acceso desde botón de 3 puntos en cada tarjeta:
 - Cache en memoria
 - Paginación eficiente
 - Compresión gzip
-- Polling optimizado (30 segundos)
+- Polling optimizado (30 segundos para dashboard, 60 segundos para mantenimiento)
+- Uploads optimizados con multer para importación masiva
+- Timeout de servidor extendido (5 minutos) para operaciones largas
 
 ## Logs y Monitoreo
 
@@ -524,7 +857,99 @@ pm2 logs energy-monitoring-api | grep "🚨"
 
 # Ver errores
 pm2 logs energy-monitoring-api | grep "❌"
+
+# Ver logs de importación
+pm2 logs energy-monitoring-api | grep "📥"
+
+# Ver logs de mantenimiento
+pm2 logs energy-monitoring-api | grep "maintenance"
 ```
+
+## Troubleshooting
+
+### Problemas con Importación Excel
+
+#### Error: "Excel file must contain a sheet named Datos"
+**Causa**: La hoja del Excel no se llama exactamente "Datos"
+
+**Solución**:
+1. Abre tu archivo Excel
+2. Busca las pestañas en la parte inferior (probablemente dice "Hoja1", "Sheet1", etc.)
+3. Haz clic derecho en la pestaña y selecciona "Cambiar nombre"
+4. Escribe exactamente: `Datos` (con D mayúscula y acento en la 'a')
+5. Guarda el archivo y vuelve a intentar
+
+#### Error: "rack_id and dc are required"
+**Causa**: Faltan datos obligatorios en el archivo
+
+**Solución**:
+1. Verifica que todas las filas tengan valor en las columnas `rack_id` y `dc`
+2. No dejes celdas vacías en estas columnas
+3. Los valores deben ser texto, no fórmulas
+
+#### Error: "Duplicate rack_id in file"
+**Causa**: El mismo rack_id aparece múltiples veces en el archivo
+
+**Solución**:
+1. Revisa el archivo Excel y busca rack_ids duplicados
+2. Elimina las filas duplicadas
+3. Cada rack_id debe aparecer solo una vez
+
+#### Error: "Rack already in maintenance"
+**Causa**: El rack ya estaba en mantenimiento antes de la importación
+
+**Solución**:
+1. Verifica en la página de mantenimiento si el rack ya está listado
+2. Si quieres actualizarlo, primero elimínalo del mantenimiento
+3. Luego vuelve a importar
+
+#### Error: "Too many racks"
+**Causa**: El archivo contiene más de 1000 racks
+
+**Solución**:
+1. Divide el archivo en múltiples archivos más pequeños
+2. Cada archivo debe tener máximo 1000 racks
+3. Importa los archivos uno por uno
+
+### Problemas con la Plantilla Excel
+
+#### La plantilla no se descarga
+**Solución**:
+1. Verifica que el archivo `plantilla_mantenimiento.xlsx` exista en la raíz del proyecto
+2. Si no existe, créalo manualmente usando el script: `node create-excel-template.cjs`
+3. Reinicia el servidor: `pm2 restart energy-monitoring-api`
+
+#### La plantilla está corrupta
+**Solución**:
+1. Elimina el archivo `plantilla_mantenimiento.xlsx`
+2. Ejecuta: `node create-excel-template.cjs`
+3. Verifica que se creó correctamente
+4. Descarga la nueva plantilla desde la aplicación
+
+### Problemas con Chains
+
+#### No se encuentran racks al poner chain en mantenimiento
+**Causa**: La chain está vacía o los racks no tienen nombres válidos
+
+**Solución**:
+1. Verifica que existan racks con esa chain en el DC especificado
+2. Verifica que los racks tengan un `rackName` válido (no vacío, no "undefined")
+3. Usa la importación masiva como alternativa para casos complejos
+
+### Problemas de Base de Datos
+
+#### Error de conexión a SQL Server
+**Solución**:
+1. Verifica las credenciales en el archivo `.env`
+2. Verifica que SQL Server esté corriendo
+3. Ejecuta el script de verificación: `verify-sql-server.bat` (Windows)
+4. Revisa los logs: `pm2 logs energy-monitoring-api`
+
+#### Tablas de mantenimiento no existen
+**Solución**:
+1. Ejecuta las migraciones de SQL Server manualmente
+2. Verifica que las tablas `maintenance_entries` y `maintenance_rack_details` existan
+3. Consulta los archivos de migración en `supabase/migrations/` para la estructura
 
 ## Soporte
 
@@ -532,7 +957,52 @@ Para soporte técnico:
 - **Logs de aplicación**: `pm2 logs energy-monitoring-api`
 - **Health check**: `http://localhost/api/health`
 - **Logs de Nginx**: `/var/log/nginx/energy-monitor-*.log`
+- **Verificar SQL Server**: `verify-sql-server.bat`
+- **Regenerar plantilla**: `node create-excel-template.cjs`
+
+## Casos de Uso Comunes
+
+### Poner un rack individual en mantenimiento
+1. Ir al dashboard principal
+2. Buscar el rack deseado
+3. Hacer clic en el menú de 3 puntos
+4. Seleccionar "Enviar a Mantenimiento"
+5. Opcionalmente especificar razón
+
+### Poner una chain completa en mantenimiento
+1. Ir a "Gestión de Mantenimiento"
+2. Usar la interfaz para seleccionar chain y DC
+3. Especificar razón y usuario
+4. Confirmar la operación
+5. Todos los racks de la chain se añaden automáticamente
+
+### Importar 50 racks en mantenimiento desde Excel
+1. Ir a "Gestión de Mantenimiento"
+2. Hacer clic en "Descargar Plantilla Excel"
+3. Abrir la plantilla descargada
+4. Rellenar las 50 filas con los datos de los racks (mínimo: rack_id y dc)
+5. Verificar que la hoja se llama "Datos"
+6. Guardar el archivo
+7. Hacer clic en "Importar desde Excel"
+8. Seleccionar el archivo rellenado
+9. Revisar el resumen de importación
+10. Verificar en la lista de mantenimiento que los 50 racks fueron añadidos
+
+### Sacar una chain completa de mantenimiento
+1. Ir a "Gestión de Mantenimiento"
+2. Buscar la entrada de la chain deseada
+3. Hacer clic en "Eliminar Entrada Completa" (icono de basura)
+4. Confirmar la operación
+5. Todos los racks de la chain vuelven a operación normal
+
+### Exportar todas las alertas activas
+1. En el dashboard principal, asegurarse de estar en vista "Alertas"
+2. Hacer clic en "Exportar Alertas a Excel"
+3. Se descarga automáticamente archivo Excel con todas las alertas
+4. El archivo incluye todas las métricas y razones de alerta
 
 ---
 
 **Energy Monitoring System** © 2025
+
+Sistema completo de monitoreo de energía para centros de datos con gestión avanzada de mantenimiento, importación masiva, y exportación de datos.
