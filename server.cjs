@@ -2181,7 +2181,7 @@ const upload = multer({
 
 // Endpoint to download template
 app.get('/api/maintenance/template', (req, res) => {
-  const filePath = path.join(__dirname, 'public', 'plantilla_mantenimiento.xlsx');
+  const filePath = path.join(__dirname, 'plantilla_mantenimiento.xlsx');
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({

@@ -147,8 +147,8 @@ async function createTemplate() {
   dataSheet.getCell('A5').font = { italic: true, color: { argb: 'FFFF0000' } };
   dataSheet.mergeCells('A5:K5');
   
-  await workbook.xlsx.writeFile('/tmp/cc-agent/55592644/project/public/plantilla_mantenimiento.xlsx');
-  console.log('✅ Excel template created successfully!');
+  await workbook.xlsx.writeFile('plantilla_mantenimiento.xlsx');
+  console.log('✅ Excel template created successfully in project root!');
 }
 
 createTemplate().catch(console.error);
