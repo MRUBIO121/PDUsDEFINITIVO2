@@ -999,7 +999,7 @@ app.get('/api/racks/energy', async (req, res) => {
     // Process data with thresholds evaluation
     const processedData = await processRackData(combinedData, thresholds);
 
-    // Get maintenance rack IDs to filter them out
+    // Get maintenance rack IDs (for info only, NOT for filtering)
     const maintenanceRackIds = await getMaintenanceRackIds();
 
     console.log(`🔧 Maintenance rack IDs count: ${maintenanceRackIds.size}`);
@@ -1007,22 +1007,22 @@ app.get('/api/racks/energy', async (req, res) => {
       console.log(`🔧 Sample maintenance racks: ${Array.from(maintenanceRackIds).slice(0, 3).join(', ')}${maintenanceRackIds.size > 3 ? '...' : ''}`);
     }
 
-    // Filter out PDUs whose rack is in maintenance mode
-    const filteredData = processedData.filter(pdu => {
-      // Check if this PDU's rack is in maintenance using rackId
+    // DO NOT filter out maintenance racks - send them to frontend for visual indication
+    // The frontend will display them with a blue maintenance indicator
+    const filteredData = processedData;
+
+    console.log(`📊 Total PDUs to send (including maintenance): ${filteredData.length}`);
+
+    // Count unique racks
+    const uniqueRacks = new Set(filteredData.map(pdu => pdu.rackId)).size;
+    console.log(`📊 Unique racks (including maintenance): ${uniqueRacks}`);
+
+    // Manage active critical alerts in database (excluding maintenance racks from alerts)
+    const nonMaintenanceData = processedData.filter(pdu => {
       const isInMaintenance = maintenanceRackIds.has(pdu.rackId);
       return !isInMaintenance;
     });
-
-    const pdusFilteredOut = processedData.length - filteredData.length;
-    console.log(`📊 Maintenance filter: ${processedData.length} PDUs → ${filteredData.length} PDUs (${pdusFilteredOut} filtered out)`);
-
-    // Count unique racks after filtering
-    const uniqueRacksAfterFilter = new Set(filteredData.map(pdu => pdu.rackId)).size;
-    console.log(`📊 Unique racks after maintenance filter: ${uniqueRacksAfterFilter}`);
-
-    // Manage active critical alerts in database (only for non-maintenance racks)
-    await manageActiveCriticalAlerts(filteredData, thresholds);
+    await manageActiveCriticalAlerts(nonMaintenanceData, thresholds);
 
     // Agrupar por rackId para formar grupos
     const rackGroups = [];
