@@ -69,44 +69,31 @@ function App() {
 
   const filteredRackGroups = React.useMemo(() => {
     const rackGroups: RackData[][] = [];
-    let filteredOutCount = 0;
-    let checkedCount = 0;
+    let maintenanceCount = 0;
 
     Object.values(groupedRacks).forEach(siteGroups => {
       Object.values(siteGroups).forEach(dcGroups => {
         Object.values(dcGroups).forEach(logicalGroups => {
-          if (activeView === 'alertas') {
-            const nonMaintenanceGroups = logicalGroups.filter(group => {
-              checkedCount++;
-              const rackId = String(group[0]?.rackId || '').trim();
-              const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+          logicalGroups.forEach(group => {
+            const rackId = String(group[0]?.rackId || '').trim();
+            const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
-              if (isInMaintenance) {
-                filteredOutCount++;
-                if (filteredOutCount <= 5) {
-                  console.log(`🔵 [Alertas] Filtering out rack in maintenance: rackId="${rackId}"`);
-                }
+            if (isInMaintenance) {
+              maintenanceCount++;
+              if (maintenanceCount <= 5) {
+                console.log(`🔵 [${activeView}] Rack en mantenimiento encontrado: "${group[0]?.name}" (rackId="${rackId}")`);
               }
-
-              return !isInMaintenance;
-            });
-            rackGroups.push(...nonMaintenanceGroups);
-          } else {
-            rackGroups.push(...logicalGroups);
-          }
+            }
+          });
+          rackGroups.push(...logicalGroups);
         });
       });
     });
 
-    if (activeView === 'alertas') {
-      console.log(`\n🔍 FILTRADO DE RACKS EN MANTENIMIENTO (Vista Alertas):`);
-      console.log(`   Racks verificados: ${checkedCount}`);
-      console.log(`   Racks filtrados (en mantenimiento): ${filteredOutCount}`);
-      console.log(`   Racks en Set de mantenimiento: ${maintenanceRacks.size}`);
-      if (maintenanceRacks.size > 0) {
-        console.log(`   IDs en el Set (primeros 10): [${Array.from(maintenanceRacks).slice(0, 10).join(', ')}]`);
-      }
-    }
+    console.log(`\n🔍 RESUMEN DE RACKS (Vista ${activeView}):`);
+    console.log(`   Total de grupos de racks: ${rackGroups.length}`);
+    console.log(`   Racks en mantenimiento detectados: ${maintenanceCount}`);
+    console.log(`   Racks en Set de mantenimiento: ${maintenanceRacks.size}`);
 
     return rackGroups;
   }, [groupedRacks, activeView, maintenanceRacks]);

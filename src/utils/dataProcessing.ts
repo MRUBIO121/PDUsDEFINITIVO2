@@ -223,13 +223,26 @@ export function filterRacks(
     }
     // If statusFilter is 'all', show all racks (no status filtering)
   } else {
-    // In "Alertas" mode: only show PDUs that have alerts (critical or warning status)
-    // Never show PDUs with normal status in alerts view
-    filteredRacks = filteredRacks.filter(rack => rack.status === 'critical' || rack.status === 'warning');
+    // In "Alertas" mode: show PDUs with alerts OR in maintenance
+    filteredRacks = filteredRacks.filter(rack => {
+      const rackId = String(rack.rackId || '').trim();
+      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
-    // Filter out zero amperage alerts if the toggle is disabled
+      // Show if: has alerts (critical/warning) OR is in maintenance
+      return rack.status === 'critical' || rack.status === 'warning' || isInMaintenance;
+    });
+
+    // Filter out zero amperage alerts if the toggle is disabled (but keep maintenance racks)
     if (!showZeroAmperageAlerts) {
       filteredRacks = filteredRacks.filter(rack => {
+        const rackId = String(rack.rackId || '').trim();
+        const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+
+        // Always keep maintenance racks
+        if (isInMaintenance) {
+          return true;
+        }
+
         // Keep racks that don't have critical_amperage_zero_reading as a reason
         // OR have other alert reasons in addition to critical_amperage_zero_reading
         if (!rack.reasons || rack.reasons.length === 0) {
@@ -244,26 +257,44 @@ export function filterRacks(
       });
     }
 
-    // Apply additional status filter if specified
+    // Apply additional status filter if specified (but keep maintenance racks)
     if (statusFilter !== 'all') {
-      filteredRacks = filteredRacks.filter(rack => rack.status === statusFilter);
+      filteredRacks = filteredRacks.filter(rack => {
+        const rackId = String(rack.rackId || '').trim();
+        const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+
+        // Always keep maintenance racks regardless of status filter
+        if (isInMaintenance) {
+          return true;
+        }
+
+        return rack.status === statusFilter;
+      });
     }
   }
   
   // Filter by specific metric type (only in Alertas mode and when statusFilter is not 'all')
   if (metricFilter !== 'all' && statusFilter !== 'all' && !showAllRacks) {
     filteredRacks = filteredRacks.filter(rack => {
+      const rackId = String(rack.rackId || '').trim();
+      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+
+      // Always keep maintenance racks regardless of metric filter
+      if (isInMaintenance) {
+        return true;
+      }
+
       if (!rack.reasons || rack.reasons.length === 0) {
         return false;
       }
-      
+
       // Check if the rack has alerts for the specific metric and status combination
       const hasSpecificMetricAlert = rack.reasons.some(reason => {
         const hasStatusMatch = reason.startsWith(`${statusFilter}_`);
         const hasMetricMatch = reason.includes(metricFilter);
         return hasStatusMatch && hasMetricMatch;
       });
-      
+
       return hasSpecificMetricAlert;
     });
   }
