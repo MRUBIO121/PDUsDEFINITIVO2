@@ -224,13 +224,34 @@ export function filterRacks(
     // If statusFilter is 'all', show all racks (no status filtering)
   } else {
     // In "Alertas" mode: show PDUs with alerts OR in maintenance
+    let maintenanceCount = 0;
+    let alertCount = 0;
+
     filteredRacks = filteredRacks.filter(rack => {
       const rackId = String(rack.rackId || '').trim();
       const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+      const hasAlert = rack.status === 'critical' || rack.status === 'warning';
+
+      if (isInMaintenance) {
+        maintenanceCount++;
+        if (maintenanceCount <= 5) {
+          console.log(`🔵 [filterRacks] Manteniendo rack en vista alertas: "${rack.name}" (rackId="${rackId}", status="${rack.status}")`);
+        }
+      }
+
+      if (hasAlert) {
+        alertCount++;
+      }
 
       // Show if: has alerts (critical/warning) OR is in maintenance
-      return rack.status === 'critical' || rack.status === 'warning' || isInMaintenance;
+      return hasAlert || isInMaintenance;
     });
+
+    console.log(`\n🔍 [filterRacks] FILTRADO VISTA ALERTAS:`);
+    console.log(`   Racks con alertas: ${alertCount}`);
+    console.log(`   Racks en mantenimiento incluidos: ${maintenanceCount}`);
+    console.log(`   Total racks en resultado: ${filteredRacks.length}`);
+    console.log(`   IDs en maintenanceRacks Set: ${maintenanceRacks.size}`);
 
     // Filter out zero amperage alerts if the toggle is disabled (but keep maintenance racks)
     if (!showZeroAmperageAlerts) {
