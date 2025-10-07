@@ -916,44 +916,60 @@ app.get('/api/racks/energy', async (req, res) => {
       console.log(`[${requestId}] ⚠️ NENG_SENSORS_API_URL not configured, skipping sensor data`);
     }
 
-    // Map and combine power and sensor data
-    const combinedData = allPowerData.map(powerItem => {
-      // Map power fields to expected format
-      const mapped = {
-        id: String(powerItem.id),
-        rackId: String(powerItem.rackId),
-        name: powerItem.rackName || powerItem.name,
-        country: 'España',
-        site: powerItem.site,
-        dc: powerItem.dc,
-        phase: powerItem.phase,
-        chain: String(powerItem.chain || ''),
-        node: String(powerItem.node || ''),
-        serial: powerItem.serial,
-        current: parseFloat(powerItem.totalAmps) || 0,
-        temperature: parseFloat(powerItem.avgVolts) || 0,
-        lastUpdated: powerItem.lastUpdate || new Date().toISOString()
-      };
+    // Map and combine power and sensor data, filtering out items without valid rackName
+    const combinedData = allPowerData
+      .filter(powerItem => {
+        // Filter out PDUs/Racks without valid rackName
+        const hasValidRackName = powerItem.rackName &&
+                                  String(powerItem.rackName).trim() !== '' &&
+                                  String(powerItem.rackName).trim() !== 'null' &&
+                                  String(powerItem.rackName).trim() !== 'undefined';
 
-      // Find matching sensor data by rackId
-      const matchingSensor = allSensorsData.find(sensor =>
-        String(sensor.rackId) === String(powerItem.rackId)
-      );
+        if (!hasValidRackName) {
+          console.log(`⚠️ Filtering out item ${powerItem.id} - missing or invalid rackName`);
+        }
 
-      if (matchingSensor) {
-        // Check for N/A before parsing temperature
-        mapped.sensorTemperature = (matchingSensor.temperature === 'N/A' || matchingSensor.temperature === null || matchingSensor.temperature === undefined)
-          ? 'N/A'
-          : (parseFloat(matchingSensor.temperature) || null);
+        return hasValidRackName;
+      })
+      .map(powerItem => {
+        // Map power fields to expected format
+        const mapped = {
+          id: String(powerItem.id),
+          rackId: String(powerItem.rackId),
+          name: powerItem.rackName || powerItem.name,
+          country: 'España',
+          site: powerItem.site,
+          dc: powerItem.dc,
+          phase: powerItem.phase,
+          chain: String(powerItem.chain || ''),
+          node: String(powerItem.node || ''),
+          serial: powerItem.serial,
+          current: parseFloat(powerItem.totalAmps) || 0,
+          temperature: parseFloat(powerItem.avgVolts) || 0,
+          lastUpdated: powerItem.lastUpdate || new Date().toISOString()
+        };
 
-        // Check for N/A before parsing humidity
-        mapped.sensorHumidity = (matchingSensor.humidity === 'N/A' || matchingSensor.humidity === null || matchingSensor.humidity === undefined)
-          ? 'N/A'
-          : (parseFloat(matchingSensor.humidity) || null);
-      }
+        // Find matching sensor data by rackId
+        const matchingSensor = allSensorsData.find(sensor =>
+          String(sensor.rackId) === String(powerItem.rackId)
+        );
 
-      return mapped;
-    });
+        if (matchingSensor) {
+          // Check for N/A before parsing temperature
+          mapped.sensorTemperature = (matchingSensor.temperature === 'N/A' || matchingSensor.temperature === null || matchingSensor.temperature === undefined)
+            ? 'N/A'
+            : (parseFloat(matchingSensor.temperature) || null);
+
+          // Check for N/A before parsing humidity
+          mapped.sensorHumidity = (matchingSensor.humidity === 'N/A' || matchingSensor.humidity === null || matchingSensor.humidity === undefined)
+            ? 'N/A'
+            : (parseFloat(matchingSensor.humidity) || null);
+        }
+
+        return mapped;
+      });
+
+    console.log(`📊 Power data filtered: ${allPowerData.length} items → ${combinedData.length} items with valid rackName`);
     
     if (combinedData.length === 0) {
       console.log(`[${requestId}] ⚠️ No data received from NENG API`);
@@ -1660,7 +1676,8 @@ app.post('/api/maintenance/chain', async (req, res) => {
     console.log(`\n========== ENVIANDO CHAIN A MANTENIMIENTO ==========`);
     console.log(`📋 Chain: "${sanitizedChain}" | DC: "${sanitizedDc}" | Site: "${site || 'Any'}"`);
 
-    const chainRacks = allPowerData.filter(rack => {
+    // First, filter by chain, dc, and site
+    let chainRacks = allPowerData.filter(rack => {
       const rackChain = String(rack.chain).trim();
       const rackDc = String(rack.dc).trim();
       const rackSite = String(rack.site || '').trim();
@@ -1676,7 +1693,24 @@ app.post('/api/maintenance/chain', async (req, res) => {
       return matches;
     });
 
-    console.log(`📊 PDUs filtrados del API: ${chainRacks.length}`);
+    console.log(`📊 PDUs filtrados por chain/dc/site: ${chainRacks.length}`);
+
+    // Then, filter out items without valid rackName
+    const beforeRackNameFilter = chainRacks.length;
+    chainRacks = chainRacks.filter(rack => {
+      const hasValidRackName = rack.rackName &&
+                                String(rack.rackName).trim() !== '' &&
+                                String(rack.rackName).trim() !== 'null' &&
+                                String(rack.rackName).trim() !== 'undefined';
+
+      if (!hasValidRackName) {
+        console.log(`⚠️ Filtering out item ${rack.id} from maintenance - missing or invalid rackName`);
+      }
+
+      return hasValidRackName;
+    });
+
+    console.log(`📊 PDUs después de filtrar rackName: ${chainRacks.length} (${beforeRackNameFilter - chainRacks.length} omitidos)`);
 
     // Show sample of what was found
     if (chainRacks.length > 0) {
