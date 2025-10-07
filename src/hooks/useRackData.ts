@@ -115,9 +115,9 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       if (flatRacks.length > 0) {
         console.log(`\n📦 RACKS CARGADOS DEL API:`);
         console.log(`   Total racks: ${flatRacks.length}`);
-        console.log(`   Primeros 5 rack IDs:`);
-        flatRacks.slice(0, 5).forEach((rack, i) => {
-          console.log(`      ${i + 1}. rackId="${rack.rackId}" (type: ${typeof rack.rackId})`);
+        console.log(`   Primeros 10 racks con AMBOS IDs (PDU ID y Rack ID):`);
+        flatRacks.slice(0, 10).forEach((rack, i) => {
+          console.log(`      ${i + 1}. name="${rack.name}" | id="${rack.id}" | rackId="${rack.rackId}" | chain="${rack.chain}"`);
         });
       }
 
@@ -175,7 +175,8 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         console.log(`\n✅ RESULTADO:`);
         console.log(`   Total registros en DB: ${totalRackDetails}`);
         console.log(`   Racks únicos (Set): ${maintenanceSet.size}`);
-        console.log(`   Primeros 5 IDs: [${Array.from(maintenanceSet).slice(0, 5).join(', ')}]`);
+        console.log(`   Todos los IDs en el Set de mantenimiento:`);
+        console.log(`   [${Array.from(maintenanceSet).join(', ')}]`);
         console.log(`================================================================\n`);
 
         setMaintenanceRacks(maintenanceSet);

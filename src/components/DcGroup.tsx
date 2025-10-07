@@ -207,12 +207,19 @@ export default function DcGroup({
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 px-3 pb-6">
           {rackGroups.map((rackGroup, index) => {
             // Always use CombinedRackCard to show all PDUs consistently
-            const overallStatus = rackGroup.some(r => r.status === 'critical') 
-              ? 'critical' 
-              : rackGroup.some(r => r.status === 'warning') 
-              ? 'warning' 
+            const overallStatus = rackGroup.some(r => r.status === 'critical')
+              ? 'critical'
+              : rackGroup.some(r => r.status === 'warning')
+              ? 'warning'
               : 'normal';
-            
+
+            // DEBUG: Log rack group before rendering
+            if (index === 0) {
+              console.log(`\n🎨 [DcGroup] Rendering DC: "${dc}" with ${rackGroups.length} rack groups`);
+              console.log(`   maintenanceRacks.size in DcGroup: ${maintenanceRacks.size}`);
+              console.log(`   Sample IDs from Set: [${Array.from(maintenanceRacks).slice(0, 5).join(', ')}]`);
+            }
+
             return (
               <CombinedRackCard
                 key={`combined-${rackGroup[0].rackId || rackGroup[0].id}-${index}`}

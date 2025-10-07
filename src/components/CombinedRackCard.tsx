@@ -127,9 +127,27 @@ export default function CombinedRackCard({
   const commonInfo = racks[0];
   const rackId = commonInfo.rackId || commonInfo.id;
 
+  // DEBUG: Log rack ID and maintenance check
+  console.log(`\n🔍 [CombinedRackCard] Checking maintenance status:`);
+  console.log(`   Rack Name: "${commonInfo.name}"`);
+  console.log(`   commonInfo.rackId: "${commonInfo.rackId}" (type: ${typeof commonInfo.rackId})`);
+  console.log(`   commonInfo.id: "${commonInfo.id}" (type: ${typeof commonInfo.id})`);
+  console.log(`   Calculated rackId: "${rackId}" (type: ${typeof rackId})`);
+  console.log(`   maintenanceRacks.size: ${maintenanceRacks.size}`);
+  console.log(`   First 10 IDs in Set: [${Array.from(maintenanceRacks).slice(0, 10).join(', ')}]`);
+  console.log(`   maintenanceRacks.has(rackId): ${maintenanceRacks.has(rackId)}`);
+  console.log(`   Checking ${racks.length} PDUs in this rack:`);
+  racks.forEach((rack, idx) => {
+    const hasById = maintenanceRacks.has(rack.id);
+    const hasByRackId = maintenanceRacks.has(rack.rackId || '');
+    console.log(`      PDU ${idx + 1}: id="${rack.id}", rackId="${rack.rackId}" | hasById=${hasById}, hasByRackId=${hasByRackId}`);
+  });
+
   // Check if any of the PDUs in this rack are in maintenance
   const isInMaintenance = maintenanceRacks.has(rackId) ||
     racks.some(rack => maintenanceRacks.has(rack.id) || maintenanceRacks.has(rack.rackId || ''));
+
+  console.log(`   ✅ Final isInMaintenance: ${isInMaintenance}`);
 
   return (
     <div className={`rounded-lg shadow hover:shadow-md transition-shadow bg-white ${
