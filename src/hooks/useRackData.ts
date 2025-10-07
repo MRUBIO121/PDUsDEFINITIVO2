@@ -110,7 +110,17 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
           rack.site = 'Cantabria';
         }
       });
-      
+
+      // Log sample rack IDs from fetched data
+      if (flatRacks.length > 0) {
+        console.log(`\n📦 RACKS CARGADOS DEL API:`);
+        console.log(`   Total racks: ${flatRacks.length}`);
+        console.log(`   Primeros 5 rack IDs:`);
+        flatRacks.slice(0, 5).forEach((rack, i) => {
+          console.log(`      ${i + 1}. rackId="${rack.rackId}" (type: ${typeof rack.rackId})`);
+        });
+      }
+
       setRacks(flatRacks);
     } catch (err) {
       console.error('Error fetching racks:', err);

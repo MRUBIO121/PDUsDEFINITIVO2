@@ -71,6 +71,9 @@ function App() {
   // Flatten groupedRacks to get all rack groups (filtered by current view/filters)
   const filteredRackGroups = React.useMemo(() => {
     const rackGroups: RackData[][] = [];
+    let filteredOutCount = 0;
+    let checkedCount = 0;
+
     Object.values(groupedRacks).forEach(siteGroups => {
       Object.values(siteGroups).forEach(dcGroups => {
         Object.values(dcGroups).forEach(logicalGroups => {
@@ -78,8 +81,18 @@ function App() {
           // In principal view: show all racks including maintenance (displayed in blue)
           if (activeView === 'alertas') {
             const nonMaintenanceGroups = logicalGroups.filter(group => {
+              checkedCount++;
               const rackId = group[0]?.rackId || group[0]?.id;
-              return !maintenanceRacks.has(rackId);
+              const isInMaintenance = maintenanceRacks.has(rackId);
+
+              if (isInMaintenance) {
+                filteredOutCount++;
+                if (filteredOutCount <= 3) {
+                  console.log(`🔵 Filtering out rack in maintenance: rackId="${rackId}" (type: ${typeof rackId})`);
+                }
+              }
+
+              return !isInMaintenance;
             });
             rackGroups.push(...nonMaintenanceGroups);
           } else {
@@ -89,6 +102,14 @@ function App() {
         });
       });
     });
+
+    if (activeView === 'alertas' && checkedCount > 0) {
+      console.log(`\n🔍 FILTRADO DE RACKS EN MANTENIMIENTO (Vista Alertas):`);
+      console.log(`   Racks verificados: ${checkedCount}`);
+      console.log(`   Racks filtrados (en mantenimiento): ${filteredOutCount}`);
+      console.log(`   Racks en Set de mantenimiento: ${maintenanceRacks.size}`);
+    }
+
     return rackGroups;
   }, [groupedRacks, activeView, maintenanceRacks]);
 

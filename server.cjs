@@ -1390,6 +1390,9 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
 
 // Get all maintenance entries with their racks
 app.get('/api/maintenance', async (req, res) => {
+  const requestId = `GET_MAINT_${Date.now()}`;
+  console.log(`\n[${requestId}] 📥 GET /api/maintenance - Request received`);
+
   try {
     const results = await executeQuery(async (pool) => {
       // Get all maintenance entries
@@ -1434,11 +1437,29 @@ app.get('/api/maintenance', async (req, res) => {
 
     const { entries, details } = results;
 
+    console.log(`[${requestId}] 📊 DB Query Results:`);
+    console.log(`   Entries found: ${entries.length}`);
+    console.log(`   Details found: ${details.length}`);
+
+    if (details.length > 0) {
+      console.log(`   Sample rack_id values (first 5):`);
+      details.slice(0, 5).forEach((d, i) => {
+        console.log(`      ${i + 1}. rack_id="${d.rack_id}" (type: ${typeof d.rack_id}, name: "${d.name}")`);
+      });
+    }
+
     // Map details to their entries
     const maintenanceData = entries.map(entry => ({
       ...entry,
       racks: details.filter(d => d.maintenance_entry_id === entry.id)
     }));
+
+    console.log(`[${requestId}] 📤 Sending response with ${maintenanceData.length} entries`);
+
+    if (maintenanceData.length > 0 && maintenanceData[0].racks && maintenanceData[0].racks.length > 0) {
+      console.log(`   First entry has ${maintenanceData[0].racks.length} racks`);
+      console.log(`   Sample rack from first entry: rack_id="${maintenanceData[0].racks[0].rack_id}"`);
+    }
 
     res.json({
       success: true,
