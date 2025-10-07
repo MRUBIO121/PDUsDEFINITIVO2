@@ -1619,6 +1619,10 @@ app.post('/api/maintenance/rack', async (req, res) => {
 
 // Add all racks from a chain to maintenance
 app.post('/api/maintenance/chain', async (req, res) => {
+  const requestId = `CHAIN_MAINT_${Date.now()}`;
+  console.log(`\n[${requestId}] 📥 POST /api/maintenance/chain - Request received`);
+  console.log(`[${requestId}] 📋 Body:`, JSON.stringify(req.body, null, 2));
+
   try {
     const {
       chain,
@@ -1629,6 +1633,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
     } = req.body;
 
     if (!chain || !dc) {
+      console.log(`[${requestId}] ❌ Validation failed: missing chain or dc`);
       return res.status(400).json({
         success: false,
         message: 'chain and dc are required',
@@ -1892,6 +1897,8 @@ app.post('/api/maintenance/chain', async (req, res) => {
     const successMessage = `Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance`;
     logger.info(`${successMessage} (${result.insertedCount}/${uniqueRacks.length} racks)`);
 
+    console.log(`[${requestId}] ✅ Sending success response...`);
+
     res.json({
       success: true,
       message: `${successMessage}: ${result.insertedCount} racks added successfully${result.failedCount > 0 ? `, ${result.failedCount} skipped (already in maintenance)` : ''}`,
@@ -1907,9 +1914,13 @@ app.post('/api/maintenance/chain', async (req, res) => {
       timestamp: new Date().toISOString()
     });
 
+    console.log(`[${requestId}] ✅ Response sent successfully`);
+
   } catch (error) {
-    console.error('❌ Error adding chain to maintenance:', error);
-    logger.error('Add chain to maintenance failed', { error: error.message, body: req.body });
+    console.error(`[${requestId}] ❌ Error adding chain to maintenance:`, error);
+    logger.error('Add chain to maintenance failed', { error: error.message, stack: error.stack, body: req.body });
+
+    console.log(`[${requestId}] ❌ Sending error response...`);
 
     res.status(500).json({
       success: false,
@@ -2293,6 +2304,9 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use('*', (req, res) => {
+  console.warn(`⚠️ 404 - Route not found: ${req.method} ${req.originalUrl}`);
+  console.warn(`   Headers:`, req.headers);
+  console.warn(`   Body:`, req.body);
   res.status(404).json({
     success: false,
     message: `Route ${req.method} ${req.originalUrl} not found`,
@@ -2307,6 +2321,11 @@ const server = app.listen(port, () => {
   console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
   logger.info(`Server started on port ${port}`);
 });
+
+// Set server timeout to 5 minutes (for long-running operations like chain maintenance)
+server.timeout = 300000;
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
 
 // Graceful shutdown
 async function gracefulShutdown(signal) {
