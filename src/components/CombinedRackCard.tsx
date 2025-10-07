@@ -125,8 +125,11 @@ export default function CombinedRackCard({
 
   const commonInfo = racks[0];
   const rackId = String(commonInfo.rackId || '').trim();
-
   const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+
+  if (isInMaintenance) {
+    console.log(`🔵 [CombinedRackCard] Rack EN MANTENIMIENTO detectado: "${commonInfo.name}" (rackId: "${rackId}")`);
+  }
 
   return (
     <div className={`rounded-lg shadow hover:shadow-md transition-shadow bg-white ${

@@ -1437,15 +1437,41 @@ app.get('/api/maintenance', async (req, res) => {
 
     const { entries, details } = results;
 
-    console.log(`[${requestId}] 📊 DB Query Results:`);
-    console.log(`   Entries found: ${entries.length}`);
-    console.log(`   Details found: ${details.length}`);
+    console.log(`\n========== CONSULTA DE MANTENIMIENTO (SQL Server) ==========`);
+    console.log(`[${requestId}] 📊 Resultados de la Base de Datos:`);
+    console.log(`   ✅ Entradas encontradas: ${entries.length}`);
+    console.log(`   ✅ Detalles de racks encontrados: ${details.length}`);
+
+    if (entries.length > 0) {
+      console.log(`\n📋 ENTRADAS DE MANTENIMIENTO:`);
+      entries.forEach((entry, i) => {
+        console.log(`\n   Entrada ${i + 1}:`);
+        console.log(`      Tipo: ${entry.entry_type}`);
+        console.log(`      Rack ID: "${entry.rack_id || 'N/A'}"`);
+        console.log(`      Chain: "${entry.chain || 'N/A'}"`);
+        console.log(`      Site: "${entry.site || 'N/A'}"`);
+        console.log(`      DC: "${entry.dc}"`);
+        console.log(`      Razón: "${entry.reason}"`);
+        console.log(`      Iniciado: ${entry.started_at}`);
+      });
+    }
 
     if (details.length > 0) {
-      console.log(`   Sample rack_id values (first 5):`);
-      details.slice(0, 5).forEach((d, i) => {
-        console.log(`      ${i + 1}. rack_id="${d.rack_id}" (type: ${typeof d.rack_id}, name: "${d.name}")`);
+      console.log(`\n📦 DETALLES DE RACKS EN MANTENIMIENTO:`);
+      const uniqueRackIds = new Set();
+      details.forEach((d, i) => {
+        const rackIdStr = String(d.rack_id || '').trim();
+        uniqueRackIds.add(rackIdStr);
+        if (i < 10) {
+          console.log(`   ${i + 1}. rack_id="${d.rack_id}" (type: ${typeof d.rack_id})`);
+          console.log(`      Name: "${d.name}"`);
+          console.log(`      Chain: "${d.chain}"`);
+          console.log(`      DC: "${d.dc}"`);
+        }
       });
+      console.log(`\n   🔢 Total de rack_id únicos en mantenimiento: ${uniqueRackIds.size}`);
+      console.log(`   📋 Lista de todos los rack_id únicos:`);
+      console.log(`   [${Array.from(uniqueRackIds).join(', ')}]`);
     }
 
     // Map details to their entries
@@ -1454,12 +1480,8 @@ app.get('/api/maintenance', async (req, res) => {
       racks: details.filter(d => d.maintenance_entry_id === entry.id)
     }));
 
-    console.log(`[${requestId}] 📤 Sending response with ${maintenanceData.length} entries`);
-
-    if (maintenanceData.length > 0 && maintenanceData[0].racks && maintenanceData[0].racks.length > 0) {
-      console.log(`   First entry has ${maintenanceData[0].racks.length} racks`);
-      console.log(`   Sample rack from first entry: rack_id="${maintenanceData[0].racks[0].rack_id}"`);
-    }
+    console.log(`\n[${requestId}] 📤 Enviando respuesta con ${maintenanceData.length} entradas`);
+    console.log(`============================================================\n`);
 
     res.json({
       success: true,
@@ -1474,7 +1496,7 @@ app.get('/api/maintenance', async (req, res) => {
     console.error('❌ Error fetching maintenance entries:', error);
     logger.error('Maintenance entries fetch failed', { error: error.message });
 
-    res.status(500).json({
+    res.json({
       success: false,
       message: 'Failed to fetch maintenance entries',
       error: error.message,

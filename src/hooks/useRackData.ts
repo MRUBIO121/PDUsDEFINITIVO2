@@ -111,14 +111,30 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         }
       });
 
-      // Log sample rack IDs from fetched data
       if (flatRacks.length > 0) {
         console.log(`\n📦 RACKS CARGADOS DEL API:`);
-        console.log(`   Total racks: ${flatRacks.length}`);
-        console.log(`   Primeros 10 racks con AMBOS IDs (PDU ID y Rack ID):`);
-        flatRacks.slice(0, 10).forEach((rack, i) => {
-          console.log(`      ${i + 1}. name="${rack.name}" | id="${rack.id}" | rackId="${rack.rackId}" | chain="${rack.chain}"`);
+        console.log(`   Total PDUs: ${flatRacks.length}`);
+
+        const uniqueRackIds = new Set<string>();
+        flatRacks.forEach(rack => {
+          const rackId = String(rack.rackId || '').trim();
+          if (rackId) {
+            uniqueRackIds.add(rackId);
+          }
         });
+
+        console.log(`   Total rack_id únicos: ${uniqueRackIds.size}`);
+        console.log(`   Primeros 10 racks con sus IDs:`);
+        flatRacks.slice(0, 10).forEach((rack, i) => {
+          console.log(`      ${i + 1}. name="${rack.name}"`);
+          console.log(`         id="${rack.id}" (PDU ID)`);
+          console.log(`         rackId="${rack.rackId}" (Rack ID físico)`);
+          console.log(`         chain="${rack.chain}"`);
+          console.log(`         dc="${rack.dc}"`);
+        });
+
+        console.log(`\n   📋 Todos los rack_id únicos (primeros 20):`);
+        console.log(`   [${Array.from(uniqueRackIds).slice(0, 20).join(', ')}]${uniqueRackIds.size > 20 ? '...' : ''}`);
       }
 
       setRacks(flatRacks);
@@ -176,8 +192,21 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         console.log(`\n✅ RESULTADO:`);
         console.log(`   Total registros en DB: ${totalRackDetails}`);
         console.log(`   Racks únicos (Set): ${maintenanceSet.size}`);
-        console.log(`   Todos los IDs en el Set de mantenimiento:`);
-        console.log(`   [${Array.from(maintenanceSet).slice(0, 20).join(', ')}]${maintenanceSet.size > 20 ? '...' : ''}`);
+
+        if (maintenanceSet.size > 0) {
+          console.log(`\n   📋 Todos los IDs en el Set de mantenimiento:`);
+          const maintenanceArray = Array.from(maintenanceSet);
+          maintenanceArray.forEach((id, idx) => {
+            if (idx < 20) {
+              console.log(`      ${idx + 1}. "${id}" (length: ${id.length}, type: ${typeof id})`);
+            }
+          });
+          if (maintenanceSet.size > 20) {
+            console.log(`      ... y ${maintenanceSet.size - 20} más`);
+          }
+        } else {
+          console.log(`   ⚠️ NO HAY RACKS EN MANTENIMIENTO EN LA BASE DE DATOS`);
+        }
         console.log(`================================================================\n`);
 
         setMaintenanceRacks(maintenanceSet);
