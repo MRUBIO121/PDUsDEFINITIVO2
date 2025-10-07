@@ -2160,6 +2160,74 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
   }
 });
 
+// Remove ALL maintenance entries and racks
+app.delete('/api/maintenance/all', async (req, res) => {
+  const requestId = crypto.randomUUID().slice(0, 8);
+  console.log(`\n[${requestId}] 📥 DELETE /api/maintenance/all - Request received`);
+
+  try {
+    const result = await executeQuery(async (pool) => {
+      // Get count before deletion
+      const countResult = await pool.request().query(`
+        SELECT
+          (SELECT COUNT(*) FROM maintenance_entries) as entry_count,
+          (SELECT COUNT(*) FROM maintenance_rack_details) as rack_count
+      `);
+
+      const { entry_count, rack_count } = countResult.recordset[0];
+
+      if (entry_count === 0) {
+        return { entry_count: 0, rack_count: 0, deleted: false };
+      }
+
+      // Delete all rack details first (foreign key constraint)
+      await pool.request().query(`DELETE FROM maintenance_rack_details`);
+
+      // Delete all maintenance entries
+      await pool.request().query(`DELETE FROM maintenance_entries`);
+
+      console.log(`[${requestId}] ✅ Deleted ${entry_count} entries and ${rack_count} racks from maintenance`);
+
+      return { entry_count, rack_count, deleted: true };
+    });
+
+    if (!result.deleted) {
+      return res.status(404).json({
+        success: false,
+        message: 'No maintenance entries to remove',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    logger.info('All maintenance entries removed', {
+      requestId,
+      entry_count: result.entry_count,
+      rack_count: result.rack_count
+    });
+
+    res.json({
+      success: true,
+      message: `All maintenance entries removed (${result.entry_count} entries, ${result.rack_count} racks)`,
+      data: {
+        entriesRemoved: result.entry_count,
+        racksRemoved: result.rack_count
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error(`[${requestId}] ❌ Error removing all maintenance entries:`, error);
+    logger.error('Remove all maintenance entries failed', { error: error.message, stack: error.stack });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove all maintenance entries',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Configure multer for file uploads
 const upload = multer({
   storage: multer.memoryStorage(),

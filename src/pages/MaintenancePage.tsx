@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2, ChevronDown, ChevronUp, Upload } from 'lucide-react';
+import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2, ChevronDown, ChevronUp, Upload, XCircle } from 'lucide-react';
 import ImportMaintenanceModal from '../components/ImportMaintenanceModal';
 
 interface RackDetail {
@@ -35,6 +35,7 @@ export default function MaintenancePage() {
   const [error, setError] = useState<string | null>(null);
   const [removingEntryId, setRemovingEntryId] = useState<string | null>(null);
   const [removingRackId, setRemovingRackId] = useState<string | null>(null);
+  const [removingAll, setRemovingAll] = useState(false);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
@@ -166,6 +167,52 @@ export default function MaintenancePage() {
     }
   };
 
+  const handleRemoveAll = async () => {
+    if (maintenanceEntries.length === 0) {
+      return;
+    }
+
+    const confirmMessage = `¿Estás COMPLETAMENTE SEGURO de que quieres sacar TODOS los ${totalRacks} racks de mantenimiento?\n\nEsta acción eliminará ${maintenanceEntries.length} ${maintenanceEntries.length === 1 ? 'entrada' : 'entradas'} de mantenimiento y no se puede deshacer.`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // Double confirmation for safety
+    if (!confirm('Última confirmación: ¿Realmente deseas eliminar TODAS las entradas de mantenimiento?')) {
+      return;
+    }
+
+    try {
+      setRemovingAll(true);
+
+      const response = await fetch('/api/maintenance/all', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to remove all maintenance entries');
+      }
+
+      alert(`✅ ${data.data.entriesRemoved} entradas de mantenimiento eliminadas (${data.data.racksRemoved} racks)`);
+      await fetchMaintenanceEntries();
+    } catch (err) {
+      console.error('Error removing all maintenance entries:', err);
+      alert(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setRemovingAll(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">
@@ -214,13 +261,35 @@ export default function MaintenancePage() {
               <Wrench className="w-8 h-8 text-amber-600" />
               <h1 className="text-3xl font-bold text-slate-900">Modo Mantenimiento</h1>
             </div>
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-            >
-              <Upload className="w-5 h-5" />
-              Importar desde Excel
-            </button>
+            <div className="flex items-center gap-3">
+              {maintenanceEntries.length > 0 && (
+                <button
+                  onClick={handleRemoveAll}
+                  disabled={removingAll}
+                  className="bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Sacar todos los racks de mantenimiento"
+                >
+                  {removingAll ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-5 h-5" />
+                      Finalizar Todo
+                    </>
+                  )}
+                </button>
+              )}
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Upload className="w-5 h-5" />
+                Importar desde Excel
+              </button>
+            </div>
           </div>
           <p className="text-slate-600">
             Equipos actualmente en mantenimiento (no generan alertas)
