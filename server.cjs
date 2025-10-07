@@ -917,6 +917,8 @@ app.get('/api/racks/energy', async (req, res) => {
     }
 
     // Map and combine power and sensor data, filtering out items without valid rackName
+    const itemsWithoutRackName = [];
+
     const combinedData = allPowerData
       .filter(powerItem => {
         // Filter out PDUs/Racks without valid rackName
@@ -926,7 +928,7 @@ app.get('/api/racks/energy', async (req, res) => {
                                   String(powerItem.rackName).trim() !== 'undefined';
 
         if (!hasValidRackName) {
-          console.log(`⚠️ Filtering out item ${powerItem.id} - missing or invalid rackName`);
+          itemsWithoutRackName.push(powerItem);
         }
 
         return hasValidRackName;
@@ -969,7 +971,17 @@ app.get('/api/racks/energy', async (req, res) => {
         return mapped;
       });
 
-    console.log(`📊 Power data filtered: ${allPowerData.length} items → ${combinedData.length} items with valid rackName`);
+    // Log detailed statistics about filtered items
+    if (itemsWithoutRackName.length > 0) {
+      const uniqueRacksFiltered = new Set(itemsWithoutRackName.map(item => String(item.rackId))).size;
+      console.log(`\n⚠️ ============ OMITIDOS POR FALTA DE RACKNAME ============`);
+      console.log(`❌ PDUs omitidos: ${itemsWithoutRackName.length}`);
+      console.log(`❌ Racks únicos omitidos: ${uniqueRacksFiltered}`);
+      console.log(`📋 Primeros 5 PDUs omitidos: ${itemsWithoutRackName.slice(0, 5).map(item => `${item.id} (rack: ${item.rackId})`).join(', ')}`);
+      console.log(`==========================================================\n`);
+    }
+
+    console.log(`📊 Power data filtered: ${allPowerData.length} PDUs → ${combinedData.length} PDUs con rackName válido`);
     
     if (combinedData.length === 0) {
       console.log(`[${requestId}] ⚠️ No data received from NENG API`);
@@ -1697,6 +1709,8 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     // Then, filter out items without valid rackName
     const beforeRackNameFilter = chainRacks.length;
+    const maintenanceItemsWithoutRackName = [];
+
     chainRacks = chainRacks.filter(rack => {
       const hasValidRackName = rack.rackName &&
                                 String(rack.rackName).trim() !== '' &&
@@ -1704,13 +1718,23 @@ app.post('/api/maintenance/chain', async (req, res) => {
                                 String(rack.rackName).trim() !== 'undefined';
 
       if (!hasValidRackName) {
-        console.log(`⚠️ Filtering out item ${rack.id} from maintenance - missing or invalid rackName`);
+        maintenanceItemsWithoutRackName.push(rack);
       }
 
       return hasValidRackName;
     });
 
-    console.log(`📊 PDUs después de filtrar rackName: ${chainRacks.length} (${beforeRackNameFilter - chainRacks.length} omitidos)`);
+    // Log detailed statistics about filtered items in maintenance
+    if (maintenanceItemsWithoutRackName.length > 0) {
+      const uniqueRacksFiltered = new Set(maintenanceItemsWithoutRackName.map(item => String(item.rackId))).size;
+      console.log(`\n⚠️ ============ OMITIDOS DE MANTENIMIENTO POR FALTA DE RACKNAME ============`);
+      console.log(`❌ PDUs omitidos: ${maintenanceItemsWithoutRackName.length}`);
+      console.log(`❌ Racks únicos omitidos: ${uniqueRacksFiltered}`);
+      console.log(`📋 Primeros 5 PDUs omitidos: ${maintenanceItemsWithoutRackName.slice(0, 5).map(item => `${item.id} (rack: ${item.rackId})`).join(', ')}`);
+      console.log(`=============================================================================\n`);
+    }
+
+    console.log(`📊 PDUs después de filtrar rackName: ${chainRacks.length} (${beforeRackNameFilter - chainRacks.length} PDUs omitidos)`);
 
     // Show sample of what was found
     if (chainRacks.length > 0) {
