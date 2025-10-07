@@ -1644,16 +1644,22 @@ app.post('/api/maintenance/chain', async (req, res) => {
       }
     }
 
-    // Filter racks that belong to this chain in the specified datacenter
+    // Filter racks that belong to this chain in the specified datacenter and site
     console.log(`\n========== ENVIANDO CHAIN A MANTENIMIENTO ==========`);
-    console.log(`📋 Chain: "${sanitizedChain}" | DC: "${sanitizedDc}"`);
+    console.log(`📋 Chain: "${sanitizedChain}" | DC: "${sanitizedDc}" | Site: "${site || 'Any'}"`);
 
     const chainRacks = allPowerData.filter(rack => {
       const rackChain = String(rack.chain).trim();
       const rackDc = String(rack.dc).trim();
+      const rackSite = String(rack.site || '').trim();
+
       const chainMatch = rackChain === sanitizedChain;
       const dcMatch = rackDc === sanitizedDc;
-      const matches = chainMatch && dcMatch;
+
+      // If site is specified, match it; otherwise match any site
+      const siteMatch = !site || site === 'Unknown' || rackSite === site;
+
+      const matches = chainMatch && dcMatch && siteMatch;
 
       return matches;
     });
@@ -1667,6 +1673,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
       console.log(`   - rackId: ${chainRacks[0].rackId}`);
       console.log(`   - chain: ${chainRacks[0].chain}`);
       console.log(`   - dc: ${chainRacks[0].dc}`);
+      console.log(`   - site: ${chainRacks[0].site}`);
     }
 
     if (chainRacks.length === 0) {
@@ -1681,6 +1688,9 @@ app.post('/api/maintenance/chain', async (req, res) => {
     const rackMap = new Map();
     console.log(`\n🔄 Agrupando PDUs por rackId físico...`);
 
+    // Track PDU count per rack for debugging
+    const pduCountPerRack = new Map();
+
     chainRacks.forEach((rack, index) => {
       // Sanitize and validate rack ID
       let rackId = null;
@@ -1692,11 +1702,16 @@ app.post('/api/maintenance/chain', async (req, res) => {
       }
 
       // Debug first few entries
-      if (index < 3) {
-        console.log(`   PDU #${index + 1}: id="${rack.id}" → rackId="${rackId}"`);
+      if (index < 5) {
+        console.log(`   PDU #${index + 1}: id="${rack.id}" | rackId="${rackId}" | chain="${rack.chain}" | dc="${rack.dc}" | site="${rack.site}"`);
       }
 
-      // Only add racks with valid IDs
+      // Track PDU count per rack
+      if (rackId) {
+        pduCountPerRack.set(rackId, (pduCountPerRack.get(rackId) || 0) + 1);
+      }
+
+      // Only add racks with valid IDs (first occurrence wins)
       if (rackId && !rackMap.has(rackId)) {
         rackMap.set(rackId, { ...rack, sanitizedRackId: rackId });
       }
@@ -1707,6 +1722,15 @@ app.post('/api/maintenance/chain', async (req, res) => {
     console.log(`\n✅ Resultado del agrupamiento:`);
     console.log(`   ${chainRacks.length} PDUs → ${uniqueRacks.length} racks físicos únicos`);
     console.log(`   Racks únicos: [${Array.from(rackMap.keys()).slice(0, 5).join(', ')}${rackMap.size > 5 ? '...' : ''}]`);
+
+    // Show racks with multiple PDUs
+    const racksWithMultiplePDUs = Array.from(pduCountPerRack.entries()).filter(([rackId, count]) => count > 1);
+    if (racksWithMultiplePDUs.length > 0) {
+      console.log(`\n📊 Racks con múltiples PDUs (primeros 5):`);
+      racksWithMultiplePDUs.slice(0, 5).forEach(([rackId, count]) => {
+        console.log(`   - Rack ${rackId}: ${count} PDUs`);
+      });
+    }
 
     if (uniqueRacks.length === 0) {
       return res.status(400).json({

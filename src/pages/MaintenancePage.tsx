@@ -194,7 +194,14 @@ export default function MaintenancePage() {
     );
   }
 
-  const totalRacks = maintenanceEntries.reduce((sum, entry) => sum + entry.racks.length, 0);
+  // Count unique racks across all maintenance entries
+  const uniqueRackIds = new Set<string>();
+  maintenanceEntries.forEach(entry => {
+    entry.racks.forEach(rack => {
+      uniqueRackIds.add(rack.rack_id);
+    });
+  });
+  const totalRacks = uniqueRackIds.size;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">

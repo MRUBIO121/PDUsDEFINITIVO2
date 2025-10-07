@@ -466,7 +466,7 @@ function App() {
   };
 
   const handleSendChainToMaintenance = async (chain: string, site: string, dc: string, rackData?: any) => {
-    const reason = prompt(`¿Por qué se está enviando el chain "${chain}" del DC "${dc}" a mantenimiento?\n\nNOTA: Se enviarán TODOS los racks con chain "${chain}" en el datacenter "${dc}".`, 'Mantenimiento programado');
+    const reason = prompt(`¿Por qué se está enviando el chain "${chain}" del DC "${dc}" (Site: ${site}) a mantenimiento?\n\nNOTA: Se enviarán TODOS los racks únicos con chain "${chain}" en el datacenter "${dc}" y sitio "${site}".`, 'Mantenimiento programado');
 
     if (reason === null) {
       return;
@@ -480,6 +480,7 @@ function App() {
         },
         body: JSON.stringify({
           chain,
+          site,
           dc,
           rackData,
           reason: reason || 'Mantenimiento programado',
@@ -499,12 +500,13 @@ function App() {
 
       const { racksAdded, racksFailed, totalRacks, totalPdusFiltered } = data.data;
       let message = `Chain "${chain}" del DC "${dc}" enviado a mantenimiento.\n\n`;
-      message += `✅ ${racksAdded} racks añadidos exitosamente`;
+      message += `✅ ${racksAdded} racks únicos añadidos exitosamente`;
       if (racksFailed > 0) {
         message += `\n⚠️ ${racksFailed} racks ya estaban en mantenimiento (omitidos)`;
       }
+      message += `\n\n📊 Total de racks únicos procesados: ${totalRacks}`;
       if (totalPdusFiltered && totalPdusFiltered !== totalRacks) {
-        message += `\n\n📊 Detalles: ${totalPdusFiltered} PDUs filtrados → ${totalRacks} racks físicos únicos`;
+        message += `\n📌 Nota: Se filtraron ${totalPdusFiltered} PDUs que pertenecen a estos ${totalRacks} racks físicos`;
       }
 
       alert(message);
