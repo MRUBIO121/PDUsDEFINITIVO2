@@ -570,7 +570,8 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
 
     // Get current critical PDUs with their reasons, excluding maintenance racks
     const currentCriticalPdus = allPdus.filter(pdu => {
-      const isInMaintenance = maintenanceRackIds.has(pdu.id) || maintenanceRackIds.has(pdu.logicalRackId);
+      // Check if this PDU's rack is in maintenance using rackId
+      const isInMaintenance = maintenanceRackIds.has(pdu.rackId);
       return pdu.status === 'critical' && pdu.reasons && pdu.reasons.length > 0 && !isInMaintenance;
     });
 
@@ -973,13 +974,24 @@ app.get('/api/racks/energy', async (req, res) => {
     // Get maintenance rack IDs to filter them out
     const maintenanceRackIds = await getMaintenanceRackIds();
 
-    // Filter out racks in maintenance mode
+    console.log(`🔧 Maintenance rack IDs count: ${maintenanceRackIds.size}`);
+    if (maintenanceRackIds.size > 0) {
+      console.log(`🔧 Sample maintenance racks: ${Array.from(maintenanceRackIds).slice(0, 3).join(', ')}${maintenanceRackIds.size > 3 ? '...' : ''}`);
+    }
+
+    // Filter out PDUs whose rack is in maintenance mode
     const filteredData = processedData.filter(pdu => {
-      const isInMaintenance = maintenanceRackIds.has(pdu.id) || maintenanceRackIds.has(pdu.logicalRackId);
+      // Check if this PDU's rack is in maintenance using rackId
+      const isInMaintenance = maintenanceRackIds.has(pdu.rackId);
       return !isInMaintenance;
     });
 
-    // Filtered out racks in maintenance mode
+    const pdusFilteredOut = processedData.length - filteredData.length;
+    console.log(`📊 Maintenance filter: ${processedData.length} PDUs → ${filteredData.length} PDUs (${pdusFilteredOut} filtered out)`);
+
+    // Count unique racks after filtering
+    const uniqueRacksAfterFilter = new Set(filteredData.map(pdu => pdu.rackId)).size;
+    console.log(`📊 Unique racks after maintenance filter: ${uniqueRacksAfterFilter}`);
 
     // Manage active critical alerts in database (only for non-maintenance racks)
     await manageActiveCriticalAlerts(filteredData, thresholds);
