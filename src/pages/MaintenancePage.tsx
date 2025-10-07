@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2, ChevronDown, ChevronUp, Upload } from 'lucide-react';
+import ImportMaintenanceModal from '../components/ImportMaintenanceModal';
 
 interface RackDetail {
   rack_id: string;
@@ -35,6 +36,7 @@ export default function MaintenancePage() {
   const [removingEntryId, setRemovingEntryId] = useState<string | null>(null);
   const [removingRackId, setRemovingRackId] = useState<string | null>(null);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const toggleExpanded = (entryId: string) => {
     setExpandedEntries(prev => {
@@ -207,9 +209,18 @@ export default function MaintenancePage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Wrench className="w-8 h-8 text-amber-600" />
-            <h1 className="text-3xl font-bold text-slate-900">Modo Mantenimiento</h1>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <Wrench className="w-8 h-8 text-amber-600" />
+              <h1 className="text-3xl font-bold text-slate-900">Modo Mantenimiento</h1>
+            </div>
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+            >
+              <Upload className="w-5 h-5" />
+              Importar desde Excel
+            </button>
           </div>
           <p className="text-slate-600">
             Equipos actualmente en mantenimiento (no generan alertas)
@@ -422,6 +433,14 @@ export default function MaintenancePage() {
             })}
           </div>
         )}
+
+        <ImportMaintenanceModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onImportComplete={() => {
+            fetchMaintenanceEntries();
+          }}
+        />
       </div>
     </div>
   );

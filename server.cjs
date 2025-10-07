@@ -8,6 +8,8 @@ const sql = require('mssql');
 const fs = require('fs');
 const path = require('path');
 const ExcelJS = require('exceljs');
+const multer = require('multer');
+const crypto = require('crypto');
 
 // Environment variables loaded from .env file
 
@@ -2158,6 +2160,275 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to remove maintenance entry',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+    ];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only Excel files (.xlsx, .xls) are allowed'));
+    }
+  }
+});
+
+// Endpoint to download template
+app.get('/api/maintenance/template', (req, res) => {
+  const filePath = path.join(__dirname, 'public', 'plantilla_mantenimiento.xlsx');
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({
+      success: false,
+      message: 'Template file not found',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  res.download(filePath, 'plantilla_mantenimiento_racks.xlsx', (err) => {
+    if (err) {
+      logger.error('Error downloading template:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Error downloading template',
+        error: err.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+});
+
+// Endpoint to import racks from Excel
+app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res) => {
+  const requestId = crypto.randomUUID();
+  console.log(`\n[${requestId}] 📥 POST /api/maintenance/import-excel - Request received`);
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const { startedBy = 'Sistema', defaultReason = 'Mantenimiento' } = req.body;
+
+    console.log(`[${requestId}] 📄 File received: ${req.file.originalname} (${req.file.size} bytes)`);
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+
+    const worksheet = workbook.getWorksheet('Datos');
+    if (!worksheet) {
+      return res.status(400).json({
+        success: false,
+        message: 'Excel file must contain a sheet named "Datos"',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const racks = [];
+    const errors = [];
+    const duplicatesInFile = new Set();
+    const rackIdsInFile = [];
+
+    let rowIndex = 0;
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+
+      rowIndex++;
+
+      const rackData = {
+        rack_id: row.getCell(1).value?.toString().trim() || '',
+        dc: row.getCell(2).value?.toString().trim() || '',
+        chain: row.getCell(3).value?.toString().trim() || null,
+        pdu_id: row.getCell(4).value?.toString().trim() || null,
+        name: row.getCell(5).value?.toString().trim() || null,
+        country: row.getCell(6).value?.toString().trim() || null,
+        site: row.getCell(7).value?.toString().trim() || null,
+        phase: row.getCell(8).value?.toString().trim() || null,
+        node: row.getCell(9).value?.toString().trim() || null,
+        serial: row.getCell(10).value?.toString().trim() || null,
+        reason: row.getCell(11).value?.toString().trim() || defaultReason
+      };
+
+      if (!rackData.rack_id && !rackData.dc) {
+        return;
+      }
+
+      if (!rackData.rack_id) {
+        errors.push({
+          row: rowNumber,
+          error: 'rack_id is required',
+          data: rackData
+        });
+        return;
+      }
+
+      if (!rackData.dc) {
+        errors.push({
+          row: rowNumber,
+          error: 'dc is required',
+          data: rackData
+        });
+        return;
+      }
+
+      if (rackIdsInFile.includes(rackData.rack_id)) {
+        duplicatesInFile.add(rackData.rack_id);
+        errors.push({
+          row: rowNumber,
+          error: `Duplicate rack_id in Excel: ${rackData.rack_id}`,
+          data: rackData
+        });
+        return;
+      }
+
+      rackIdsInFile.push(rackData.rack_id);
+      racks.push({ ...rackData, rowNumber });
+    });
+
+    console.log(`[${requestId}] 📊 Parsed ${racks.length} racks from Excel, ${errors.length} errors found`);
+
+    if (racks.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid racks found in Excel file',
+        errors,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await executeQuery(async (pool) => {
+      const alreadyInMaintenance = [];
+      const successfulInserts = [];
+      const failedInserts = [];
+
+      for (const rack of racks) {
+        try {
+          const existingCheck = await pool.request()
+            .input('rack_id', sql.NVarChar, rack.rack_id)
+            .query(`
+              SELECT COUNT(*) as count
+              FROM maintenance_rack_details
+              WHERE rack_id = @rack_id
+            `);
+
+          if (existingCheck.recordset[0].count > 0) {
+            alreadyInMaintenance.push({
+              row: rack.rowNumber,
+              rack_id: rack.rack_id,
+              message: 'Already in maintenance'
+            });
+            continue;
+          }
+
+          const entryId = crypto.randomUUID();
+
+          await pool.request()
+            .input('entry_id', sql.UniqueIdentifier, entryId)
+            .input('entry_type', sql.NVarChar, 'individual_rack')
+            .input('rack_id', sql.NVarChar, rack.rack_id)
+            .input('chain', sql.NVarChar, rack.chain || 'Unknown')
+            .input('site', sql.NVarChar, rack.site || 'Unknown')
+            .input('dc', sql.NVarChar, rack.dc)
+            .input('reason', sql.NVarChar, rack.reason)
+            .input('started_by', sql.NVarChar, startedBy)
+            .query(`
+              INSERT INTO maintenance_entries
+              (id, entry_type, rack_id, chain, site, dc, reason, started_by)
+              VALUES
+              (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @started_by)
+            `);
+
+          await pool.request()
+            .input('entry_id', sql.UniqueIdentifier, entryId)
+            .input('rack_id', sql.NVarChar, rack.rack_id)
+            .input('pdu_id', sql.NVarChar, rack.pdu_id || rack.rack_id)
+            .input('name', sql.NVarChar, rack.name || rack.rack_id)
+            .input('country', sql.NVarChar, rack.country || 'Unknown')
+            .input('site', sql.NVarChar, rack.site || 'Unknown')
+            .input('dc', sql.NVarChar, rack.dc)
+            .input('phase', sql.NVarChar, rack.phase || 'Unknown')
+            .input('chain', sql.NVarChar, rack.chain || 'Unknown')
+            .input('node', sql.NVarChar, rack.node || 'Unknown')
+            .input('serial', sql.NVarChar, rack.serial || 'Unknown')
+            .query(`
+              INSERT INTO maintenance_rack_details
+              (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial)
+              VALUES
+              (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial)
+            `);
+
+          successfulInserts.push({
+            row: rack.rowNumber,
+            rack_id: rack.rack_id,
+            dc: rack.dc
+          });
+
+        } catch (error) {
+          failedInserts.push({
+            row: rack.rowNumber,
+            rack_id: rack.rack_id,
+            error: error.message
+          });
+        }
+      }
+
+      return {
+        successfulInserts,
+        alreadyInMaintenance,
+        failedInserts
+      };
+    });
+
+    const summary = {
+      total: racks.length,
+      successful: result.successfulInserts.length,
+      alreadyInMaintenance: result.alreadyInMaintenance.length,
+      failed: result.failedInserts.length + errors.length,
+      errors: [
+        ...errors.map(e => ({ ...e, type: 'validation' })),
+        ...result.alreadyInMaintenance.map(e => ({ ...e, type: 'duplicate', error: 'Already in maintenance' })),
+        ...result.failedInserts.map(e => ({ ...e, type: 'insert_failed' }))
+      ]
+    };
+
+    console.log(`[${requestId}] ✅ Import completed: ${summary.successful} successful, ${summary.failed} failed`);
+
+    logger.info(`Excel import completed: ${summary.successful}/${summary.total} racks added to maintenance`, {
+      requestId,
+      fileName: req.file.originalname,
+      summary
+    });
+
+    res.json({
+      success: true,
+      message: `Import completed: ${summary.successful} racks added to maintenance`,
+      summary,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error(`[${requestId}] ❌ Error importing Excel:`, error);
+    logger.error('Excel import failed', { requestId, error: error.message });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to import Excel file',
       error: error.message,
       timestamp: new Date().toISOString()
     });
