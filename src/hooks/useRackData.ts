@@ -175,14 +175,20 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     }
   };
 
+  const fetchAllData = async () => {
+    // Fetch both racks and maintenance data in parallel, but wait for both to complete
+    await Promise.all([
+      fetchRacks(),
+      fetchMaintenanceRacks()
+    ]);
+  };
+
   useEffect(() => {
-    fetchRacks();
-    fetchMaintenanceRacks();
+    fetchAllData();
 
     // Set up polling every 30 seconds
     const interval = setInterval(() => {
-      fetchRacks();
-      fetchMaintenanceRacks();
+      fetchAllData();
     }, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -314,9 +320,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     setSearchQuery,
     searchField,
     setSearchField,
-    refreshData: () => {
-      fetchRacks();
-      fetchMaintenanceRacks();
-    },
+    refreshData: fetchAllData,
   };
 }
