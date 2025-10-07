@@ -1734,28 +1734,22 @@ app.post('/api/maintenance/chain', async (req, res) => {
       }
     }
 
-    // Filter racks that belong to this chain in the specified datacenter and site
+    // Filter racks that belong to this chain in the specified datacenter only
     console.log(`\n========== ENVIANDO CHAIN A MANTENIMIENTO ==========`);
-    console.log(`📋 Chain: "${sanitizedChain}" | DC: "${sanitizedDc}" | Site: "${site || 'Any'}"`);
+    console.log(`📋 Chain: "${sanitizedChain}" | DC: "${sanitizedDc}"`);
 
-    // First, filter by chain, dc, and site
+    // Filter by chain and dc only (dc names are unique, no need to check site)
     let chainRacks = allPowerData.filter(rack => {
       const rackChain = String(rack.chain).trim();
       const rackDc = String(rack.dc).trim();
-      const rackSite = String(rack.site || '').trim();
 
       const chainMatch = rackChain === sanitizedChain;
       const dcMatch = rackDc === sanitizedDc;
 
-      // If site is specified, match it; otherwise match any site
-      const siteMatch = !site || site === 'Unknown' || rackSite === site;
-
-      const matches = chainMatch && dcMatch && siteMatch;
-
-      return matches;
+      return chainMatch && dcMatch;
     });
 
-    console.log(`📊 PDUs filtrados por chain/dc/site: ${chainRacks.length}`);
+    console.log(`📊 PDUs filtrados por chain/dc: ${chainRacks.length}`);
 
     // Then, filter out items without valid rackName
     const beforeRackNameFilter = chainRacks.length;
