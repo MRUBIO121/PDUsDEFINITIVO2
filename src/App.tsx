@@ -1,14 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Activity, AlertTriangle, Settings, BarChart3, Zap, ZapOff, Download, RefreshCw, Wrench } from 'lucide-react';
-import CountryGroup from './components/CountryGroup';
-import ThresholdManager from './components/ThresholdManager';
-import RackThresholdManager from './components/RackThresholdManager';
-import MaintenancePage from './pages/MaintenancePage';
-import { useRackData } from './hooks/useRackData';
-import { useThresholds } from './hooks/useThresholds';
-import { getThresholdValue } from './utils/thresholdUtils';
-import { getMetricStatusColor, getAmperageStatusColor } from './utils/uiUtils';
 
 function App() {
   const [showThresholds, setShowThresholds] = useState(false);
