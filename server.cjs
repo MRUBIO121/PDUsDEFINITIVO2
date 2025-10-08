@@ -2512,7 +2512,25 @@ app.get('/api/health', (req, res) => {
 app.post('/api/export/alerts', async (req, res) => {
   try {
     // Get current racks with alerts from NENG API (real-time data)
-    const racksData = await fetchRacksFromNengApi();
+    // We can use the internal endpoint to get processed data
+    const internalResponse = await fetch(`http://localhost:${port}/api/racks/energy`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!internalResponse.ok) {
+      throw new Error('Failed to fetch racks data from internal API');
+    }
+
+    const racksResponse = await internalResponse.json();
+
+    if (!racksResponse.success || !racksResponse.data) {
+      throw new Error('Invalid response from racks API');
+    }
+
+    const racksData = racksResponse.data;
 
     if (!racksData || !Array.isArray(racksData)) {
       throw new Error('Failed to fetch racks data from NENG API');
