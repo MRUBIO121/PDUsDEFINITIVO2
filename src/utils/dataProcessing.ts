@@ -223,8 +223,8 @@ export function filterRacks(
     }
     // If statusFilter is 'all', show all racks (no status filtering)
   } else {
-    // In "Alertas" mode: show PDUs with alerts OR in maintenance
-    let maintenanceCount = 0;
+    // In "Alertas" mode: show ONLY PDUs with alerts, EXCLUDING maintenance
+    let maintenanceExcludedCount = 0;
     let alertCount = 0;
 
     filteredRacks = filteredRacks.filter(rack => {
@@ -233,37 +233,32 @@ export function filterRacks(
       const hasAlert = rack.status === 'critical' || rack.status === 'warning';
 
       if (isInMaintenance) {
-        maintenanceCount++;
-        if (maintenanceCount <= 5) {
-          console.log(`🔵 [filterRacks] Manteniendo rack en vista alertas: "${rack.name}" (rackId="${rackId}", status="${rack.status}")`);
+        maintenanceExcludedCount++;
+        if (maintenanceExcludedCount <= 5) {
+          console.log(`🚫 [filterRacks] Excluyendo rack en mantenimiento de alertas: "${rack.name}" (rackId="${rackId}", status="${rack.status}")`);
         }
+        // NEVER show maintenance racks in alerts view
+        return false;
       }
 
       if (hasAlert) {
         alertCount++;
       }
 
-      // Show if: has alerts (critical/warning) OR is in maintenance
-      return hasAlert || isInMaintenance;
+      // Show ONLY if has alerts and NOT in maintenance
+      return hasAlert;
     });
 
     console.log(`\n🔍 [filterRacks] FILTRADO VISTA ALERTAS:`);
-    console.log(`   Racks con alertas: ${alertCount}`);
-    console.log(`   Racks en mantenimiento incluidos: ${maintenanceCount}`);
-    console.log(`   Total racks en resultado: ${filteredRacks.length}`);
+    console.log(`   Racks con alertas (no en mantenimiento): ${alertCount}`);
+    console.log(`   Racks en mantenimiento excluidos: ${maintenanceExcludedCount}`);
+    console.log(`   Total racks mostrados: ${filteredRacks.length}`);
     console.log(`   IDs en maintenanceRacks Set: ${maintenanceRacks.size}`);
 
-    // Filter out zero amperage alerts if the toggle is disabled (but keep maintenance racks)
+    // Filter out zero amperage alerts if the toggle is disabled
+    // No need to check maintenance here since they're already excluded
     if (!showZeroAmperageAlerts) {
       filteredRacks = filteredRacks.filter(rack => {
-        const rackId = String(rack.rackId || '').trim();
-        const isInMaintenance = rackId && maintenanceRacks.has(rackId);
-
-        // Always keep maintenance racks
-        if (isInMaintenance) {
-          return true;
-        }
-
         // Keep racks that don't have critical_amperage_zero_reading as a reason
         // OR have other alert reasons in addition to critical_amperage_zero_reading
         if (!rack.reasons || rack.reasons.length === 0) {
@@ -278,33 +273,19 @@ export function filterRacks(
       });
     }
 
-    // Apply additional status filter if specified (but keep maintenance racks)
+    // Apply additional status filter if specified
+    // No need to check maintenance here since they're already excluded
     if (statusFilter !== 'all') {
       filteredRacks = filteredRacks.filter(rack => {
-        const rackId = String(rack.rackId || '').trim();
-        const isInMaintenance = rackId && maintenanceRacks.has(rackId);
-
-        // Always keep maintenance racks regardless of status filter
-        if (isInMaintenance) {
-          return true;
-        }
-
         return rack.status === statusFilter;
       });
     }
   }
   
   // Filter by specific metric type (only in Alertas mode and when statusFilter is not 'all')
+  // No need to check maintenance here since they're already excluded in Alertas mode
   if (metricFilter !== 'all' && statusFilter !== 'all' && !showAllRacks) {
     filteredRacks = filteredRacks.filter(rack => {
-      const rackId = String(rack.rackId || '').trim();
-      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
-
-      // Always keep maintenance racks regardless of metric filter
-      if (isInMaintenance) {
-        return true;
-      }
-
       if (!rack.reasons || rack.reasons.length === 0) {
         return false;
       }

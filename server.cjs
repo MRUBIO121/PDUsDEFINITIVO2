@@ -377,10 +377,27 @@ async function processRackData(racks, thresholds) {
   const uniqueRackIds = [...new Set(racks.map(r => r.rackId || r.id))];
   const rackThresholdsMap = await loadAllRackSpecificThresholds(uniqueRackIds);
 
+  // Get maintenance rack IDs and chain IDs
+  const maintenanceRackIds = await getMaintenanceRackIds();
+  const maintenanceChainIds = await getMaintenanceChainIds();
+
   const processedRacks = racks.map(rack => {
     // Merge global thresholds with rack-specific overrides
     const rackId = rack.rackId || rack.id;
+    const chainId = rack.chain;
     const rackOverrides = rackThresholdsMap.get(rackId) || {};
+
+    // Check if this rack or its chain is in maintenance
+    const isInMaintenance = maintenanceRackIds.has(rackId) || (chainId && maintenanceChainIds.has(chainId));
+
+    // If in maintenance, set status to 'normal' and skip all alert evaluation
+    if (isInMaintenance) {
+      return {
+        ...rack,
+        status: 'normal',
+        reasons: []
+      };
+    }
 
     // Create effective thresholds by merging global with rack-specific
     const effectiveThresholds = thresholds.map(t => {
@@ -548,6 +565,28 @@ async function getMaintenanceRackIds() {
     return new Set(result.recordset.map(r => r.rack_id));
   } catch (error) {
     console.error('⚠️ Error fetching maintenance racks:', error.message);
+    return new Set();
+  }
+}
+
+/**
+ * Get list of chain IDs currently in maintenance mode
+ * Returns chains that have been put into maintenance as entire chains
+ */
+async function getMaintenanceChainIds() {
+  try {
+    const result = await executeQuery(async (pool) => {
+      return await pool.request().query(`
+        SELECT DISTINCT chain
+        FROM maintenance_rack_details
+        WHERE chain IS NOT NULL
+        GROUP BY chain, maintenance_entry_id
+        HAVING COUNT(DISTINCT rack_id) > 1
+      `);
+    });
+    return new Set(result.recordset.map(r => r.chain));
+  } catch (error) {
+    console.error('⚠️ Error fetching maintenance chains:', error.message);
     return new Set();
   }
 }
