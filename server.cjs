@@ -2513,29 +2513,33 @@ app.post('/api/export/alerts', async (req, res) => {
   try {
 
     const result = await executeQuery(async (pool) => {
-      // Query active critical alerts from database
+      // Query active critical alerts from database, excluding racks in maintenance
       return await pool.request().query(`
         SELECT
-          pdu_id,
-          rack_id,
-          name,
-          country,
-          site,
-          dc,
-          phase,
-          chain,
-          node,
-          serial,
-          alert_type,
-          metric_type,
-          alert_reason,
-          alert_value,
-          alert_field,
-          threshold_exceeded,
-          alert_started_at,
-          last_updated_at
-        FROM active_critical_alerts
-        ORDER BY alert_started_at DESC
+          aca.pdu_id,
+          aca.rack_id,
+          aca.name,
+          aca.country,
+          aca.site,
+          aca.dc,
+          aca.phase,
+          aca.chain,
+          aca.node,
+          aca.serial,
+          aca.alert_type,
+          aca.metric_type,
+          aca.alert_reason,
+          aca.alert_value,
+          aca.alert_field,
+          aca.threshold_exceeded,
+          aca.alert_started_at,
+          aca.last_updated_at
+        FROM active_critical_alerts aca
+        WHERE aca.rack_id NOT IN (
+          SELECT rack_id
+          FROM maintenance_rack_details
+        )
+        ORDER BY aca.alert_started_at DESC
       `);
     });
 
