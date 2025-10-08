@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Activity, AlertTriangle, Settings, BarChart3, Zap, ZapOff, Download, RefreshCw, Wrench } from 'lucide-react';
+import CountryGroup from './components/CountryGroup';
+import ThresholdManager from './components/ThresholdManager';
+import RackThresholdManager from './components/RackThresholdManager';
+import MaintenancePage from './pages/MaintenancePage';
+import { useRackData } from './hooks/useRackData';
+import { useThresholds } from './hooks/useThresholds';
+import { getThresholdValue } from './utils/thresholdUtils';
+import { getMetricStatusColor, getAmperageStatusColor } from './utils/uiUtils';
 
 function App() {
   const [showThresholds, setShowThresholds] = useState(false);
@@ -132,7 +140,10 @@ function App() {
       }
     };
 
-    // Sets to track unique racks with alerts by metric
+    // Sets to track unique logical racks with alerts
+    // Sets to track unique racks with alerts
+    const criticalRacks = new Set();
+    const warningRacks = new Set();
     const criticalRacksByMetric = {
       amperage: new Set(),
       temperature: new Set(),
@@ -155,6 +166,20 @@ function App() {
       // Skip racks in maintenance - they shouldn't count in alerts
       if (isInMaintenance) {
         return;
+      }
+
+      // Determine overall status for this rack group
+      const overallStatus = rackGroup.some(r => r.status === 'critical')
+        ? 'critical'
+        : rackGroup.some(r => r.status === 'warning')
+        ? 'warning'
+        : 'normal';
+
+      // Count racks by overall status
+      if (overallStatus === 'critical') {
+        criticalRacks.add(rackId);
+      } else if (overallStatus === 'warning') {
+        warningRacks.add(rackId);
       }
 
       // Count individual PDUs and track racks with specific metric alerts
@@ -214,27 +239,9 @@ function App() {
       });
     });
 
-    // Calculate total unique racks: union of all racks with any critical metric alert
-    const allCriticalRacks = new Set([
-      ...criticalRacksByMetric.amperage,
-      ...criticalRacksByMetric.temperature,
-      ...criticalRacksByMetric.humidity,
-      ...criticalRacksByMetric.voltage,
-      ...criticalRacksByMetric.power
-    ]);
-
-    // Calculate total unique racks: union of all racks with any warning metric alert
-    const allWarningRacks = new Set([
-      ...warningRacksByMetric.amperage,
-      ...warningRacksByMetric.temperature,
-      ...warningRacksByMetric.humidity,
-      ...warningRacksByMetric.voltage,
-      ...warningRacksByMetric.power
-    ]);
-
     // Set rack summary counts from Sets
-    rackSummary.critical.total = allCriticalRacks.size;
-    rackSummary.warning.total = allWarningRacks.size;
+    rackSummary.critical.total = criticalRacks.size;
+    rackSummary.warning.total = warningRacks.size;
     rackSummary.critical.amperage = criticalRacksByMetric.amperage.size;
     rackSummary.critical.temperature = criticalRacksByMetric.temperature.size;
     rackSummary.critical.humidity = criticalRacksByMetric.humidity.size;
@@ -326,6 +333,9 @@ function App() {
     };
 
     // Sets to track unique racks with different types of alerts
+    const criticalRacks = new Set();
+    const warningRacks = new Set();
+    const allAlertingRacks = new Set(); // Tracks all racks with any type of alert
     const criticalRacksByMetric = {
       amperage: new Set(),
       temperature: new Set(),
@@ -346,6 +356,20 @@ function App() {
         return;
       }
 
+      // Check what types of alerts this rack group has
+      const hasCriticalPDU = rackGroup.some(r => r.status === 'critical');
+      const hasWarningPDU = rackGroup.some(r => r.status === 'warning');
+
+      // Count racks independently for each alert type they have
+      if (hasCriticalPDU) {
+        criticalRacks.add(rackId);
+        allAlertingRacks.add(rackId);
+      }
+      if (hasWarningPDU) {
+        warningRacks.add(rackId);
+        allAlertingRacks.add(rackId);
+      }
+
       // Count racks with specific metric alerts
       rackGroup.forEach(pdu => {
         if (pdu.reasons && pdu.reasons.length > 0) {
@@ -356,7 +380,7 @@ function App() {
                 criticalRacksByMetric.amperage.add(rackId);
               }
               if (reason.includes('temperature')) {
-                criticalRacksByMetric.temperature.add(rackId);
+                warningRacksByMetric.temperature.add(rackId);
               }
               if (reason.includes('humidity')) {
                 criticalRacksByMetric.humidity.add(rackId);
@@ -379,29 +403,9 @@ function App() {
       });
     });
 
-    // Calculate total unique racks: union of all racks with any critical metric alert
-    const allCriticalRacks = new Set([
-      ...criticalRacksByMetric.amperage,
-      ...criticalRacksByMetric.temperature,
-      ...criticalRacksByMetric.humidity
-    ]);
-
-    // Calculate total unique racks: union of all racks with any warning metric alert
-    const allWarningRacks = new Set([
-      ...warningRacksByMetric.amperage,
-      ...warningRacksByMetric.temperature,
-      ...warningRacksByMetric.humidity
-    ]);
-
-    // All alerting racks is the union of critical and warning racks
-    const allAlertingRacks = new Set([
-      ...allCriticalRacks,
-      ...allWarningRacks
-    ]);
-
     // Set rack summary counts from Sets
-    rackSummary.critical.total = allCriticalRacks.size;
-    rackSummary.warning.total = allWarningRacks.size;
+    rackSummary.critical.total = criticalRacks.size;
+    rackSummary.warning.total = warningRacks.size;
     rackSummary.critical.amperage = criticalRacksByMetric.amperage.size;
     rackSummary.critical.temperature = criticalRacksByMetric.temperature.size;
     rackSummary.critical.humidity = criticalRacksByMetric.humidity.size;
