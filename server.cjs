@@ -2511,41 +2511,54 @@ app.get('/api/health', (req, res) => {
 // Endpoint para exportar alertas a Excel
 app.post('/api/export/alerts', async (req, res) => {
   try {
+    // Get current racks with alerts from NENG API (real-time data)
+    const racksData = await fetchRacksFromNengApi();
 
-    const result = await executeQuery(async (pool) => {
-      // Query active critical alerts from database, excluding racks in maintenance
+    if (!racksData || !Array.isArray(racksData)) {
+      throw new Error('Failed to fetch racks data from NENG API');
+    }
+
+    // Get maintenance racks from database
+    const maintenanceResult = await executeQuery(async (pool) => {
       return await pool.request().query(`
-        SELECT
-          aca.pdu_id,
-          aca.rack_id,
-          aca.name,
-          aca.country,
-          aca.site,
-          aca.dc,
-          aca.phase,
-          aca.chain,
-          aca.node,
-          aca.serial,
-          aca.alert_type,
-          aca.metric_type,
-          aca.alert_reason,
-          aca.alert_value,
-          aca.alert_field,
-          aca.threshold_exceeded,
-          aca.alert_started_at,
-          aca.last_updated_at
-        FROM active_critical_alerts aca
-        WHERE aca.rack_id NOT IN (
-          SELECT rack_id
-          FROM maintenance_rack_details
-        )
-        ORDER BY aca.alert_started_at DESC
+        SELECT DISTINCT rack_id
+        FROM maintenance_rack_details
       `);
     });
 
-    const alerts = result.recordset || [];
+    const maintenanceRackIds = new Set(
+      (maintenanceResult.recordset || []).map(row => String(row.rack_id).trim())
+    );
 
-    if (alerts.length === 0) {
+    console.log(`\n📊 EXPORT ALERTS: ${maintenanceRackIds.size} racks in maintenance (excluded from export)`);
+
+    // Flatten the nested array structure (racks come as array of arrays)
+    const allPdus = [];
+    racksData.forEach(rackGroup => {
+      if (Array.isArray(rackGroup)) {
+        rackGroup.forEach(pdu => {
+          if (pdu && typeof pdu === 'object') {
+            allPdus.push(pdu);
+          }
+        });
+      }
+    });
+
+    // Filter PDUs with alerts (critical OR warning) and exclude maintenance racks
+    const pdusWithAlerts = allPdus.filter(pdu => {
+      // Check if rack is in maintenance
+      const rackId = String(pdu.rackId || pdu.id || '').trim();
+      if (rackId && maintenanceRackIds.has(rackId)) {
+        return false; // Exclude racks in maintenance
+      }
+
+      // Include PDUs with critical or warning status
+      return pdu.status === 'critical' || pdu.status === 'warning';
+    });
+
+    console.log(`📊 EXPORT ALERTS: ${allPdus.length} total PDUs, ${pdusWithAlerts.length} PDUs with alerts (excluding maintenance)`);
+
+    if (pdusWithAlerts.length === 0) {
       return res.json({
         success: true,
         message: 'No alerts found to export',
@@ -2553,31 +2566,28 @@ app.post('/api/export/alerts', async (req, res) => {
         timestamp: new Date().toISOString()
       });
     }
-    
+
     // Create Excel workbook
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Alertas Activas');
+    const worksheet = workbook.addWorksheet('Alertas');
 
-    // Define columns
+    // Define columns with all requested fields
     worksheet.columns = [
-      { header: 'ID PDU', key: 'pdu_id', width: 20 },
+      { header: 'Nombre del Rack', key: 'rack_name', width: 30 },
       { header: 'ID Rack', key: 'rack_id', width: 20 },
-      { header: 'Nombre PDU', key: 'name', width: 30 },
+      { header: 'ID PDU', key: 'pdu_id', width: 20 },
       { header: 'País', key: 'country', width: 15 },
       { header: 'Sitio', key: 'site', width: 20 },
       { header: 'Data Center', key: 'dc', width: 15 },
-      { header: 'Fase', key: 'phase', width: 15 },
       { header: 'Chain', key: 'chain', width: 12 },
       { header: 'Node', key: 'node', width: 12 },
       { header: 'N° Serie', key: 'serial', width: 20 },
-      { header: 'Tipo de Alerta', key: 'alert_type', width: 15 },
-      { header: 'Métrica', key: 'metric_type', width: 15 },
-      { header: 'Razón', key: 'alert_reason', width: 35 },
-      { header: 'Valor Actual', key: 'alert_value', width: 15 },
-      { header: 'Campo', key: 'alert_field', width: 25 },
-      { header: 'Umbral Excedido', key: 'threshold_exceeded', width: 15 },
-      { header: 'Detectada', key: 'alert_started_at', width: 20 },
-      { header: 'Última Actualización', key: 'last_updated_at', width: 20 }
+      { header: 'Fase', key: 'phase', width: 15 },
+      { header: 'Amperaje (A)', key: 'current', width: 15 },
+      { header: 'Temperatura (°C)', key: 'temperature', width: 18 },
+      { header: 'Humedad (%)', key: 'humidity', width: 15 },
+      { header: 'Estado de Alerta', key: 'alert_status', width: 18 },
+      { header: 'Razones de Alerta', key: 'alert_reasons', width: 50 }
     ];
 
     // Style the header row
@@ -2589,76 +2599,99 @@ app.post('/api/export/alerts', async (req, res) => {
       };
       cell.font = {
         color: { argb: 'FFFFFFFF' },
-        bold: true
+        bold: true,
+        size: 11
       };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
     });
 
-    // Add data rows
-    alerts.forEach(alert => {
+    // Add data rows (one row per PDU)
+    pdusWithAlerts.forEach(pdu => {
+      const alertReasons = (pdu.reasons && Array.isArray(pdu.reasons))
+        ? pdu.reasons.join(', ')
+        : '';
+
       const row = worksheet.addRow({
-        pdu_id: alert.pdu_id,
-        rack_id: alert.rack_id,
-        name: alert.name,
-        country: alert.country || 'N/A',
-        site: alert.site || 'N/A',
-        dc: alert.dc || 'N/A',
-        phase: alert.phase || 'N/A',
-        chain: alert.chain || 'N/A',
-        node: alert.node || 'N/A',
-        serial: alert.serial || 'N/A',
-        alert_type: alert.alert_type === 'critical' ? 'CRÍTICO' : 'ADVERTENCIA',
-        metric_type: alert.metric_type,
-        alert_reason: alert.alert_reason,
-        alert_value: alert.alert_value,
-        alert_field: alert.alert_field,
-        threshold_exceeded: alert.threshold_exceeded,
-        alert_started_at: new Date(alert.alert_started_at).toLocaleString('es-ES'),
-        last_updated_at: new Date(alert.last_updated_at).toLocaleString('es-ES')
+        rack_name: pdu.name || 'N/A',
+        rack_id: pdu.rackId || pdu.id || 'N/A',
+        pdu_id: pdu.id || 'N/A',
+        country: pdu.country || 'España',
+        site: pdu.site || 'N/A',
+        dc: pdu.dc || 'N/A',
+        chain: pdu.chain || 'N/A',
+        node: pdu.node || 'N/A',
+        serial: pdu.serial || 'N/A',
+        phase: pdu.phase || 'N/A',
+        current: pdu.current != null ? parseFloat(pdu.current).toFixed(2) : 'N/A',
+        temperature: pdu.sensorTemperature != null
+          ? parseFloat(pdu.sensorTemperature).toFixed(2)
+          : (pdu.temperature != null ? parseFloat(pdu.temperature).toFixed(2) : 'N/A'),
+        humidity: pdu.sensorHumidity != null
+          ? parseFloat(pdu.sensorHumidity).toFixed(1)
+          : 'N/A',
+        alert_status: pdu.status === 'critical' ? 'CRÍTICO' : 'ADVERTENCIA',
+        alert_reasons: alertReasons
       });
 
-      // Color-code alert type column
-      const alertTypeCell = row.getCell('alert_type');
-      if (alert.alert_type === 'critical') {
-        alertTypeCell.fill = {
+      // Color-code the alert status column
+      const alertStatusCell = row.getCell('alert_status');
+      if (pdu.status === 'critical') {
+        alertStatusCell.fill = {
           type: 'pattern',
           pattern: 'solid',
           fgColor: { argb: 'FFFF0000' }
         };
-        alertTypeCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-      } else if (alert.alert_type === 'warning') {
-        alertTypeCell.fill = {
+        alertStatusCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+      } else if (pdu.status === 'warning') {
+        alertStatusCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFFFFF00' }
+          fgColor: { argb: 'FFFFA500' }
         };
-        alertTypeCell.font = { color: { argb: 'FF000000' }, bold: true };
+        alertStatusCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
       }
+
+      // Add borders to all cells
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
     });
 
     // Generate filename with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-    const filename = `alertas_activas_${timestamp}.xlsx`;
+    const now = new Date();
+    const timestamp = now.toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    const filename = `alertas_${timestamp}.xlsx`;
     const filepath = path.join(__dirname, filename);
 
     // Write the Excel file to project root
     await workbook.xlsx.writeFile(filepath);
 
-    // Excel export completed
+    console.log(`✅ EXPORT ALERTS: Excel file created with ${pdusWithAlerts.length} PDUs with alerts`);
 
     res.json({
       success: true,
       message: 'Alerts exported successfully to Excel',
       filename: filename,
       filepath: filepath,
-      count: alerts.length,
-      timestamp: new Date().toISOString()
+      count: pdusWithAlerts.length,
+      timestamp: now.toISOString()
     });
-    
+
   } catch (error) {
     console.error('❌ Error exporting alerts to Excel:', error);
     logger.error('Excel export failed', { error: error.message });
-    
+
     res.status(500).json({
       success: false,
       message: 'Failed to export alerts to Excel',
