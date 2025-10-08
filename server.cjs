@@ -2657,22 +2657,57 @@ app.post('/api/export/alerts', async (req, res) => {
         alert_reasons: alertReasons
       });
 
+      // Determine alert color based on status
+      const alertColor = pdu.status === 'critical' ? 'FFFF0000' : 'FFFFA500'; // Red or Orange
+      const fontColor = 'FFFFFFFF'; // White text
+
       // Color-code the alert status column
       const alertStatusCell = row.getCell('alert_status');
-      if (pdu.status === 'critical') {
-        alertStatusCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFFF0000' }
-        };
-        alertStatusCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-      } else if (pdu.status === 'warning') {
-        alertStatusCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFFFA500' }
-        };
-        alertStatusCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+      alertStatusCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: alertColor }
+      };
+      alertStatusCell.font = { color: { argb: fontColor }, bold: true };
+
+      // Color-code the metric cells that triggered the alert
+      if (pdu.reasons && Array.isArray(pdu.reasons)) {
+        pdu.reasons.forEach(reason => {
+          const reasonLower = reason.toLowerCase();
+
+          // Check if alert is related to amperage/current
+          if (reasonLower.includes('amperage') || reasonLower.includes('current')) {
+            const currentCell = row.getCell('current');
+            currentCell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: alertColor }
+            };
+            currentCell.font = { color: { argb: fontColor }, bold: true };
+          }
+
+          // Check if alert is related to temperature
+          if (reasonLower.includes('temperature')) {
+            const tempCell = row.getCell('temperature');
+            tempCell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: alertColor }
+            };
+            tempCell.font = { color: { argb: fontColor }, bold: true };
+          }
+
+          // Check if alert is related to humidity
+          if (reasonLower.includes('humidity')) {
+            const humidityCell = row.getCell('humidity');
+            humidityCell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: alertColor }
+            };
+            humidityCell.font = { color: { argb: fontColor }, bold: true };
+          }
+        });
       }
 
       // Add borders to all cells
