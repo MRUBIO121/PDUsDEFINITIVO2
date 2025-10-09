@@ -39,7 +39,10 @@ export default function RackThresholdManager({ rackId, rackName, onSaveSuccess, 
     'warning_amperage_low_single_phase', 'warning_amperage_high_single_phase',
     // Amperage thresholds - 3-Phase
     'critical_amperage_low_3_phase', 'critical_amperage_high_3_phase',
-    'warning_amperage_low_3_phase', 'warning_amperage_high_3_phase'
+    'warning_amperage_low_3_phase', 'warning_amperage_high_3_phase',
+    // Voltage thresholds
+    'critical_voltage_low', 'critical_voltage_high',
+    'warning_voltage_low', 'warning_voltage_high'
   ];
 
   // Initialize temporary values when thresholds change
@@ -199,7 +202,12 @@ export default function RackThresholdManager({ rackId, rackName, onSaveSuccess, 
       'critical_amperage_low_3_phase': 'Amperaje Crítico Mínimo (Trifásico)',
       'critical_amperage_high_3_phase': 'Amperaje Crítico Máximo (Trifásico)',
       'warning_amperage_low_3_phase': 'Amperaje Advertencia Mínimo (Trifásico)',
-      'warning_amperage_high_3_phase': 'Amperaje Advertencia Máximo (Trifásico)'
+      'warning_amperage_high_3_phase': 'Amperaje Advertencia Máximo (Trifásico)',
+      // Voltage thresholds
+      'critical_voltage_low': 'Voltaje Crítico Mínimo',
+      'critical_voltage_high': 'Voltaje Crítico Máximo',
+      'warning_voltage_low': 'Voltaje Advertencia Mínimo',
+      'warning_voltage_high': 'Voltaje Advertencia Máximo'
     };
     return labels[key] || key;
   };
@@ -208,6 +216,7 @@ export default function RackThresholdManager({ rackId, rackName, onSaveSuccess, 
     if (key.includes('temperature')) return 'temperature';
     if (key.includes('humidity')) return 'humidity';
     if (key.includes('amperage')) return 'amperage';
+    if (key.includes('voltage')) return 'voltage';
     return 'other';
   };
 
@@ -532,6 +541,63 @@ export default function RackThresholdManager({ rackId, rackName, onSaveSuccess, 
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Voltage Thresholds */}
+          {thresholds.some(t => getThresholdGroup(t.key) === 'voltage') && (
+            <div>
+              <h3 className="text-lg font-semibold text-green-700 mb-3 flex items-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                Umbrales de Voltaje
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {thresholds
+                  .filter(threshold => getThresholdGroup(threshold.key) === 'voltage')
+                  .map((threshold) => {
+                    const isCritical = getThresholdCategory(threshold.key) === 'critical';
+                    const isSpecific = isRackSpecific(threshold.key);
+                    const bgColor = isCritical ? 'bg-red-50' : 'bg-yellow-50';
+                    const borderColor = isSpecific
+                      ? isCritical ? 'border-red-400' : 'border-yellow-400'
+                      : isCritical ? 'border-red-200' : 'border-yellow-200';
+                    const textColor = isCritical ? 'text-red-800' : 'text-yellow-800';
+                    const inputColor = isCritical ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500';
+
+                    return (
+                      <div key={threshold.key} className={`${bgColor} border-2 ${borderColor} rounded-lg p-4 ${isSpecific ? 'shadow-md' : ''}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className={`block text-sm font-medium ${textColor}`}>
+                            {getThresholdLabel(threshold.key)}
+                          </label>
+                          {isSpecific && (
+                            <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded" title="Valor específico del rack">
+                              RACK
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="number"
+                            value={tempValues[threshold.key] ?? ''}
+                            onChange={(e) => handleValueChange(threshold.key, e.target.value)}
+                            className={`flex-1 block w-full rounded-md shadow-sm text-sm ${inputColor}`}
+                            step="0.1"
+                            min="0"
+                          />
+                          {threshold.unit && (
+                            <span className={`text-sm font-medium ${textColor}`}>
+                              {threshold.unit}
+                            </span>
+                          )}
+                        </div>
+                        {threshold.description && (
+                          <p className={`mt-1 text-xs ${textColor}`}>{threshold.description}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
           )}
         </div>

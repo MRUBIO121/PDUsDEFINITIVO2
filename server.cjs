@@ -528,6 +528,41 @@ async function processRackData(racks, thresholds) {
       }
     }
 
+    // Voltage evaluation
+    // Skip evaluation if voltage is N/A, missing, or zero
+    if (rack.voltage !== 'N/A' && rack.voltage !== null && rack.voltage !== undefined) {
+      const voltage = parseFloat(rack.voltage) || null;
+
+      if (voltage !== null && !isNaN(voltage) && voltage > 0) {
+      const voltageCriticalLow = getThresholdValue(effectiveThresholds, 'critical_voltage_low');
+      const voltageCriticalHigh = getThresholdValue(effectiveThresholds, 'critical_voltage_high');
+      const voltageWarningLow = getThresholdValue(effectiveThresholds, 'warning_voltage_low');
+      const voltageWarningHigh = getThresholdValue(effectiveThresholds, 'warning_voltage_high');
+
+      // Only evaluate if all thresholds are defined and not zero
+      if (voltageCriticalLow !== undefined && voltageCriticalHigh !== undefined &&
+          voltageWarningLow !== undefined && voltageWarningHigh !== undefined &&
+          voltageCriticalLow > 0 && voltageCriticalHigh > 0 &&
+          voltageWarningLow > 0 && voltageWarningHigh > 0) {
+        if (voltage <= voltageCriticalLow || voltage >= voltageCriticalHigh) {
+          if (voltage <= voltageCriticalLow) {
+            reasons.push('critical_voltage_low');
+          } else {
+            reasons.push('critical_voltage_high');
+          }
+          status = 'critical';
+        } else if (voltage <= voltageWarningLow || voltage >= voltageWarningHigh) {
+          if (voltage <= voltageWarningLow) {
+            reasons.push('warning_voltage_low');
+          } else {
+            reasons.push('warning_voltage_high');
+          }
+          if (status !== 'critical') status = 'warning';
+        }
+      }
+      }
+    }
+
     return {
       ...rack,
       status,
@@ -762,6 +797,10 @@ function extractMetricInfo(reason, pdu) {
     metricType = 'humidity';
     alertField = 'sensorHumidity';
     alertValue = parseFloat(pdu.sensorHumidity) || null;
+  } else if (reason.includes('voltage')) {
+    metricType = 'voltage';
+    alertField = 'voltage';
+    alertValue = parseFloat(pdu.voltage) || null;
   } else {
     return null;
   }
@@ -789,6 +828,10 @@ function getThresholdFromReason(reason) {
   if (reason.includes('critical_temperature_low')) return 5.0;
   if (reason.includes('critical_humidity_high')) return 80.0;
   if (reason.includes('critical_humidity_low')) return 20.0;
+  if (reason.includes('critical_voltage_high')) return 250.0;
+  if (reason.includes('critical_voltage_low')) return 200.0;
+  if (reason.includes('warning_voltage_high')) return 240.0;
+  if (reason.includes('warning_voltage_low')) return 210.0;
   return null;
 }
 
@@ -988,6 +1031,7 @@ app.get('/api/racks/energy', async (req, res) => {
           node: String(powerItem.node || ''),
           serial: powerItem.serial,
           current: parseFloat(powerItem.totalAmps) || 0,
+          voltage: parseFloat(powerItem.totalVolts) || 0,
           temperature: parseFloat(powerItem.avgVolts) || 0,
           lastUpdated: powerItem.lastUpdate || new Date().toISOString()
         };
@@ -1317,7 +1361,9 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
       'critical_amperage_low_single_phase', 'critical_amperage_high_single_phase',
       'warning_amperage_low_single_phase', 'warning_amperage_high_single_phase',
       'critical_amperage_low_3_phase', 'critical_amperage_high_3_phase',
-      'warning_amperage_low_3_phase', 'warning_amperage_high_3_phase'
+      'warning_amperage_low_3_phase', 'warning_amperage_high_3_phase',
+      'critical_voltage_low', 'critical_voltage_high',
+      'warning_voltage_low', 'warning_voltage_high'
     ];
 
     // Filter out invalid keys

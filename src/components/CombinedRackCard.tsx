@@ -334,6 +334,15 @@ export default function CombinedRackCard({
                   </p>
                 </div>
 
+                {/* Voltage */}
+                <div className={`${getMetricBgColor(rack, 'voltage')} rounded-lg p-2`}>
+                  <span className="font-medium text-gray-600 text-xs">
+                    Voltaje
+                  </span>
+                  <p className="font-bold text-gray-900 mt-1 text-sm">
+                    {rack.voltage != null && !isNaN(rack.voltage) && rack.voltage > 0 ? `${rack.voltage}V` : 'N/A'}
+                  </p>
+                </div>
 
                 {/* Temperature */}
                 <div className={`${getMetricBgColor(rack, 'temperature')} rounded-lg p-2`}>

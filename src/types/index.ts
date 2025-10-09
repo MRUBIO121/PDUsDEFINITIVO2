@@ -10,6 +10,7 @@ export interface RackData {
   node?: string;
   serial?: string;
   current: number;
+  voltage?: number; // Voltage from totalVolts field in NENG API
   temperature: number;
   status: 'normal' | 'warning' | 'critical';
   lastUpdated: string;
