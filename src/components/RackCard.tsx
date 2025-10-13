@@ -22,7 +22,7 @@ export default function RackCard({
   getAmperageStatusColor
 }: RackCardProps) {
   // Helper function to determine metric background color based on alerts
-  const getMetricBgColor = (rack: RackData, metricType: 'amperage' | 'temperature' | 'humidity'): string => {
+  const getMetricBgColor = (rack: RackData, metricType: 'amperage' | 'temperature' | 'humidity' | 'voltage'): string => {
     // Check for critical alerts first (higher priority)
     const hasCritical = rack.reasons && rack.reasons.some(reason => 
       reason.startsWith('critical_') && reason.includes(metricType)
