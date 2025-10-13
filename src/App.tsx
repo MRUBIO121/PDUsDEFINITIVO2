@@ -140,6 +140,7 @@ function App() {
       }
     };
 
+    // Sets to track unique logical racks with alerts
     // Sets to track unique racks with alerts
     const criticalRacks = new Set();
     const warningRacks = new Set();
@@ -244,13 +245,9 @@ function App() {
     rackSummary.critical.amperage = criticalRacksByMetric.amperage.size;
     rackSummary.critical.temperature = criticalRacksByMetric.temperature.size;
     rackSummary.critical.humidity = criticalRacksByMetric.humidity.size;
-    rackSummary.critical.voltage = criticalRacksByMetric.voltage.size;
-    rackSummary.critical.power = criticalRacksByMetric.power.size;
     rackSummary.warning.amperage = warningRacksByMetric.amperage.size;
     rackSummary.warning.temperature = warningRacksByMetric.temperature.size;
     rackSummary.warning.humidity = warningRacksByMetric.humidity.size;
-    rackSummary.warning.voltage = warningRacksByMetric.voltage.size;
-    rackSummary.warning.power = warningRacksByMetric.power.size;
 
     return { rackSummary, pduSummary };
   }, [filteredRackGroups, maintenanceRacks]);
@@ -301,12 +298,6 @@ function App() {
             if (reason.includes('humidity')) {
               pduSummary.critical.humidity++;
             }
-            if (reason.includes('voltage')) {
-              pduSummary.critical.voltage++;
-            }
-            if (reason.includes('power')) {
-              pduSummary.critical.power++;
-            }
           }
           else if (reason.startsWith('warning_')) {
             pduSummary.warning.total++;
@@ -318,12 +309,6 @@ function App() {
             }
             if (reason.includes('humidity')) {
               pduSummary.warning.humidity++;
-            }
-            if (reason.includes('voltage')) {
-              pduSummary.warning.voltage++;
-            }
-            if (reason.includes('power')) {
-              pduSummary.warning.power++;
             }
           }
         });
@@ -337,17 +322,13 @@ function App() {
         total: 0,
         amperage: 0,
         temperature: 0,
-        humidity: 0,
-        voltage: 0,
-        power: 0
+        humidity: 0
       },
       warning: {
         total: 0,
         amperage: 0,
         temperature: 0,
-        humidity: 0,
-        voltage: 0,
-        power: 0
+        humidity: 0
       }
     };
 
@@ -358,16 +339,12 @@ function App() {
     const criticalRacksByMetric = {
       amperage: new Set(),
       temperature: new Set(),
-      humidity: new Set(),
-      voltage: new Set(),
-      power: new Set()
+      humidity: new Set()
     };
     const warningRacksByMetric = {
       amperage: new Set(),
       temperature: new Set(),
-      humidity: new Set(),
-      voltage: new Set(),
-      power: new Set()
+      humidity: new Set()
     };
 
     originalRackGroups.forEach(rackGroup => {
@@ -403,16 +380,10 @@ function App() {
                 criticalRacksByMetric.amperage.add(rackId);
               }
               if (reason.includes('temperature')) {
-                criticalRacksByMetric.temperature.add(rackId);
+                warningRacksByMetric.temperature.add(rackId);
               }
               if (reason.includes('humidity')) {
                 criticalRacksByMetric.humidity.add(rackId);
-              }
-              if (reason.includes('voltage')) {
-                criticalRacksByMetric.voltage.add(rackId);
-              }
-              if (reason.includes('power')) {
-                criticalRacksByMetric.power.add(rackId);
               }
             }
             // Track racks with warning alerts by metric
@@ -426,12 +397,6 @@ function App() {
               if (reason.includes('humidity')) {
                 warningRacksByMetric.humidity.add(rackId);
               }
-              if (reason.includes('voltage')) {
-                warningRacksByMetric.voltage.add(rackId);
-              }
-              if (reason.includes('power')) {
-                warningRacksByMetric.power.add(rackId);
-              }
             }
           });
         }
@@ -444,15 +409,11 @@ function App() {
     rackSummary.critical.amperage = criticalRacksByMetric.amperage.size;
     rackSummary.critical.temperature = criticalRacksByMetric.temperature.size;
     rackSummary.critical.humidity = criticalRacksByMetric.humidity.size;
-    rackSummary.critical.voltage = criticalRacksByMetric.voltage.size;
-    rackSummary.critical.power = criticalRacksByMetric.power.size;
     rackSummary.warning.amperage = warningRacksByMetric.amperage.size;
     rackSummary.warning.temperature = warningRacksByMetric.temperature.size;
     rackSummary.warning.humidity = warningRacksByMetric.humidity.size;
-    rackSummary.warning.voltage = warningRacksByMetric.voltage.size;
-    rackSummary.warning.power = warningRacksByMetric.power.size;
 
-    return {
+    return { 
       rackSummary,
       pduSummary,
       totalAlertingPdus: pduSummary.critical.total + pduSummary.warning.total,
@@ -706,40 +667,6 @@ function App() {
                     </span>
                   </div>
                 )}
-                {summary.critical.voltage > 0 && (
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => {
-                        setActiveStatusFilter('critical');
-                        setActiveMetricFilter('voltage');
-                      }}
-                      className="text-red-700 text-sm hover:text-red-900 hover:bg-red-100 px-2 py-1 rounded transition-colors cursor-pointer flex items-center"
-                      title="Filtrar por alertas críticas de voltaje"
-                    >
-                      ⚡ Voltaje
-                    </button>
-                    <span className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-medium">
-                      {summary.critical.voltage} {unitText}
-                    </span>
-                  </div>
-                )}
-                {summary.critical.power > 0 && (
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => {
-                        setActiveStatusFilter('critical');
-                        setActiveMetricFilter('power');
-                      }}
-                      className="text-red-700 text-sm hover:text-red-900 hover:bg-red-100 px-2 py-1 rounded transition-colors cursor-pointer flex items-center"
-                      title="Filtrar por alertas críticas de potencia"
-                    >
-                      🔌 Potencia
-                    </button>
-                    <span className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-medium">
-                      {summary.critical.power} {unitText}
-                    </span>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -805,40 +732,6 @@ function App() {
                     </button>
                     <span className="bg-yellow-200 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
                       {summary.warning.humidity} {unitText}
-                    </span>
-                  </div>
-                )}
-                {summary.warning.voltage > 0 && (
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => {
-                        setActiveStatusFilter('warning');
-                        setActiveMetricFilter('voltage');
-                      }}
-                      className="text-yellow-700 text-sm hover:text-yellow-900 hover:bg-yellow-100 px-2 py-1 rounded transition-colors cursor-pointer flex items-center"
-                      title="Filtrar por alertas de advertencia de voltaje"
-                    >
-                      ⚡ Voltaje
-                    </button>
-                    <span className="bg-yellow-200 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
-                      {summary.warning.voltage} {unitText}
-                    </span>
-                  </div>
-                )}
-                {summary.warning.power > 0 && (
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => {
-                        setActiveStatusFilter('warning');
-                        setActiveMetricFilter('power');
-                      }}
-                      className="text-yellow-700 text-sm hover:text-yellow-900 hover:bg-yellow-100 px-2 py-1 rounded transition-colors cursor-pointer flex items-center"
-                      title="Filtrar por alertas de advertencia de potencia"
-                    >
-                      🔌 Potencia
-                    </button>
-                    <span className="bg-yellow-200 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
-                      {summary.warning.power} {unitText}
                     </span>
                   </div>
                 )}
