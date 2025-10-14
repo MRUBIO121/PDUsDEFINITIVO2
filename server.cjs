@@ -596,14 +596,48 @@ async function processRackData(racks, thresholds) {
       reasons
     };
   });
-  
-  // Log evaluation summary
-  const criticalCount = processedRacks.filter(r => r.status === 'critical').length;
-  const warningCount = processedRacks.filter(r => r.status === 'warning').length;
-  const normalCount = processedRacks.filter(r => r.status === 'normal').length;
-  
-  // Evaluation complete
-  
+
+  // Voltage evaluation summary
+  const voltageStats = {
+    total: 0,
+    withVoltage: 0,
+    criticalLow: 0,
+    criticalHigh: 0,
+    warningLow: 0,
+    warningHigh: 0,
+    normal: 0
+  };
+
+  processedRacks.forEach(rack => {
+    voltageStats.total++;
+    const voltage = parseFloat(rack.voltage);
+    if (voltage && !isNaN(voltage) && voltage > 0) {
+      voltageStats.withVoltage++;
+      if (rack.reasons) {
+        if (rack.reasons.includes('critical_voltage_low')) voltageStats.criticalLow++;
+        if (rack.reasons.includes('critical_voltage_high')) voltageStats.criticalHigh++;
+        if (rack.reasons.includes('warning_voltage_low')) voltageStats.warningLow++;
+        if (rack.reasons.includes('warning_voltage_high')) voltageStats.warningHigh++;
+      }
+      const hasVoltageAlert = rack.reasons && rack.reasons.some(r => r.includes('voltage'));
+      if (!hasVoltageAlert) voltageStats.normal++;
+    }
+  });
+
+  console.log(`\n═══════════════════════════════════════════════════════`);
+  console.log(`🔌 RESUMEN DE EVALUACIÓN DE VOLTAJE`);
+  console.log(`═══════════════════════════════════════════════════════`);
+  console.log(`📊 Total PDUs: ${voltageStats.total}`);
+  console.log(`📊 PDUs con voltaje: ${voltageStats.withVoltage}`);
+  if (voltageStats.withVoltage > 0) {
+    console.log(`✅ Voltaje normal: ${voltageStats.normal}`);
+    if (voltageStats.criticalLow > 0) console.log(`❌ Crítico bajo (<200V): ${voltageStats.criticalLow}`);
+    if (voltageStats.criticalHigh > 0) console.log(`❌ Crítico alto (>250V): ${voltageStats.criticalHigh}`);
+    if (voltageStats.warningLow > 0) console.log(`⚠️  Advertencia bajo (<210V): ${voltageStats.warningLow}`);
+    if (voltageStats.warningHigh > 0) console.log(`⚠️  Advertencia alto (>240V): ${voltageStats.warningHigh}`);
+  }
+  console.log(`═══════════════════════════════════════════════════════\n`);
+
   return processedRacks;
 }
 
@@ -1083,17 +1117,10 @@ app.get('/api/racks/energy', async (req, res) => {
         return mapped;
       });
 
-    // Log detailed statistics about filtered items
+    // Simplified log
     if (itemsWithoutRackName.length > 0) {
-      const uniqueRacksFiltered = new Set(itemsWithoutRackName.map(item => String(item.rackId))).size;
-      console.log(`\n⚠️ ============ OMITIDOS POR FALTA DE RACKNAME ============`);
-      console.log(`❌ PDUs omitidos: ${itemsWithoutRackName.length}`);
-      console.log(`❌ Racks únicos omitidos: ${uniqueRacksFiltered}`);
-      console.log(`📋 Primeros 5 PDUs omitidos: ${itemsWithoutRackName.slice(0, 5).map(item => `${item.id} (rack: ${item.rackId})`).join(', ')}`);
-      console.log(`==========================================================\n`);
+      console.log(`⚠️ ${itemsWithoutRackName.length} PDUs omitidos (sin rackName)`);
     }
-
-    console.log(`📊 Power data filtered: ${allPowerData.length} PDUs → ${combinedData.length} PDUs con rackName válido`);
     
     if (combinedData.length === 0) {
       console.log(`[${requestId}] ⚠️ No data received from NENG API`);
@@ -1114,20 +1141,10 @@ app.get('/api/racks/energy', async (req, res) => {
     // Get maintenance rack IDs (for info only, NOT for filtering)
     const maintenanceRackIds = await getMaintenanceRackIds();
 
-    console.log(`🔧 Maintenance rack IDs count: ${maintenanceRackIds.size}`);
-    if (maintenanceRackIds.size > 0) {
-      console.log(`🔧 Sample maintenance racks: ${Array.from(maintenanceRackIds).slice(0, 3).join(', ')}${maintenanceRackIds.size > 3 ? '...' : ''}`);
-    }
-
     // DO NOT filter out maintenance racks - send them to frontend for visual indication
-    // The frontend will display them with a blue maintenance indicator
     const filteredData = processedData;
-
-    console.log(`📊 Total PDUs to send (including maintenance): ${filteredData.length}`);
-
-    // Count unique racks
     const uniqueRacks = new Set(filteredData.map(pdu => pdu.rackId)).size;
-    console.log(`📊 Unique racks (including maintenance): ${uniqueRacks}`);
+    console.log(`✅ Procesados: ${filteredData.length} PDUs (${uniqueRacks} racks únicos, ${maintenanceRackIds.size} en mantenimiento)`);
 
     // Manage active critical alerts in database (excluding maintenance racks from alerts)
     const nonMaintenanceData = processedData.filter(pdu => {
