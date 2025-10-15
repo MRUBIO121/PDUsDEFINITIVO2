@@ -96,7 +96,6 @@ async function getPool() {
   // Create new connection
   isConnecting = true;
   try {
-    console.log('🔄 Establishing database connection...');
     globalPool = await sql.connect(sqlConfig);
 
     // Set up connection event handlers
@@ -106,7 +105,6 @@ async function getPool() {
       globalPool = null;
     });
 
-    console.log('✅ Database connection established');
     reconnectAttempts = 0;
     isConnecting = false;
     return globalPool;
@@ -171,7 +169,7 @@ async function executeQuery(queryFn, retries = 2) {
 async function initializeDatabaseConnection() {
   try {
     await getPool();
-    console.log('✅ Database initialization complete');
+    console.log('✅ Database connected');
   } catch (error) {
     console.error('❌ Database initialization failed:', error.message);
     logger.error('Database initialization failed', { error: error.message });
@@ -282,6 +280,22 @@ async function fetchThresholdsFromDatabase() {
     });
 
     const thresholds = result.recordset || [];
+
+    // Check and log voltage threshold configuration
+    const voltageThresholds = thresholds.filter(t => t.key.includes('voltage'));
+    if (voltageThresholds.length === 4) {
+      console.log('✅ Voltage thresholds loaded from database:');
+      voltageThresholds.forEach(t => {
+        console.log(`   ${t.key}: ${t.value} ${t.unit}`);
+      });
+    } else if (voltageThresholds.length === 0) {
+      console.log('⚠️ No voltage thresholds found in database');
+    } else {
+      console.log(`⚠️ Incomplete voltage thresholds (found ${voltageThresholds.length}/4):`);
+      voltageThresholds.forEach(t => {
+        console.log(`   ${t.key}: ${t.value} ${t.unit}`);
+      });
+    }
 
     // Update cache
     thresholdsCache.data = thresholds;
@@ -540,16 +554,6 @@ async function processRackData(racks, thresholds) {
       const voltageWarningLow = getThresholdValue(effectiveThresholds, 'warning_voltage_low');
       const voltageWarningHigh = getThresholdValue(effectiveThresholds, 'warning_voltage_high');
 
-      // Debug log for first 3 racks with voltage
-      if (voltageDebugCount < 3) {
-        console.log(`\n🔌 [Voltage Debug #${voltageDebugCount + 1}] Rack: ${rack.name} (ID: ${rack.id})`);
-        console.log(`   Current Voltage: ${voltage}V`);
-        console.log(`   Thresholds:`);
-        console.log(`     Critical: ${voltageCriticalLow}V - ${voltageCriticalHigh}V`);
-        console.log(`     Warning:  ${voltageWarningLow}V - ${voltageWarningHigh}V`);
-        voltageDebugCount++;
-      }
-
       // Only evaluate if all thresholds are defined and not zero
       if (voltageCriticalLow !== undefined && voltageCriticalHigh !== undefined &&
           voltageWarningLow !== undefined && voltageWarningHigh !== undefined &&
@@ -562,10 +566,8 @@ async function processRackData(racks, thresholds) {
         if (voltage < voltageCriticalLow || voltage > voltageCriticalHigh) {
           if (voltage < voltageCriticalLow) {
             reasons.push('critical_voltage_low');
-            if (voltageDebugCount <= 3) console.log(`   ❌ CRITICAL: Voltage ${voltage}V < ${voltageCriticalLow}V`);
           } else {
             reasons.push('critical_voltage_high');
-            if (voltageDebugCount <= 3) console.log(`   ❌ CRITICAL: Voltage ${voltage}V > ${voltageCriticalHigh}V`);
           }
           status = 'critical';
         }
@@ -575,21 +577,15 @@ async function processRackData(racks, thresholds) {
         else if (voltage < voltageWarningLow || voltage > voltageWarningHigh) {
           if (voltage < voltageWarningLow) {
             reasons.push('warning_voltage_low');
-            if (voltageDebugCount <= 3) console.log(`   ⚠️ WARNING: Voltage ${voltage}V < ${voltageWarningLow}V`);
           } else {
             reasons.push('warning_voltage_high');
-            if (voltageDebugCount <= 3) console.log(`   ⚠️ WARNING: Voltage ${voltage}V > ${voltageWarningHigh}V`);
           }
           if (status !== 'critical') status = 'warning';
-        } else {
-          if (voltageDebugCount <= 3) console.log(`   ✅ OK: Voltage ${voltage}V within normal range (${voltageWarningLow}V - ${voltageWarningHigh}V)`);
         }
-      } else {
-        if (voltageDebugCount <= 3) {
-          console.log(`   ⚠️ Voltage thresholds not configured properly!`);
-          console.log(`      CritLow=${voltageCriticalLow}, CritHigh=${voltageCriticalHigh}`);
-          console.log(`      WarnLow=${voltageWarningLow}, WarnHigh=${voltageWarningHigh}`);
-        }
+      } else if (voltageDebugCount === 0) {
+        console.log('⚠️ Voltage thresholds not configured in database');
+        console.log(`   Missing or invalid: critical_voltage_low=${voltageCriticalLow}, critical_voltage_high=${voltageCriticalHigh}, warning_voltage_low=${voltageWarningLow}, warning_voltage_high=${voltageWarningHigh}`);
+        voltageDebugCount++;
       }
       }
     }
@@ -628,19 +624,6 @@ async function processRackData(racks, thresholds) {
     }
   });
 
-  console.log(`\n═══════════════════════════════════════════════════════`);
-  console.log(`🔌 RESUMEN DE EVALUACIÓN DE VOLTAJE`);
-  console.log(`═══════════════════════════════════════════════════════`);
-  console.log(`📊 Total PDUs: ${voltageStats.total}`);
-  console.log(`📊 PDUs con voltaje: ${voltageStats.withVoltage}`);
-  if (voltageStats.withVoltage > 0) {
-    console.log(`✅ Voltaje normal: ${voltageStats.normal}`);
-    if (voltageStats.criticalLow > 0) console.log(`❌ Crítico bajo (<200V): ${voltageStats.criticalLow}`);
-    if (voltageStats.criticalHigh > 0) console.log(`❌ Crítico alto (>250V): ${voltageStats.criticalHigh}`);
-    if (voltageStats.warningLow > 0) console.log(`⚠️  Advertencia bajo (<210V): ${voltageStats.warningLow}`);
-    if (voltageStats.warningHigh > 0) console.log(`⚠️  Advertencia alto (>240V): ${voltageStats.warningHigh}`);
-  }
-  console.log(`═══════════════════════════════════════════════════════\n`);
 
   return processedRacks;
 }
@@ -745,7 +728,6 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
       }
     }
 
-    console.log(`✅ Processed ${processedCount} alerts (${errorCount} errors)`);
 
     // Clean up resolved alerts
     try {
@@ -768,7 +750,6 @@ async function processCriticalAlert(pdu, reason, thresholds) {
     const metricInfo = extractMetricInfo(reason, pdu);
 
     if (!metricInfo) {
-      console.log(`⚠️ Could not extract metric info from reason: ${reason}`);
       return;
     }
 
