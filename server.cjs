@@ -96,23 +96,28 @@ async function getPool() {
   // Create new connection
   isConnecting = true;
   try {
+    console.log('🔄 Establishing database connection...');
     globalPool = await sql.connect(sqlConfig);
 
     // Set up connection event handlers
     globalPool.on('error', (err) => {
+      console.error('❌ Database pool error:', err.message);
       logger.error('Database pool error', { error: err.message });
       globalPool = null;
     });
 
+    console.log('✅ Database connection established');
     reconnectAttempts = 0;
     isConnecting = false;
     return globalPool;
   } catch (error) {
     isConnecting = false;
     reconnectAttempts++;
+    console.error(`❌ Failed to connect to database (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}):`, error.message);
     logger.error('Database connection failed', { error: error.message, attempt: reconnectAttempts });
 
     if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      console.log(`⏳ Retrying in ${reconnectAttempts * 2} seconds...`);
       await new Promise(resolve => setTimeout(resolve, reconnectAttempts * 2000));
       return getPool();
     }
@@ -142,11 +147,13 @@ async function executeQuery(queryFn, retries = 2) {
 
       // Check if error is connection-related
       if (error.code === 'ECONNCLOSED' || error.code === 'ENOTOPEN' || error.message.includes('Connection is closed')) {
+        console.error(`⚠️ Connection error on attempt ${attempt + 1}/${retries + 1}:`, error.message);
 
         // Reset global pool to force reconnection
         globalPool = null;
 
         if (attempt < retries) {
+          console.log(`🔄 Retrying query after connection reset...`);
           await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
           continue;
         }
@@ -164,7 +171,9 @@ async function executeQuery(queryFn, retries = 2) {
 async function initializeDatabaseConnection() {
   try {
     await getPool();
+    console.log('✅ Database initialization complete');
   } catch (error) {
+    console.error('❌ Database initialization failed:', error.message);
     logger.error('Database initialization failed', { error: error.message });
   }
 }
@@ -248,9 +257,11 @@ async function fetchFromNengApi(url, options = {}) {
     
   } catch (error) {
     if (error.name === 'AbortError') {
+      console.error(`❌ NENG API timeout after ${apiTimeout}ms`);
       throw new Error(`API request timeout after ${apiTimeout}ms`);
     }
     
+    console.error('❌ NENG API error:', error);
     throw error;
   }
 }
@@ -279,6 +290,7 @@ async function fetchThresholdsFromDatabase() {
     return thresholds;
 
   } catch (error) {
+    console.error('❌ Error fetching thresholds from database:', error);
     logger.error('Database threshold fetch failed', { error: error.message });
     return [];
   }
@@ -315,6 +327,7 @@ async function saveThresholdsToDatabase(thresholds) {
     return updatedCount;
 
   } catch (error) {
+    console.error('❌ Error saving thresholds to database:', error);
     logger.error('Database threshold save failed', { error: error.message });
     throw error;
   }
@@ -352,6 +365,7 @@ async function loadAllRackSpecificThresholds(rackIds) {
     // Loaded rack-specific thresholds
     return rackThresholdsMap;
   } catch (error) {
+    console.error('Error loading rack-specific thresholds:', error.message);
     return new Map();
   }
 }
@@ -526,7 +540,15 @@ async function processRackData(racks, thresholds) {
       const voltageWarningLow = getThresholdValue(effectiveThresholds, 'warning_voltage_low');
       const voltageWarningHigh = getThresholdValue(effectiveThresholds, 'warning_voltage_high');
 
-      voltageDebugCount++;
+      // Debug log for first 3 racks with voltage
+      if (voltageDebugCount < 3) {
+        console.log(`\n🔌 [Voltage Debug #${voltageDebugCount + 1}] Rack: ${rack.name} (ID: ${rack.id})`);
+        console.log(`   Current Voltage: ${voltage}V`);
+        console.log(`   Thresholds:`);
+        console.log(`     Critical: ${voltageCriticalLow}V - ${voltageCriticalHigh}V`);
+        console.log(`     Warning:  ${voltageWarningLow}V - ${voltageWarningHigh}V`);
+        voltageDebugCount++;
+      }
 
       // Only evaluate if all thresholds are defined and not zero
       if (voltageCriticalLow !== undefined && voltageCriticalHigh !== undefined &&
@@ -540,8 +562,10 @@ async function processRackData(racks, thresholds) {
         if (voltage < voltageCriticalLow || voltage > voltageCriticalHigh) {
           if (voltage < voltageCriticalLow) {
             reasons.push('critical_voltage_low');
+            if (voltageDebugCount <= 3) console.log(`   ❌ CRITICAL: Voltage ${voltage}V < ${voltageCriticalLow}V`);
           } else {
             reasons.push('critical_voltage_high');
+            if (voltageDebugCount <= 3) console.log(`   ❌ CRITICAL: Voltage ${voltage}V > ${voltageCriticalHigh}V`);
           }
           status = 'critical';
         }
@@ -551,10 +575,20 @@ async function processRackData(racks, thresholds) {
         else if (voltage < voltageWarningLow || voltage > voltageWarningHigh) {
           if (voltage < voltageWarningLow) {
             reasons.push('warning_voltage_low');
+            if (voltageDebugCount <= 3) console.log(`   ⚠️ WARNING: Voltage ${voltage}V < ${voltageWarningLow}V`);
           } else {
             reasons.push('warning_voltage_high');
+            if (voltageDebugCount <= 3) console.log(`   ⚠️ WARNING: Voltage ${voltage}V > ${voltageWarningHigh}V`);
           }
           if (status !== 'critical') status = 'warning';
+        } else {
+          if (voltageDebugCount <= 3) console.log(`   ✅ OK: Voltage ${voltage}V within normal range (${voltageWarningLow}V - ${voltageWarningHigh}V)`);
+        }
+      } else {
+        if (voltageDebugCount <= 3) {
+          console.log(`   ⚠️ Voltage thresholds not configured properly!`);
+          console.log(`      CritLow=${voltageCriticalLow}, CritHigh=${voltageCriticalHigh}`);
+          console.log(`      WarnLow=${voltageWarningLow}, WarnHigh=${voltageWarningHigh}`);
         }
       }
       }
@@ -594,17 +628,19 @@ async function processRackData(racks, thresholds) {
     }
   });
 
+  console.log(`\n═══════════════════════════════════════════════════════`);
+  console.log(`🔌 RESUMEN DE EVALUACIÓN DE VOLTAJE`);
+  console.log(`═══════════════════════════════════════════════════════`);
+  console.log(`📊 Total PDUs: ${voltageStats.total}`);
+  console.log(`📊 PDUs con voltaje: ${voltageStats.withVoltage}`);
   if (voltageStats.withVoltage > 0) {
-    console.log(`\n🔌 Lectura de voltaje: ✅ ACTIVA`);
-    console.log(`   PDUs con datos de voltaje: ${voltageStats.withVoltage}/${voltageStats.total}`);
-    if (voltageStats.normal > 0) console.log(`   Normal: ${voltageStats.normal}`);
-    if (voltageStats.criticalLow > 0) console.log(`   Crítico bajo: ${voltageStats.criticalLow}`);
-    if (voltageStats.criticalHigh > 0) console.log(`   Crítico alto: ${voltageStats.criticalHigh}`);
-    if (voltageStats.warningLow > 0) console.log(`   Warning bajo: ${voltageStats.warningLow}`);
-    if (voltageStats.warningHigh > 0) console.log(`   Warning alto: ${voltageStats.warningHigh}`);
-  } else {
-    console.log(`\n🔌 Lectura de voltaje: ❌ NO DISPONIBLE - No se encontraron datos de voltaje`);
+    console.log(`✅ Voltaje normal: ${voltageStats.normal}`);
+    if (voltageStats.criticalLow > 0) console.log(`❌ Crítico bajo (<200V): ${voltageStats.criticalLow}`);
+    if (voltageStats.criticalHigh > 0) console.log(`❌ Crítico alto (>250V): ${voltageStats.criticalHigh}`);
+    if (voltageStats.warningLow > 0) console.log(`⚠️  Advertencia bajo (<210V): ${voltageStats.warningLow}`);
+    if (voltageStats.warningHigh > 0) console.log(`⚠️  Advertencia alto (>240V): ${voltageStats.warningHigh}`);
   }
+  console.log(`═══════════════════════════════════════════════════════\n`);
 
   return processedRacks;
 }
@@ -628,6 +664,7 @@ async function getMaintenanceRackIds() {
     });
     return new Set(result.recordset.map(r => r.rack_id));
   } catch (error) {
+    console.error('⚠️ Error fetching maintenance racks:', error.message);
     return new Set();
   }
 }
@@ -649,6 +686,7 @@ async function getMaintenanceChainIds() {
     });
     return new Set(result.recordset.map(r => r.chain));
   } catch (error) {
+    console.error('⚠️ Error fetching maintenance chains:', error.message);
     return new Set();
   }
 }
@@ -695,6 +733,7 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
               processedCount++;
             } catch (alertError) {
               errorCount++;
+              console.error(`❌ Error processing critical alert for PDU ${pdu.id}:`, alertError.message);
             }
           }
         }
@@ -706,14 +745,17 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
       }
     }
 
+    console.log(`✅ Processed ${processedCount} alerts (${errorCount} errors)`);
 
     // Clean up resolved alerts
     try {
       await cleanupResolvedAlerts(currentCriticalPdus);
     } catch (cleanupError) {
+      console.error('❌ Error during cleanup:', cleanupError.message);
     }
 
   } catch (error) {
+    console.error('❌ Error managing active critical alerts:', error);
   }
 }
 
@@ -726,6 +768,7 @@ async function processCriticalAlert(pdu, reason, thresholds) {
     const metricInfo = extractMetricInfo(reason, pdu);
 
     if (!metricInfo) {
+      console.log(`⚠️ Could not extract metric info from reason: ${reason}`);
       return;
     }
 
@@ -902,6 +945,7 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
     });
 
   } catch (error) {
+    console.error('❌ Error cleaning up resolved alerts:', error);
   }
 }
 
@@ -993,6 +1037,7 @@ app.get('/api/racks/energy', async (req, res) => {
           );
 
           if (!sensorsResponse.success || !sensorsResponse.data) {
+            console.warn(`[${requestId}] ⚠️ Sensor page failed, stopping pagination`);
             hasMoreSensorData = false;
             break;
           }
@@ -1014,8 +1059,10 @@ app.get('/api/racks/energy', async (req, res) => {
 
         // Sensors data collected
       } catch (sensorError) {
+        console.warn(`[${requestId}] ⚠️ Sensors API failed (continuing without sensor data):`, sensorError.message);
       }
     } else {
+      console.log(`[${requestId}] ⚠️ NENG_SENSORS_API_URL not configured, skipping sensor data`);
     }
 
     // Map and combine power and sensor data, filtering out items without valid rackName
@@ -1076,9 +1123,11 @@ app.get('/api/racks/energy', async (req, res) => {
 
     // Simplified log
     if (itemsWithoutRackName.length > 0) {
+      console.log(`⚠️ ${itemsWithoutRackName.length} PDUs omitidos (sin rackName)`);
     }
     
     if (combinedData.length === 0) {
+      console.log(`[${requestId}] ⚠️ No data received from NENG API`);
       return res.json({
         success: true,
         data: [],
@@ -1099,6 +1148,7 @@ app.get('/api/racks/energy', async (req, res) => {
     // DO NOT filter out maintenance racks - send them to frontend for visual indication
     const filteredData = processedData;
     const uniqueRacks = new Set(filteredData.map(pdu => pdu.rackId)).size;
+    console.log(`✅ Procesados: ${filteredData.length} PDUs (${uniqueRacks} racks únicos, ${maintenanceRackIds.size} en mantenimiento)`);
 
     // Manage active critical alerts in database (excluding maintenance racks from alerts)
     const nonMaintenanceData = processedData.filter(pdu => {
@@ -1121,6 +1171,9 @@ app.get('/api/racks/energy', async (req, res) => {
       // Check for duplicate PDU IDs across different racks or datacenters
       if (pduTracker.has(pduId)) {
         const existing = pduTracker.get(pduId);
+        console.warn(`⚠️ DUPLICATE PDU DETECTED: PDU ${pduId} appears in multiple locations:`);
+        console.warn(`   Existing: rack=${existing.rackId}, dc=${existing.dc}, site=${existing.site}, chain=${existing.chain}`);
+        console.warn(`   Current:  rack=${rackId}, dc=${pdu.dc}, site=${pdu.site}, chain=${pdu.chain}`);
       } else {
         pduTracker.set(pduId, {
           rackId: rackId,
@@ -1144,6 +1197,7 @@ app.get('/api/racks/energy', async (req, res) => {
       const dcs = new Set(rackGroup.map(pdu => pdu.dc));
 
       if (dcs.size > 1) {
+        console.warn(`⚠️ RACK IN MULTIPLE DCS: Rack ${rackId} appears in multiple datacenters: ${Array.from(dcs).join(', ')}`);
       }
 
       rackDcTracker.set(rackId, dcs);
@@ -1171,6 +1225,7 @@ app.get('/api/racks/energy', async (req, res) => {
     res.json(response);
     
   } catch (error) {
+    console.error(`[${requestId}] ❌ REQUEST FAILED:`, error);
     logger.error('Energy racks fetch failed', { 
       error: error.message, 
       stack: error.stack,
@@ -1201,6 +1256,7 @@ app.get('/api/thresholds', async (req, res) => {
     });
     
   } catch (error) {
+    console.error('❌ Error fetching thresholds:', error);
     logger.error('Thresholds fetch failed', { error: error.message });
     
     res.status(500).json({
@@ -1247,6 +1303,7 @@ app.put('/api/thresholds', async (req, res) => {
       if (validKeys.includes(key)) {
         filteredThresholds[key] = value;
       } else {
+        console.log(`⚠️ Ignoring invalid threshold key: ${key}`);
       }
     });
     
@@ -1268,6 +1325,7 @@ app.put('/api/thresholds', async (req, res) => {
     });
     
   } catch (error) {
+    console.error('❌ Error updating thresholds:', error);
     logger.error('Thresholds update failed', { error: error.message });
     
     res.status(500).json({
@@ -1316,6 +1374,7 @@ app.get('/api/racks/:rackId/thresholds', async (req, res) => {
     });
     
   } catch (error) {
+    console.error(`❌ Error fetching thresholds for rack ${req.params.rackId}:`, error);
     logger.error('Rack thresholds fetch failed', { error: error.message, rackId: req.params.rackId });
     
     res.status(500).json({
@@ -1361,6 +1420,7 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
       if (validKeys.includes(key)) {
         filteredThresholds[key] = value;
       } else {
+        console.log(`⚠️ Ignoring invalid threshold key: ${key}`);
       }
     });
 
@@ -1412,6 +1472,7 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
     });
     
   } catch (error) {
+    console.error(`❌ Error updating rack thresholds for ${req.params.rackId}:`, error);
     logger.error('Rack thresholds update failed', { error: error.message, rackId: req.params.rackId });
     
     res.status(500).json({
@@ -1446,6 +1507,7 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
     });
     
   } catch (error) {
+    console.error(`❌ Error resetting rack thresholds for ${req.params.rackId}:`, error);
     logger.error('Rack thresholds reset failed', { error: error.message, rackId: req.params.rackId });
     
     res.status(500).json({
@@ -1464,6 +1526,7 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
 // Get all maintenance entries with their racks
 app.get('/api/maintenance', async (req, res) => {
   const requestId = `GET_MAINT_${Date.now()}`;
+  console.log(`\n[${requestId}] 📥 GET /api/maintenance - Request received`);
 
   try {
     const results = await executeQuery(async (pool) => {
@@ -1509,12 +1572,51 @@ app.get('/api/maintenance', async (req, res) => {
 
     const { entries, details } = results;
 
+    console.log(`\n========== CONSULTA DE MANTENIMIENTO (SQL Server) ==========`);
+    console.log(`[${requestId}] 📊 Resultados de la Base de Datos:`);
+    console.log(`   ✅ Entradas encontradas: ${entries.length}`);
+    console.log(`   ✅ Detalles de racks encontrados: ${details.length}`);
+
+    if (entries.length > 0) {
+      console.log(`\n📋 ENTRADAS DE MANTENIMIENTO:`);
+      entries.forEach((entry, i) => {
+        console.log(`\n   Entrada ${i + 1}:`);
+        console.log(`      Tipo: ${entry.entry_type}`);
+        console.log(`      Rack ID: "${entry.rack_id || 'N/A'}"`);
+        console.log(`      Chain: "${entry.chain || 'N/A'}"`);
+        console.log(`      Site: "${entry.site || 'N/A'}"`);
+        console.log(`      DC: "${entry.dc}"`);
+        console.log(`      Razón: "${entry.reason}"`);
+        console.log(`      Iniciado: ${entry.started_at}`);
+      });
+    }
+
+    if (details.length > 0) {
+      console.log(`\n📦 DETALLES DE RACKS EN MANTENIMIENTO:`);
+      const uniqueRackIds = new Set();
+      details.forEach((d, i) => {
+        const rackIdStr = String(d.rack_id || '').trim();
+        uniqueRackIds.add(rackIdStr);
+        if (i < 10) {
+          console.log(`   ${i + 1}. rack_id="${d.rack_id}" (type: ${typeof d.rack_id})`);
+          console.log(`      Name: "${d.name}"`);
+          console.log(`      Chain: "${d.chain}"`);
+          console.log(`      DC: "${d.dc}"`);
+        }
+      });
+      console.log(`\n   🔢 Total de rack_id únicos en mantenimiento: ${uniqueRackIds.size}`);
+      console.log(`   📋 Lista de todos los rack_id únicos:`);
+      console.log(`   [${Array.from(uniqueRackIds).join(', ')}]`);
+    }
+
     // Map details to their entries
     const maintenanceData = entries.map(entry => ({
       ...entry,
       racks: details.filter(d => d.maintenance_entry_id === entry.id)
     }));
 
+    console.log(`\n[${requestId}] 📤 Enviando respuesta con ${maintenanceData.length} entradas`);
+    console.log(`============================================================\n`);
 
     res.json({
       success: true,
@@ -1526,6 +1628,7 @@ app.get('/api/maintenance', async (req, res) => {
     });
 
   } catch (error) {
+    console.error('❌ Error fetching maintenance entries:', error);
     logger.error('Maintenance entries fetch failed', { error: error.message });
 
     res.json({
@@ -1695,6 +1798,8 @@ app.post('/api/maintenance/rack', async (req, res) => {
 // Add all racks from a chain to maintenance
 app.post('/api/maintenance/chain', async (req, res) => {
   const requestId = `CHAIN_MAINT_${Date.now()}`;
+  console.log(`\n[${requestId}] 📥 POST /api/maintenance/chain - Request received`);
+  console.log(`[${requestId}] 📋 Body:`, JSON.stringify(req.body, null, 2));
 
   try {
     const {
@@ -1706,6 +1811,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
     } = req.body;
 
     if (!chain || !dc) {
+      console.log(`[${requestId}] ❌ Validation failed: missing chain or dc`);
       return res.status(400).json({
         success: false,
         message: 'chain and dc are required',
@@ -1762,6 +1868,8 @@ app.post('/api/maintenance/chain', async (req, res) => {
     }
 
     // Filter racks that belong to this chain in the specified datacenter only
+    console.log(`\n========== ENVIANDO CHAIN A MANTENIMIENTO ==========`);
+    console.log(`📋 Chain: "${sanitizedChain}" | DC: "${sanitizedDc}"`);
 
     // Filter by chain and dc only (dc names are unique, no need to check site)
     let chainRacks = allPowerData.filter(rack => {
@@ -1774,6 +1882,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
       return chainMatch && dcMatch;
     });
 
+    console.log(`📊 PDUs filtrados por chain/dc: ${chainRacks.length}`);
 
     // Then, filter out items without valid rackName
     const beforeRackNameFilter = chainRacks.length;
@@ -1795,14 +1904,28 @@ app.post('/api/maintenance/chain', async (req, res) => {
     // Log detailed statistics about filtered items in maintenance
     if (maintenanceItemsWithoutRackName.length > 0) {
       const uniqueRacksFiltered = new Set(maintenanceItemsWithoutRackName.map(item => String(item.rackId))).size;
+      console.log(`\n⚠️ ============ OMITIDOS DE MANTENIMIENTO POR FALTA DE RACKNAME ============`);
+      console.log(`❌ PDUs omitidos: ${maintenanceItemsWithoutRackName.length}`);
+      console.log(`❌ Racks únicos omitidos: ${uniqueRacksFiltered}`);
+      console.log(`📋 Primeros 5 PDUs omitidos: ${maintenanceItemsWithoutRackName.slice(0, 5).map(item => `${item.id} (rack: ${item.rackId})`).join(', ')}`);
+      console.log(`=============================================================================\n`);
     }
 
+    console.log(`📊 PDUs después de filtrar rackName: ${chainRacks.length} (${beforeRackNameFilter - chainRacks.length} PDUs omitidos)`);
 
     // Show sample of what was found
     if (chainRacks.length > 0) {
+      console.log(`📝 Ejemplo del primer PDU:`);
+      console.log(`   - id: ${chainRacks[0].id}`);
+      console.log(`   - rackId: ${chainRacks[0].rackId}`);
+      console.log(`   - chain: ${chainRacks[0].chain}`);
+      console.log(`   - dc: ${chainRacks[0].dc}`);
+      console.log(`   - site: ${chainRacks[0].site}`);
     }
 
     if (chainRacks.length === 0) {
+      console.log(`⚠️ No se encontraron racks para esta chain`);
+      console.log(`====================================================\n`);
       return res.status(200).json({
         success: true,
         message: `No se encontraron racks para la chain ${sanitizedChain} en DC ${sanitizedDc}. Es posible que la chain esté vacía o que los racks no tengan rackName válido.`,
@@ -1813,6 +1936,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     // Group by rackId to avoid inserting multiple records for the same physical rack
     const rackMap = new Map();
+    console.log(`\n🔄 Agrupando PDUs por rackId físico...`);
 
     // Track PDU count per rack for debugging
     const pduCountPerRack = new Map();
@@ -1829,6 +1953,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
       // Debug first few entries
       if (index < 5) {
+        console.log(`   PDU #${index + 1}: id="${rack.id}" | rackId="${rackId}" | chain="${rack.chain}" | dc="${rack.dc}" | site="${rack.site}"`);
       }
 
       // Track PDU count per rack
@@ -1844,7 +1969,18 @@ app.post('/api/maintenance/chain', async (req, res) => {
 
     const uniqueRacks = Array.from(rackMap.values());
 
+    console.log(`\n✅ Resultado del agrupamiento:`);
+    console.log(`   ${chainRacks.length} PDUs → ${uniqueRacks.length} racks físicos únicos`);
+    console.log(`   Racks únicos: [${Array.from(rackMap.keys()).slice(0, 5).join(', ')}${rackMap.size > 5 ? '...' : ''}]`);
 
+    // Show racks with multiple PDUs
+    const racksWithMultiplePDUs = Array.from(pduCountPerRack.entries()).filter(([rackId, count]) => count > 1);
+    if (racksWithMultiplePDUs.length > 0) {
+      console.log(`\n📊 Racks con múltiples PDUs (primeros 5):`);
+      racksWithMultiplePDUs.slice(0, 5).forEach(([rackId, count]) => {
+        console.log(`   - Rack ${rackId}: ${count} PDUs`);
+      });
+    }
 
     if (uniqueRacks.length === 0) {
       return res.status(400).json({
@@ -1877,6 +2013,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
       let insertedCount = 0;
       let failedCount = 0;
 
+      console.log(`\n💾 Insertando racks en la base de datos...`);
 
       for (const rack of uniqueRacks) {
         try {
@@ -1926,10 +2063,16 @@ app.post('/api/maintenance/chain', async (req, res) => {
       return { entryId, insertedCount, failedCount };
     });
 
+    console.log(`\n✅ RESULTADO FINAL:`);
+    console.log(`   Insertados: ${result.insertedCount}`);
+    console.log(`   Ya en mantenimiento (omitidos): ${result.failedCount}`);
+    console.log(`   Total procesados: ${uniqueRacks.length}`);
+    console.log(`====================================================\n`);
 
     const successMessage = `Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance`;
     logger.info(`${successMessage} (${result.insertedCount}/${uniqueRacks.length} racks)`);
 
+    console.log(`[${requestId}] ✅ Sending success response...`);
 
     res.json({
       success: true,
@@ -1946,10 +2089,13 @@ app.post('/api/maintenance/chain', async (req, res) => {
       timestamp: new Date().toISOString()
     });
 
+    console.log(`[${requestId}] ✅ Response sent successfully`);
 
   } catch (error) {
+    console.error(`[${requestId}] ❌ Error adding chain to maintenance:`, error);
     logger.error('Add chain to maintenance failed', { error: error.message, stack: error.stack, body: req.body });
 
+    console.log(`[${requestId}] ❌ Sending error response...`);
 
     res.status(500).json({
       success: false,
@@ -2052,6 +2198,7 @@ app.delete('/api/maintenance/rack/:rackId', async (req, res) => {
     });
 
   } catch (error) {
+    console.error('❌ Error removing rack from maintenance:', error);
     logger.error('Remove rack from maintenance failed', { error: error.message, rackId: req.params.rackId });
 
     res.status(500).json({
@@ -2134,6 +2281,7 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
     });
 
   } catch (error) {
+    console.error('❌ Error removing maintenance entry:', error);
     logger.error('Remove maintenance entry failed', { error: error.message, entryId: req.params.entryId });
 
     res.status(500).json({
@@ -2148,6 +2296,7 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
 // Remove ALL maintenance entries and racks
 app.delete('/api/maintenance/all', async (req, res) => {
   const requestId = crypto.randomUUID().slice(0, 8);
+  console.log(`\n[${requestId}] 📥 DELETE /api/maintenance/all - Request received`);
 
   try {
     const result = await executeQuery(async (pool) => {
@@ -2170,6 +2319,7 @@ app.delete('/api/maintenance/all', async (req, res) => {
       // Delete all maintenance entries
       await pool.request().query(`DELETE FROM maintenance_entries`);
 
+      console.log(`[${requestId}] ✅ Deleted ${entry_count} entries and ${rack_count} racks from maintenance`);
 
       return { entry_count, rack_count, deleted: true };
     });
@@ -2199,6 +2349,7 @@ app.delete('/api/maintenance/all', async (req, res) => {
     });
 
   } catch (error) {
+    console.error(`[${requestId}] ❌ Error removing all maintenance entries:`, error);
     logger.error('Remove all maintenance entries failed', { error: error.message, stack: error.stack });
 
     res.status(500).json({
@@ -2257,6 +2408,7 @@ app.get('/api/maintenance/template', (req, res) => {
 // Endpoint to import racks from Excel
 app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res) => {
   const requestId = crypto.randomUUID();
+  console.log(`\n[${requestId}] 📥 POST /api/maintenance/import-excel - Request received`);
 
   try {
     if (!req.file) {
@@ -2269,6 +2421,7 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
 
     const { startedBy = 'Sistema', defaultReason = 'Mantenimiento' } = req.body;
 
+    console.log(`[${requestId}] 📄 File received: ${req.file.originalname} (${req.file.size} bytes)`);
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(req.file.buffer);
@@ -2343,6 +2496,7 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
       racks.push({ ...rackData, rowNumber });
     });
 
+    console.log(`[${requestId}] 📊 Parsed ${racks.length} racks from Excel, ${errors.length} errors found`);
 
     if (racks.length === 0) {
       return res.status(400).json({
@@ -2448,6 +2602,7 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
       ]
     };
 
+    console.log(`[${requestId}] ✅ Import completed: ${summary.successful} successful, ${summary.failed} failed`);
 
     logger.info(`Excel import completed: ${summary.successful}/${summary.total} racks added to maintenance`, {
       requestId,
@@ -2463,6 +2618,7 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
     });
 
   } catch (error) {
+    console.error(`[${requestId}] ❌ Error importing Excel:`, error);
     logger.error('Excel import failed', { requestId, error: error.message });
 
     res.status(500).json({
@@ -2525,6 +2681,7 @@ app.post('/api/export/alerts', async (req, res) => {
       (maintenanceResult.recordset || []).map(row => String(row.rack_id).trim())
     );
 
+    console.log(`\n📊 EXPORT ALERTS: ${maintenanceRackIds.size} racks in maintenance (excluded from export)`);
 
     // Flatten the nested array structure (racks come as array of arrays)
     const allPdus = [];
@@ -2550,6 +2707,7 @@ app.post('/api/export/alerts', async (req, res) => {
       return pdu.status === 'critical' || pdu.status === 'warning';
     });
 
+    console.log(`📊 EXPORT ALERTS: ${allPdus.length} total PDUs, ${pdusWithAlerts.length} PDUs with alerts (excluding maintenance)`);
 
     if (pdusWithAlerts.length === 0) {
       return res.json({
@@ -2705,6 +2863,7 @@ app.post('/api/export/alerts', async (req, res) => {
     // Write the Excel file to project root
     await workbook.xlsx.writeFile(filepath);
 
+    console.log(`✅ EXPORT ALERTS: Excel file created with ${pdusWithAlerts.length} PDUs with alerts`);
 
     res.json({
       success: true,
@@ -2716,6 +2875,7 @@ app.post('/api/export/alerts', async (req, res) => {
     });
 
   } catch (error) {
+    console.error('❌ Error exporting alerts to Excel:', error);
     logger.error('Excel export failed', { error: error.message });
 
     res.status(500).json({
@@ -2746,6 +2906,9 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use('*', (req, res) => {
+  console.warn(`⚠️ 404 - Route not found: ${req.method} ${req.originalUrl}`);
+  console.warn(`   Headers:`, req.headers);
+  console.warn(`   Body:`, req.body);
   res.status(404).json({
     success: false,
     message: `Route ${req.method} ${req.originalUrl} not found`,
@@ -2755,7 +2918,9 @@ app.use('*', (req, res) => {
 
 // Start server
 const server = app.listen(port, () => {
-  console.log(`🚀 Server running on port ${port}`);
+  console.log(`🚀 Energy Monitoring API server running on port ${port}`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
   logger.info(`Server started on port ${port}`);
 });
 
@@ -2766,23 +2931,29 @@ server.headersTimeout = 66000;
 
 // Graceful shutdown
 async function gracefulShutdown(signal) {
+  console.log(`⏹️ ${signal} received, shutting down gracefully...`);
 
   // Close server first
   server.close(async () => {
+    console.log('🔌 HTTP server closed');
 
     // Close database connection pool
     if (globalPool && globalPool.connected) {
       try {
         await globalPool.close();
+        console.log('🔌 Database connection pool closed');
       } catch (error) {
+        console.error('❌ Error closing database pool:', error.message);
       }
     }
 
+    console.log('✅ Process terminated');
     process.exit(0);
   });
 
   // Force shutdown after 10 seconds
   setTimeout(() => {
+    console.error('⚠️ Forced shutdown after timeout');
     process.exit(1);
   }, 10000);
 }
@@ -2792,11 +2963,13 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
+  console.error('💥 Uncaught Exception:', error);
   logger.error('Uncaught Exception', { error: error.message, stack: error.stack });
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
   logger.error('Unhandled Rejection', { reason, promise });
   process.exit(1);
 });
