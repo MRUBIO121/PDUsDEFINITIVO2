@@ -557,6 +557,8 @@ async function processRackData(racks, thresholds) {
           voltageWarningLow > 0 && voltageWarningHigh > 0) {
 
         // Check critical thresholds first
+        // Critical LOW: voltage below critical minimum (< 200V)
+        // Critical HIGH: voltage above critical maximum (> 250V)
         if (voltage < voltageCriticalLow || voltage > voltageCriticalHigh) {
           if (voltage < voltageCriticalLow) {
             reasons.push('critical_voltage_low');
@@ -568,6 +570,8 @@ async function processRackData(racks, thresholds) {
           status = 'critical';
         }
         // Check warning thresholds (only if not already critical)
+        // Warning LOW: voltage between critical and warning low (200V <= voltage < 210V)
+        // Warning HIGH: voltage between warning and critical high (240V < voltage <= 250V)
         else if (voltage < voltageWarningLow || voltage > voltageWarningHigh) {
           if (voltage < voltageWarningLow) {
             reasons.push('warning_voltage_low');
@@ -578,7 +582,7 @@ async function processRackData(racks, thresholds) {
           }
           if (status !== 'critical') status = 'warning';
         } else {
-          if (voltageDebugCount <= 3) console.log(`   ✅ OK: Voltage ${voltage}V within normal range`);
+          if (voltageDebugCount <= 3) console.log(`   ✅ OK: Voltage ${voltage}V within normal range (${voltageWarningLow}V - ${voltageWarningHigh}V)`);
         }
       } else {
         if (voltageDebugCount <= 3) {
