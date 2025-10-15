@@ -283,6 +283,17 @@ async function fetchThresholdsFromDatabase() {
 
     const thresholds = result.recordset || [];
 
+    // Check for voltage thresholds
+    const voltageThresholds = thresholds.filter(t => t.key && t.key.includes('voltage'));
+    if (voltageThresholds.length > 0) {
+      console.log('✅ Umbrales de voltaje encontrados en BD:');
+      voltageThresholds.forEach(t => {
+        console.log(`   ${t.key}: ${t.value}${t.unit || ''}`);
+      });
+    } else {
+      console.error('❌ No se encontraron umbrales de voltaje en la base de datos');
+    }
+
     // Update cache
     thresholdsCache.data = thresholds;
     thresholdsCache.timestamp = Date.now();
@@ -290,7 +301,7 @@ async function fetchThresholdsFromDatabase() {
     return thresholds;
 
   } catch (error) {
-    console.error('❌ Error fetching thresholds from database:', error);
+    console.error('❌ Error al cargar umbrales de BD:', error.message);
     logger.error('Database threshold fetch failed', { error: error.message });
     return [];
   }
