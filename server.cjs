@@ -283,19 +283,6 @@ async function fetchThresholdsFromDatabase() {
 
     const thresholds = result.recordset || [];
 
-    // Log voltage thresholds for debugging
-    const voltageThresholds = thresholds.filter(t => t.key.includes('voltage'));
-    if (voltageThresholds.length > 0) {
-      console.log(`\n🔌 Umbrales de voltaje cargados desde BD:`);
-      voltageThresholds.forEach(t => {
-        console.log(`   ${t.key}: ${t.value}${t.unit}`);
-      });
-      console.log('');
-    } else {
-      console.log(`\n⚠️  NO SE ENCONTRARON UMBRALES DE VOLTAJE EN LA BASE DE DATOS`);
-      console.log(`   Por favor ejecuta: update_voltage_thresholds.sql\n`);
-    }
-
     // Update cache
     thresholdsCache.data = thresholds;
     thresholdsCache.timestamp = Date.now();
@@ -621,51 +608,19 @@ async function processRackData(racks, thresholds) {
     normal: 0
   };
 
-  const voltageIssues = [];
-  const sampleRacksWithVoltage = [];
-
   processedRacks.forEach(rack => {
     voltageStats.total++;
     const voltage = parseFloat(rack.voltage);
     if (voltage && !isNaN(voltage) && voltage > 0) {
       voltageStats.withVoltage++;
-
-      // Sample first 3 racks with voltage for debugging
-      if (sampleRacksWithVoltage.length < 3) {
-        sampleRacksWithVoltage.push({
-          name: rack.name,
-          voltage: voltage,
-          status: rack.status,
-          reasons: rack.reasons || []
-        });
-      }
-
-      // Detect voltage issues based on thresholds
-      const hasVoltageAlert = rack.reasons && rack.reasons.some(r => r.includes('voltage'));
-
       if (rack.reasons) {
         if (rack.reasons.includes('critical_voltage_low')) voltageStats.criticalLow++;
         if (rack.reasons.includes('critical_voltage_high')) voltageStats.criticalHigh++;
         if (rack.reasons.includes('warning_voltage_low')) voltageStats.warningLow++;
         if (rack.reasons.includes('warning_voltage_high')) voltageStats.warningHigh++;
       }
-
-      if (!hasVoltageAlert) {
-        voltageStats.normal++;
-      }
-
-      // Log racks that SHOULD trigger alerts but don't
-      if ((voltage < 200 || voltage > 250) && !hasVoltageAlert) {
-        if (voltageIssues.length < 5) {
-          voltageIssues.push({
-            name: rack.name,
-            voltage: voltage,
-            status: rack.status,
-            reasons: rack.reasons || [],
-            issue: voltage < 200 ? 'Voltaje bajo (<200V)' : 'Voltaje alto (>250V)'
-          });
-        }
-      }
+      const hasVoltageAlert = rack.reasons && rack.reasons.some(r => r.includes('voltage'));
+      if (!hasVoltageAlert) voltageStats.normal++;
     }
   });
 
@@ -674,28 +629,12 @@ async function processRackData(racks, thresholds) {
   console.log(`═══════════════════════════════════════════════════════`);
   console.log(`📊 Total PDUs: ${voltageStats.total}`);
   console.log(`📊 PDUs con voltaje: ${voltageStats.withVoltage}`);
-
   if (voltageStats.withVoltage > 0) {
     console.log(`✅ Voltaje normal: ${voltageStats.normal}`);
     if (voltageStats.criticalLow > 0) console.log(`❌ Crítico bajo (<200V): ${voltageStats.criticalLow}`);
     if (voltageStats.criticalHigh > 0) console.log(`❌ Crítico alto (>250V): ${voltageStats.criticalHigh}`);
     if (voltageStats.warningLow > 0) console.log(`⚠️  Advertencia bajo (<210V): ${voltageStats.warningLow}`);
     if (voltageStats.warningHigh > 0) console.log(`⚠️  Advertencia alto (>240V): ${voltageStats.warningHigh}`);
-
-    // Show sample racks
-    console.log(`\n📋 Muestra de PDUs con voltaje (primeros 3):`);
-    sampleRacksWithVoltage.forEach((rack, idx) => {
-      console.log(`   ${idx + 1}. ${rack.name}: ${rack.voltage}V - Status: ${rack.status} - Reasons: [${rack.reasons.join(', ')}]`);
-    });
-
-    // Show racks that should trigger alerts but don't
-    if (voltageIssues.length > 0) {
-      console.log(`\n⚠️  PDUs CON VOLTAJE FUERA DE RANGO PERO SIN ALERTA:`);
-      voltageIssues.forEach((issue, idx) => {
-        console.log(`   ${idx + 1}. ${issue.name}: ${issue.voltage}V - ${issue.issue}`);
-        console.log(`      Status: ${issue.status}, Reasons: [${issue.reasons.join(', ')}]`);
-      });
-    }
   }
   console.log(`═══════════════════════════════════════════════════════\n`);
 
