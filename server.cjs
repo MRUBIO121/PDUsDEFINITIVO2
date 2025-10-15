@@ -393,6 +393,7 @@ async function processRackData(racks, thresholds) {
   const maintenanceChainIds = await getMaintenanceChainIds();
 
   let voltageDebugCount = 0;
+  let thresholdDebugCount = 0;
   const processedRacks = racks.map(rack => {
     // Merge global thresholds with rack-specific overrides
     const rackId = rack.rackId || rack.id;
@@ -418,6 +419,19 @@ async function processRackData(racks, thresholds) {
       }
       return t;
     });
+
+    // Debug log effective thresholds for first 2 racks
+    if (thresholdDebugCount < 2) {
+      console.log(`\n🔧 [Threshold Debug #${thresholdDebugCount + 1}] Rack: ${rack.name} (ID: ${rack.id})`);
+      const voltageThresholds = effectiveThresholds.filter(t => t.key && t.key.includes('voltage'));
+      if (voltageThresholds.length > 0) {
+        console.log(`   Voltage thresholds loaded:`);
+        voltageThresholds.forEach(t => console.log(`     ${t.key} = ${t.value}${t.unit || ''}`));
+      } else {
+        console.log(`   ⚠️ No voltage thresholds found in effectiveThresholds array`);
+      }
+      thresholdDebugCount++;
+    }
 
     const reasons = [];
     let status = 'normal';
@@ -561,11 +575,9 @@ async function processRackData(racks, thresholds) {
         voltageDebugCount++;
       }
 
-      // Only evaluate if all thresholds are defined and not zero
+      // Only evaluate if all thresholds are defined (0 is a valid threshold value)
       if (voltageCriticalLow !== undefined && voltageCriticalHigh !== undefined &&
-          voltageWarningLow !== undefined && voltageWarningHigh !== undefined &&
-          voltageCriticalLow > 0 && voltageCriticalHigh > 0 &&
-          voltageWarningLow > 0 && voltageWarningHigh > 0) {
+          voltageWarningLow !== undefined && voltageWarningHigh !== undefined) {
 
         // Check critical thresholds first
         // Critical LOW: voltage below critical minimum (< 200V)
@@ -597,9 +609,11 @@ async function processRackData(racks, thresholds) {
         }
       } else {
         if (voltageDebugCount <= 3) {
-          console.log(`   ⚠️ Voltage thresholds not configured properly!`);
-          console.log(`      CritLow=${voltageCriticalLow}, CritHigh=${voltageCriticalHigh}`);
-          console.log(`      WarnLow=${voltageWarningLow}, WarnHigh=${voltageWarningHigh}`);
+          console.log(`   ⚠️ Voltage thresholds not fully configured!`);
+          console.log(`      CritLow=${voltageCriticalLow} (${voltageCriticalLow === undefined ? 'MISSING' : 'OK'})`);
+          console.log(`      CritHigh=${voltageCriticalHigh} (${voltageCriticalHigh === undefined ? 'MISSING' : 'OK'})`);
+          console.log(`      WarnLow=${voltageWarningLow} (${voltageWarningLow === undefined ? 'MISSING' : 'OK'})`);
+          console.log(`      WarnHigh=${voltageWarningHigh} (${voltageWarningHigh === undefined ? 'MISSING' : 'OK'})`);
         }
       }
       }
