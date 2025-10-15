@@ -1,6 +1,6 @@
 # Explicación Detallada de Queries SQL - Sistema de Monitoreo de Energía con Voltaje
 
-## Archivo: `complete_database_setup_with_voltage.sql`
+## Archivo: `supabase/migrations/20251015000004_complete_database_setup_with_voltage.sql`
 
 Este documento explica en detalle cada query del archivo SQL y su propósito en el sistema.
 

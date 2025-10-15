@@ -22,7 +22,7 @@ Este documento explica cómo configurar tu base de datos SQL Server para que el 
 Si tu base de datos está vacía o quieres empezar desde cero, ejecuta **SOLO ESTE ARCHIVO**:
 
 ```sql
-complete_database_setup_with_voltage.sql
+supabase/migrations/20251015000004_complete_database_setup_with_voltage.sql
 ```
 
 Este archivo:
@@ -284,7 +284,10 @@ Si encuentras problemas o tienes preguntas:
 
 | Archivo | Propósito |
 |---------|-----------|
-| `complete_database_setup_with_voltage.sql` | Setup completo desde cero con voltaje |
+| `supabase/migrations/20251015000004_complete_database_setup_with_voltage.sql` | Setup completo desde cero con voltaje |
+| `supabase/migrations/20251015000001_add_voltage_thresholds_zero_values.sql` | Añadir umbrales de voltaje con valores en 0 (requieren configuración manual) |
+| `supabase/migrations/20251015000002_update_voltage_thresholds_default_values.sql` | Actualizar umbrales de voltaje con valores por defecto 220V |
+| `supabase/migrations/20251015000003_verificar_soporte_voltaje.sql` | Script de verificación de soporte de voltaje |
 | `supabase/migrations/20251013140000_add_voltage_support.sql` | Añadir voltaje a BD existente |
 | `server.cjs` | Backend que lee totalVolts y evalúa umbrales |
 | `src/types/index.ts` | Definición de tipo RackData con campo voltage |
