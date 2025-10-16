@@ -568,28 +568,28 @@ async function processRackData(racks, thresholds) {
           voltageWarningLow > 0 && voltageWarningHigh > 0) {
 
         // Check critical thresholds first
-        // Critical LOW: voltage below critical minimum (< 200V)
-        // Critical HIGH: voltage above critical maximum (> 250V)
-        if (voltage < voltageCriticalLow || voltage > voltageCriticalHigh) {
-          if (voltage < voltageCriticalLow) {
+        // Critical LOW: voltage at or below critical minimum (<= 200V)
+        // Critical HIGH: voltage at or above critical maximum (>= 250V)
+        if (voltage <= voltageCriticalLow || voltage >= voltageCriticalHigh) {
+          if (voltage <= voltageCriticalLow) {
             reasons.push('critical_voltage_low');
-            if (voltageDebugCount <= 3) console.log(`   ❌ CRITICAL: Voltage ${voltage}V < ${voltageCriticalLow}V`);
+            if (voltageDebugCount <= 3) console.log(`   ❌ CRITICAL: Voltage ${voltage}V <= ${voltageCriticalLow}V`);
           } else {
             reasons.push('critical_voltage_high');
-            if (voltageDebugCount <= 3) console.log(`   ❌ CRITICAL: Voltage ${voltage}V > ${voltageCriticalHigh}V`);
+            if (voltageDebugCount <= 3) console.log(`   ❌ CRITICAL: Voltage ${voltage}V >= ${voltageCriticalHigh}V`);
           }
           status = 'critical';
         }
         // Check warning thresholds (only if not already critical)
-        // Warning LOW: voltage between critical and warning low (200V <= voltage < 210V)
-        // Warning HIGH: voltage between warning and critical high (240V < voltage <= 250V)
-        else if (voltage < voltageWarningLow || voltage > voltageWarningHigh) {
-          if (voltage < voltageWarningLow) {
+        // Warning LOW: voltage at or below warning low (<= 210V)
+        // Warning HIGH: voltage at or above warning high (>= 240V)
+        else if (voltage <= voltageWarningLow || voltage >= voltageWarningHigh) {
+          if (voltage <= voltageWarningLow) {
             reasons.push('warning_voltage_low');
-            if (voltageDebugCount <= 3) console.log(`   ⚠️ WARNING: Voltage ${voltage}V < ${voltageWarningLow}V`);
+            if (voltageDebugCount <= 3) console.log(`   ⚠️ WARNING: Voltage ${voltage}V <= ${voltageWarningLow}V`);
           } else {
             reasons.push('warning_voltage_high');
-            if (voltageDebugCount <= 3) console.log(`   ⚠️ WARNING: Voltage ${voltage}V > ${voltageWarningHigh}V`);
+            if (voltageDebugCount <= 3) console.log(`   ⚠️ WARNING: Voltage ${voltage}V >= ${voltageWarningHigh}V`);
           }
           if (status !== 'critical') status = 'warning';
         } else {
