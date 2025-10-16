@@ -567,9 +567,9 @@ async function processRackData(racks, thresholds) {
           voltageCriticalLow > 0 && voltageCriticalHigh > 0 &&
           voltageWarningLow > 0 && voltageWarningHigh > 0) {
 
-        // Check critical thresholds first
-        // Critical LOW: voltage at or below critical minimum (<= 200V)
-        // Critical HIGH: voltage at or above critical maximum (>= 250V)
+        // Check critical thresholds first (values from database)
+        // Critical LOW: voltage at or below critical minimum
+        // Critical HIGH: voltage at or above critical maximum
         if (voltage <= voltageCriticalLow || voltage >= voltageCriticalHigh) {
           if (voltage <= voltageCriticalLow) {
             reasons.push('critical_voltage_low');
@@ -580,9 +580,9 @@ async function processRackData(racks, thresholds) {
           }
           status = 'critical';
         }
-        // Check warning thresholds (only if not already critical)
-        // Warning LOW: voltage at or below warning low (<= 210V)
-        // Warning HIGH: voltage at or above warning high (>= 240V)
+        // Check warning thresholds (only if not already critical, values from database)
+        // Warning LOW: voltage at or below warning low
+        // Warning HIGH: voltage at or above warning high
         else if (voltage <= voltageWarningLow || voltage >= voltageWarningHigh) {
           if (voltage <= voltageWarningLow) {
             reasons.push('warning_voltage_low');
@@ -639,17 +639,28 @@ async function processRackData(racks, thresholds) {
     }
   });
 
+  // Get threshold values from database for display
+  const voltageCriticalLowValue = getThresholdValue(thresholds, 'critical_voltage_low') || 'N/A';
+  const voltageCriticalHighValue = getThresholdValue(thresholds, 'critical_voltage_high') || 'N/A';
+  const voltageWarningLowValue = getThresholdValue(thresholds, 'warning_voltage_low') || 'N/A';
+  const voltageWarningHighValue = getThresholdValue(thresholds, 'warning_voltage_high') || 'N/A';
+
   console.log(`\n═══════════════════════════════════════════════════════`);
   console.log(`🔌 RESUMEN DE EVALUACIÓN DE VOLTAJE`);
   console.log(`═══════════════════════════════════════════════════════`);
-  console.log(`📊 Total PDUs: ${voltageStats.total}`);
+  console.log(`📊 Umbrales desde Base de Datos:`);
+  console.log(`   - Critical Low:  ${voltageCriticalLowValue}V`);
+  console.log(`   - Warning Low:   ${voltageWarningLowValue}V`);
+  console.log(`   - Warning High:  ${voltageWarningHighValue}V`);
+  console.log(`   - Critical High: ${voltageCriticalHighValue}V`);
+  console.log(`\n📊 Total PDUs: ${voltageStats.total}`);
   console.log(`📊 PDUs con voltaje: ${voltageStats.withVoltage}`);
   if (voltageStats.withVoltage > 0) {
     console.log(`✅ Voltaje normal: ${voltageStats.normal}`);
-    if (voltageStats.criticalLow > 0) console.log(`❌ Crítico bajo (<200V): ${voltageStats.criticalLow}`);
-    if (voltageStats.criticalHigh > 0) console.log(`❌ Crítico alto (>250V): ${voltageStats.criticalHigh}`);
-    if (voltageStats.warningLow > 0) console.log(`⚠️  Advertencia bajo (<210V): ${voltageStats.warningLow}`);
-    if (voltageStats.warningHigh > 0) console.log(`⚠️  Advertencia alto (>240V): ${voltageStats.warningHigh}`);
+    if (voltageStats.criticalLow > 0) console.log(`❌ Crítico bajo (<=${voltageCriticalLowValue}V): ${voltageStats.criticalLow}`);
+    if (voltageStats.criticalHigh > 0) console.log(`❌ Crítico alto (>=${voltageCriticalHighValue}V): ${voltageStats.criticalHigh}`);
+    if (voltageStats.warningLow > 0) console.log(`⚠️  Advertencia bajo (<=${voltageWarningLowValue}V): ${voltageStats.warningLow}`);
+    if (voltageStats.warningHigh > 0) console.log(`⚠️  Advertencia alto (>=${voltageWarningHighValue}V): ${voltageStats.warningHigh}`);
   }
   console.log(`═══════════════════════════════════════════════════════\n`);
 
@@ -775,8 +786,8 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
  */
 async function processCriticalAlert(pdu, reason, thresholds) {
   try {
-    // Extract metric type and field from reason
-    const metricInfo = extractMetricInfo(reason, pdu);
+    // Extract metric type and field from reason (passing thresholds)
+    const metricInfo = extractMetricInfo(reason, pdu, thresholds);
 
     if (!metricInfo) {
       console.log(`⚠️ Could not extract metric info from reason: ${reason}`);
@@ -850,9 +861,9 @@ async function processCriticalAlert(pdu, reason, thresholds) {
 /**
  * Extracts metric information from alert reason and PDU data
  */
-function extractMetricInfo(reason, pdu) {
+function extractMetricInfo(reason, pdu, thresholds) {
   let metricType, alertField, alertValue;
-  
+
   if (reason.includes('amperage') || reason.includes('current')) {
     metricType = 'amperage';
     alertField = 'current';
@@ -880,10 +891,10 @@ function extractMetricInfo(reason, pdu) {
   } else {
     return null;
   }
-  
-  // Extract threshold exceeded (this would need to be calculated based on thresholds)
-  const thresholdExceeded = getThresholdFromReason(reason);
-  
+
+  // Extract threshold exceeded from database thresholds
+  const thresholdExceeded = getThresholdFromReason(reason, thresholds);
+
   return {
     metricType,
     alertField,
@@ -894,21 +905,49 @@ function extractMetricInfo(reason, pdu) {
 
 /**
  * Gets the threshold value that was exceeded based on the reason
- * This is a simplified version - you might want to enhance this with actual threshold lookup
+ * Looks up values from database thresholds - NO hardcoded values
  */
-function getThresholdFromReason(reason) {
-  // This is a placeholder - ideally you'd look up the actual threshold from your thresholds data
-  if (reason.includes('critical_amperage_high')) return 25.0;
-  if (reason.includes('critical_amperage_low')) return 1.0;
-  if (reason.includes('critical_temperature_high')) return 40.0;
-  if (reason.includes('critical_temperature_low')) return 5.0;
-  if (reason.includes('critical_humidity_high')) return 80.0;
-  if (reason.includes('critical_humidity_low')) return 20.0;
-  if (reason.includes('critical_voltage_high')) return 250.0;
-  if (reason.includes('critical_voltage_low')) return 200.0;
-  if (reason.includes('warning_voltage_high')) return 240.0;
-  if (reason.includes('warning_voltage_low')) return 210.0;
-  return null;
+function getThresholdFromReason(reason, thresholds) {
+  if (!thresholds || thresholds.length === 0) return null;
+
+  // Map reason patterns to threshold keys
+  const reasonToKeyMap = {
+    'critical_amperage_high_single_phase': 'critical_amperage_high_single_phase',
+    'critical_amperage_low_single_phase': 'critical_amperage_low_single_phase',
+    'critical_amperage_high_3_phase': 'critical_amperage_high_3_phase',
+    'critical_amperage_low_3_phase': 'critical_amperage_low_3_phase',
+    'warning_amperage_high_single_phase': 'warning_amperage_high_single_phase',
+    'warning_amperage_low_single_phase': 'warning_amperage_low_single_phase',
+    'warning_amperage_high_3_phase': 'warning_amperage_high_3_phase',
+    'warning_amperage_low_3_phase': 'warning_amperage_low_3_phase',
+    'critical_temperature_high': 'critical_temperature_high',
+    'critical_temperature_low': 'critical_temperature_low',
+    'warning_temperature_high': 'warning_temperature_high',
+    'warning_temperature_low': 'warning_temperature_low',
+    'critical_humidity_high': 'critical_humidity_high',
+    'critical_humidity_low': 'critical_humidity_low',
+    'warning_humidity_high': 'warning_humidity_high',
+    'warning_humidity_low': 'warning_humidity_low',
+    'critical_voltage_high': 'critical_voltage_high',
+    'critical_voltage_low': 'critical_voltage_low',
+    'warning_voltage_high': 'warning_voltage_high',
+    'warning_voltage_low': 'warning_voltage_low'
+  };
+
+  // Find the matching threshold key
+  let thresholdKey = null;
+  for (const [reasonPattern, key] of Object.entries(reasonToKeyMap)) {
+    if (reason.includes(reasonPattern)) {
+      thresholdKey = key;
+      break;
+    }
+  }
+
+  if (!thresholdKey) return null;
+
+  // Look up the threshold value from database
+  const threshold = thresholds.find(t => t.key === thresholdKey);
+  return threshold ? threshold.value : null;
 }
 
 /**
