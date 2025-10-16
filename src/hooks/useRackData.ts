@@ -111,32 +111,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         }
       });
 
-      if (flatRacks.length > 0) {
-        console.log(`\n📦 RACKS CARGADOS DEL API:`);
-        console.log(`   Total PDUs: ${flatRacks.length}`);
-
-        const uniqueRackIds = new Set<string>();
-        flatRacks.forEach(rack => {
-          const rackId = String(rack.rackId || '').trim();
-          if (rackId) {
-            uniqueRackIds.add(rackId);
-          }
-        });
-
-        console.log(`   Total rack_id únicos: ${uniqueRackIds.size}`);
-        console.log(`   Primeros 10 racks con sus IDs:`);
-        flatRacks.slice(0, 10).forEach((rack, i) => {
-          console.log(`      ${i + 1}. name="${rack.name}"`);
-          console.log(`         id="${rack.id}" (PDU ID)`);
-          console.log(`         rackId="${rack.rackId}" (Rack ID físico)`);
-          console.log(`         chain="${rack.chain}"`);
-          console.log(`         dc="${rack.dc}"`);
-        });
-
-        console.log(`\n   📋 Todos los rack_id únicos (primeros 20):`);
-        console.log(`   [${Array.from(uniqueRackIds).slice(0, 20).join(', ')}]${uniqueRackIds.size > 20 ? '...' : ''}`);
-      }
-
       setRacks(flatRacks);
     } catch (err) {
       console.error('Error fetching racks:', err);
@@ -165,20 +139,10 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       const data = await response.json();
       if (data.success && Array.isArray(data.data)) {
         const maintenanceSet = new Set<string>();
-        let totalRackDetails = 0;
 
-        console.log(`\n========== CARGANDO RACKS EN MANTENIMIENTO (FRONTEND) ==========`);
-        console.log(`📋 Entradas de mantenimiento: ${data.data.length}`);
-
-        data.data.forEach((entry: any, entryIndex: number) => {
+        data.data.forEach((entry: any) => {
           if (Array.isArray(entry.racks)) {
-            console.log(`\nEntrada #${entryIndex + 1} (${entry.entry_type}): ${entry.racks.length} registros`);
-            if (entryIndex === 0 && entry.racks.length > 0) {
-              console.log(`   Ejemplo rack_id: "${entry.racks[0].rack_id}" (type: ${typeof entry.racks[0].rack_id})`);
-            }
-
             entry.racks.forEach((rack: any) => {
-              totalRackDetails++;
               if (rack.rack_id) {
                 const rackIdStr = String(rack.rack_id).trim();
                 if (rackIdStr) {
@@ -188,26 +152,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
             });
           }
         });
-
-        console.log(`\n✅ RESULTADO:`);
-        console.log(`   Total registros en DB: ${totalRackDetails}`);
-        console.log(`   Racks únicos (Set): ${maintenanceSet.size}`);
-
-        if (maintenanceSet.size > 0) {
-          console.log(`\n   📋 Todos los IDs en el Set de mantenimiento:`);
-          const maintenanceArray = Array.from(maintenanceSet);
-          maintenanceArray.forEach((id, idx) => {
-            if (idx < 20) {
-              console.log(`      ${idx + 1}. "${id}" (length: ${id.length}, type: ${typeof id})`);
-            }
-          });
-          if (maintenanceSet.size > 20) {
-            console.log(`      ... y ${maintenanceSet.size - 20} más`);
-          }
-        } else {
-          console.log(`   ⚠️ NO HAY RACKS EN MANTENIMIENTO EN LA BASE DE DATOS`);
-        }
-        console.log(`================================================================\n`);
 
         setMaintenanceRacks(maintenanceSet);
       }

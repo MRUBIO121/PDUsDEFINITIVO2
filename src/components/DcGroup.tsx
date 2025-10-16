@@ -213,13 +213,6 @@ export default function DcGroup({
               ? 'warning'
               : 'normal';
 
-            // DEBUG: Log rack group before rendering
-            if (index === 0) {
-              console.log(`\n🎨 [DcGroup] Rendering DC: "${dc}" with ${rackGroups.length} rack groups`);
-              console.log(`   maintenanceRacks.size in DcGroup: ${maintenanceRacks.size}`);
-              console.log(`   Sample IDs from Set: [${Array.from(maintenanceRacks).slice(0, 5).join(', ')}]`);
-            }
-
             return (
               <CombinedRackCard
                 key={`combined-${rackGroup[0].rackId || rackGroup[0].id}-${index}`}

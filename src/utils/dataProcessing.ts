@@ -234,9 +234,6 @@ export function filterRacks(
 
       if (isInMaintenance) {
         maintenanceExcludedCount++;
-        if (maintenanceExcludedCount <= 5) {
-          console.log(`🚫 [filterRacks] Excluyendo rack en mantenimiento de alertas: "${rack.name}" (rackId="${rackId}", status="${rack.status}")`);
-        }
         // NEVER show maintenance racks in alerts view
         return false;
       }
@@ -248,12 +245,6 @@ export function filterRacks(
       // Show ONLY if has alerts and NOT in maintenance
       return hasAlert;
     });
-
-    console.log(`\n🔍 [filterRacks] FILTRADO VISTA ALERTAS:`);
-    console.log(`   Racks con alertas (no en mantenimiento): ${alertCount}`);
-    console.log(`   Racks en mantenimiento excluidos: ${maintenanceExcludedCount}`);
-    console.log(`   Total racks mostrados: ${filteredRacks.length}`);
-    console.log(`   IDs en maintenanceRacks Set: ${maintenanceRacks.size}`);
 
     // Filter out zero amperage alerts if the toggle is disabled
     // No need to check maintenance here since they're already excluded

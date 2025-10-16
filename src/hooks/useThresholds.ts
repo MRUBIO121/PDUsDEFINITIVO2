@@ -70,12 +70,18 @@ export function useThresholds(options: UseThresholdsOptions = {}): UseThresholds
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        
+
         const data = await response.json();
         if (!data.success) {
           throw new Error(data.message || 'Failed to fetch thresholds');
         }
-        
+
+        // Log voltage thresholds for verification
+        const voltageThresholds = (data.data || []).filter((t: any) => t.key && t.key.includes('voltage'));
+        if (voltageThresholds.length > 0) {
+          console.log('📊 Umbrales de Voltaje cargados:', voltageThresholds.map((t: any) => `${t.key}=${t.value}V`).join(', '));
+        }
+
         setThresholds(data.data || []);
         setGlobalThresholds(data.data || []);
         setRackSpecificThresholds([]);

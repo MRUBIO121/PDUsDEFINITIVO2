@@ -80,20 +80,12 @@ function App() {
 
             if (isInMaintenance) {
               maintenanceCount++;
-              if (maintenanceCount <= 5) {
-                console.log(`🔵 [${activeView}] Rack en mantenimiento encontrado: "${group[0]?.name}" (rackId="${rackId}")`);
-              }
             }
           });
           rackGroups.push(...logicalGroups);
         });
       });
     });
-
-    console.log(`\n🔍 RESUMEN DE RACKS (Vista ${activeView}):`);
-    console.log(`   Total de grupos de racks: ${rackGroups.length}`);
-    console.log(`   Racks en mantenimiento detectados: ${maintenanceCount}`);
-    console.log(`   Racks en Set de mantenimiento: ${maintenanceRacks.size}`);
 
     return rackGroups;
   }, [groupedRacks, activeView, maintenanceRacks]);
