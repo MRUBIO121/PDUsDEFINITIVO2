@@ -40,10 +40,11 @@ Sistema completo de monitoreo en tiempo real para infraestructura de racks y uni
 - **Búsqueda flexible**: Por sitio, país, DC, nombre del rack, nodo, cadena, número de serie
 
 ### Métricas Monitoreadas
-- **Amperaje/Corriente**: Soporte para fases monofásicas y trifásicas
+- **Amperaje/Corriente**: Soporte para fases monofásicas y trifásicas (solo evalúa umbrales máximos, 0A es valor normal)
 - **Temperatura**: Sensores ambientales con umbrales configurables
 - **Humedad**: Monitoreo ambiental con umbrales configurables
-- **Voltaje y Potencia**: Métricas adicionales disponibles
+- **Voltaje**: Monitoreo de voltaje con umbrales configurables (mínimo siempre 0V, evalúa sobrevoltaje)
+- **Potencia**: Métrica adicional disponible
 
 ### Configuración de Umbrales
 - **Interface intuitiva**: Editor gráfico de umbrales críticos y de advertencia
@@ -492,17 +493,22 @@ Acceso desde botón "Configurar Umbrales" en barra superior:
 
 **Amperaje por Fase**:
 - Monofásica:
-  - Crítico Alto (A)
-  - Advertencia Alto (A)
-  - Crítico Bajo (A)
-  - Advertencia Bajo (A)
+  - Crítico Alto (A) - Solo evalúa sobrecarga
+  - Advertencia Alto (A) - Solo evalúa sobrecarga
+  - Nota: Los umbrales mínimos se ignoran, 0A es un valor normal
 - Trifásica L1:
-  - Crítico Alto (A)
-  - Advertencia Alto (A)
-  - Crítico Bajo (A)
-  - Advertencia Bajo (A)
+  - Crítico Alto (A) - Solo evalúa sobrecarga
+  - Advertencia Alto (A) - Solo evalúa sobrecarga
+  - Nota: Los umbrales mínimos se ignoran, 0A es un valor normal
 - Trifásica L2: (mismo formato)
 - Trifásica L3: (mismo formato)
+
+**Voltaje**:
+- Crítico Alto (V) - Detecta sobrevoltaje peligroso (ej: >250V para sistemas 220V)
+- Advertencia Alto (V) - Detecta sobrevoltaje leve (ej: >240V para sistemas 220V)
+- Crítico Bajo: Siempre 0V (sin energía es condición normal, no alerta)
+- Advertencia Bajo: Siempre 0V (sin energía es condición normal, no alerta)
+- Nota: El sistema evalúa principalmente sobrevoltaje que puede dañar equipos
 
 **Funcionalidades del editor**:
 - Validación en tiempo real
@@ -721,17 +727,20 @@ Errores:
 **Evaluación automática**:
 - Cada métrica se compara contra umbrales (globales o personalizados)
 - Evaluación por fase para amperaje trifásico
-- Soporte para valores 0A (evaluación correcta de amperaje bajo)
+- **Amperaje**: Solo evalúa umbrales máximos (sobrecarga), 0A es valor normal sin alerta
+- **Voltaje**: Solo evalúa umbrales máximos (sobrevoltaje), 0V es valor normal sin alerta
+- **Temperatura y Humedad**: Evalúan tanto umbrales mínimos como máximos
 
 **Clasificación de alertas**:
-1. **Crítico**: Métrica fuera de rango crítico
+1. **Crítico**: Métrica fuera de rango crítico (excede máximo para amperaje/voltaje)
 2. **Advertencia**: Métrica fuera de rango de advertencia pero dentro de crítico
-3. **Normal**: Métrica dentro de todos los rangos
+3. **Normal**: Métrica dentro de todos los rangos o en valores mínimos válidos (0A, 0V)
 
 **Razones de alerta**:
 - Se genera descripción detallada de cada alerta
 - Incluye: métrica afectada, valor actual, umbral, fase (si aplica)
 - Múltiples razones si hay varias métricas en alerta
+- **Nota**: 0A y 0V no generan alertas (son condiciones normales de equipos apagados o sin carga)
 
 #### 5.3 Exportación de Datos
 Acceso desde botón "Exportar Alertas a Excel" en barra superior:
