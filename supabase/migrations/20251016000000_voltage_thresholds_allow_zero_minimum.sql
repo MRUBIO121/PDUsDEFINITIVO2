@@ -1,35 +1,39 @@
 /*
-  # Actualizar Umbrales de Voltaje - Permitir 0V como Mínimo Válido
+  # Actualizar Umbrales de Voltaje - Configurar 0V como Umbral Mínimo Crítico
 
   1. Descripción General
-    - Los umbrales de voltaje mínimo (crítico y advertencia) se actualizan a 0V
-    - Esto refleja que el valor mínimo de voltaje válido siempre será 0V
-    - Los umbrales máximos permanecen sin cambios
-    - Esta configuración es estándar para sistemas de monitoreo de voltaje
+    - Los umbrales de voltaje mínimo se actualizan para detectar condición de "sin energía"
+    - 0V es una condición CRÍTICA que debe generar alerta (ausencia total de energía)
+    - Los umbrales máximos detectan sobrevoltaje peligroso
+    - Esta configuración permite detectar tanto falta de energía como sobrevoltaje
 
   2. Cambios en threshold_configs
-    - Actualiza critical_voltage_low de 200.0V a 0.0V
-    - Actualiza warning_voltage_low de 210.0V a 0.0V
+    - Actualiza critical_voltage_low a 0.0V (sin energía = crítico)
+    - Actualiza warning_voltage_low a 0.0V (sin energía = crítico)
     - Los umbrales altos permanecen:
-      * warning_voltage_high: 240.0V
-      * critical_voltage_high: 250.0V
+      * warning_voltage_high: 240.0V (sobrevoltaje leve)
+      * critical_voltage_high: 250.0V (sobrevoltaje peligroso)
 
-  3. Justificación Técnica
-    - Un voltaje de 0V indica ausencia total de energía (condición crítica válida)
-    - No tiene sentido alertar por voltaje menor a un valor mínimo cuando 0V es válido
-    - El sistema debe detectar principalmente sobrevoltaje (valores altos peligrosos)
-    - Los equipos se apagan o no funcionan cuando el voltaje cae a 0V, pero esto no es una "alerta por bajo voltaje" sino una condición de "sin energía"
+  3. Comportamiento Esperado del Sistema
+    - Voltaje = 0V: ALERTA CRÍTICA (sin energía, equipo apagado o desconectado)
+    - Voltaje entre 0V y 240V: Operación NORMAL
+    - Voltaje entre 240V y 250V: ADVERTENCIA (sobrevoltaje leve)
+    - Voltaje > 250V: CRÍTICO (sobrevoltaje peligroso, riesgo de daño)
 
-  4. Comportamiento Esperado
-    - Voltaje = 0V: Condición normal (sin energía, sin alerta de bajo voltaje)
-    - Voltaje entre 0V y 240V: Operación normal
-    - Voltaje entre 240V y 250V: Advertencia (sobrevoltaje leve)
-    - Voltaje > 250V: Crítico (sobrevoltaje peligroso)
+  4. Diferencia con Amperaje
+    - Amperaje 0A: Normal (sin carga, equipo apagado = condición esperada)
+    - Voltaje 0V: Crítico (sin energía, PDU desconectado = problema eléctrico)
 
-  5. Compatibilidad
+  5. Justificación Técnica
+    - 0V indica falta de alimentación eléctrica (problema crítico del sistema)
+    - 0A indica simplemente que no hay consumo (condición normal de operación)
+    - Los PDUs deben tener voltaje presente aunque no haya carga
+    - Detectar 0V permite identificar desconexiones, fallos de UPS, o cortes de energía
+
+  6. Compatibilidad
     - Compatible con sistemas de 110V, 220V, 380V
     - Los umbrales máximos deben ajustarse según el voltaje nominal del sistema
-    - Los umbrales mínimos siempre serán 0V independientemente del sistema
+    - El umbral mínimo crítico (0V) es universal para todos los sistemas
 */
 
 -- ============================================================================================================
@@ -40,7 +44,7 @@ GO
 
 PRINT '';
 PRINT '============================================================================================================';
-PRINT 'INICIO: Actualizando umbrales de voltaje para permitir 0V como mínimo válido';
+PRINT 'INICIO: Configurando umbrales de voltaje para detectar sin energía (0V)';
 PRINT '============================================================================================================';
 PRINT '';
 
@@ -55,21 +59,21 @@ PRINT '-------------------------------------------------------------------------
 UPDATE threshold_configs
 SET
     value = 0.0,
-    description = 'Voltaje crítico mínimo - 0V es el valor mínimo válido (sin energía)',
+    description = 'Voltaje crítico mínimo - 0V indica ausencia total de energía (genera alerta crítica)',
     updated_at = GETDATE()
 WHERE threshold_key = 'critical_voltage_low';
 
-PRINT '✅ critical_voltage_low actualizado a 0.0V';
+PRINT '✅ critical_voltage_low actualizado a 0.0V (sin energía = alerta crítica)';
 
 -- Actualizar warning_voltage_low a 0V
 UPDATE threshold_configs
 SET
     value = 0.0,
-    description = 'Voltaje advertencia mínimo - 0V es el valor mínimo válido (sin energía)',
+    description = 'Voltaje advertencia mínimo - 0V indica ausencia total de energía (genera alerta crítica)',
     updated_at = GETDATE()
 WHERE threshold_key = 'warning_voltage_low';
 
-PRINT '✅ warning_voltage_low actualizado a 0.0V';
+PRINT '✅ warning_voltage_low actualizado a 0.0V (sin energía = alerta crítica)';
 GO
 
 -- ============================================================================================================
@@ -98,7 +102,7 @@ ORDER BY
 
 PRINT '';
 PRINT '============================================================================================================';
-PRINT 'RESUMEN: Umbrales de Voltaje Actualizados Correctamente';
+PRINT 'RESUMEN: Umbrales de Voltaje Configurados Correctamente';
 PRINT '============================================================================================================';
 PRINT '';
 
@@ -115,25 +119,29 @@ SELECT @criticalHighValue = value FROM threshold_configs WHERE threshold_key = '
 
 PRINT '📊 CONFIGURACIÓN DE UMBRALES DE VOLTAJE:';
 PRINT '';
-PRINT '   Umbrales Mínimos (actualizados):';
-PRINT '   • critical_voltage_low:  ' + CAST(@criticalLowValue AS NVARCHAR(10)) + ' V (sin energía = normal)';
-PRINT '   • warning_voltage_low:   ' + CAST(@warningLowValue AS NVARCHAR(10)) + ' V (sin energía = normal)';
+PRINT '   Umbrales Mínimos (detectan sin energía):';
+PRINT '   • critical_voltage_low:  ' + CAST(@criticalLowValue AS NVARCHAR(10)) + ' V → 0V = ALERTA CRÍTICA';
+PRINT '   • warning_voltage_low:   ' + CAST(@warningLowValue AS NVARCHAR(10)) + ' V → 0V = ALERTA CRÍTICA';
 PRINT '';
-PRINT '   Umbrales Máximos (sin cambios):';
-PRINT '   • warning_voltage_high:  ' + CAST(@warningHighValue AS NVARCHAR(10)) + ' V (advertencia sobrevoltaje)';
-PRINT '   • critical_voltage_high: ' + CAST(@criticalHighValue AS NVARCHAR(10)) + ' V (crítico sobrevoltaje)';
+PRINT '   Umbrales Máximos (detectan sobrevoltaje):';
+PRINT '   • warning_voltage_high:  ' + CAST(@warningHighValue AS NVARCHAR(10)) + ' V → sobrevoltaje leve';
+PRINT '   • critical_voltage_high: ' + CAST(@criticalHighValue AS NVARCHAR(10)) + ' V → sobrevoltaje peligroso';
 PRINT '';
 PRINT '⚙️ COMPORTAMIENTO ESPERADO:';
-PRINT '   ✓ Voltaje = 0V          → Normal (sin energía, sin alerta)';
+PRINT '   🚨 Voltaje = 0V          → CRÍTICO (sin energía, PDU desconectado o fallo eléctrico)';
 PRINT '   ✓ Voltaje 0V - 240V     → Normal (operación estándar)';
 PRINT '   ⚠ Voltaje 240V - 250V   → Advertencia (sobrevoltaje leve)';
 PRINT '   🚨 Voltaje > 250V       → Crítico (sobrevoltaje peligroso)';
 PRINT '';
-PRINT '📝 NOTAS IMPORTANTES:';
-PRINT '   • El mínimo siempre es 0V independientemente del sistema (110V/220V/380V)';
-PRINT '   • Los umbrales máximos deben ajustarse según el voltaje nominal';
-PRINT '   • 0V indica ausencia de energía, no es una alerta de "bajo voltaje"';
-PRINT '   • El sistema detecta principalmente sobrevoltaje que puede dañar equipos';
+PRINT '📝 DIFERENCIA CON AMPERAJE:';
+PRINT '   • Amperaje 0A:  Normal (sin carga, no genera alerta)';
+PRINT '   • Voltaje 0V:   CRÍTICO (sin energía, SÍ genera alerta)';
+PRINT '';
+PRINT '🔧 NOTAS TÉCNICAS:';
+PRINT '   • 0V indica falta de alimentación eléctrica (problema del sistema)';
+PRINT '   • 0A indica simplemente que no hay consumo (operación normal)';
+PRINT '   • Los PDUs deben tener voltaje presente aunque no tengan carga';
+PRINT '   • Detectar 0V identifica: desconexiones, fallos UPS, cortes de energía';
 PRINT '';
 PRINT '============================================================================================================';
 PRINT '✅ ACTUALIZACIÓN COMPLETADA EXITOSAMENTE';

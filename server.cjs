@@ -530,11 +530,12 @@ async function processRackData(racks, thresholds) {
     }
 
     // Voltage evaluation
-    // Skip evaluation if voltage is N/A, missing, or zero
+    // Skip evaluation if voltage is N/A or missing
+    // IMPORTANT: 0V is a valid critical condition (no power) and MUST be evaluated
     if (rack.voltage !== 'N/A' && rack.voltage !== null && rack.voltage !== undefined) {
-      const voltage = parseFloat(rack.voltage) || null;
+      const voltage = parseFloat(rack.voltage);
 
-      if (voltage !== null && !isNaN(voltage) && voltage > 0) {
+      if (!isNaN(voltage) && voltage >= 0) {
       const voltageCriticalLow = getThresholdValue(effectiveThresholds, 'critical_voltage_low');
       const voltageCriticalHigh = getThresholdValue(effectiveThresholds, 'critical_voltage_high');
       const voltageWarningLow = getThresholdValue(effectiveThresholds, 'warning_voltage_low');
@@ -550,11 +551,12 @@ async function processRackData(racks, thresholds) {
         voltageDebugCount++;
       }
 
-      // Only evaluate if all thresholds are defined and not zero
+      // Only evaluate if all thresholds are defined
+      // Note: Low thresholds can be 0 (to detect no power condition)
       if (voltageCriticalLow !== undefined && voltageCriticalHigh !== undefined &&
           voltageWarningLow !== undefined && voltageWarningHigh !== undefined &&
-          voltageCriticalLow > 0 && voltageCriticalHigh > 0 &&
-          voltageWarningLow > 0 && voltageWarningHigh > 0) {
+          voltageCriticalLow >= 0 && voltageCriticalHigh > 0 &&
+          voltageWarningLow >= 0 && voltageWarningHigh > 0) {
 
         // Check critical thresholds first (values from database)
         // Critical LOW: voltage at or below critical minimum
