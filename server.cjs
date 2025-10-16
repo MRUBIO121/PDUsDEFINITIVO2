@@ -451,25 +451,17 @@ async function processRackData(racks, thresholds) {
       warningHigh = getThresholdValue(effectiveThresholds, 'warning_amperage_high_single_phase');
     }
     
-    // Amperage evaluation - CRITICAL: Including 0A evaluation
-    // Only evaluate if all thresholds are defined
-    if (criticalLow !== undefined && criticalHigh !== undefined && warningLow !== undefined && warningHigh !== undefined) {
+    // Amperage evaluation - ONLY evaluate MAXIMUM thresholds (not minimum)
+    // Only evaluate if high thresholds are defined
+    if (criticalHigh !== undefined && warningHigh !== undefined) {
       if (current === 0) {
         reasons.push('critical_amperage_zero_reading');
         status = 'critical';
-      } else if (current <= criticalLow || current >= criticalHigh) {
-        if (current <= criticalLow) {
-          reasons.push(`critical_amperage_low_${isSinglePhase ? 'single_phase' : '3_phase'}`);
-        } else {
-          reasons.push(`critical_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
-        }
+      } else if (current >= criticalHigh) {
+        reasons.push(`critical_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
         status = 'critical';
-      } else if (current <= warningLow || current >= warningHigh) {
-        if (current <= warningLow) {
-          reasons.push(`warning_amperage_low_${isSinglePhase ? 'single_phase' : '3_phase'}`);
-        } else {
-          reasons.push(`warning_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
-        }
+      } else if (current >= warningHigh) {
+        reasons.push(`warning_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
         if (status !== 'critical') status = 'warning';
       }
     }
