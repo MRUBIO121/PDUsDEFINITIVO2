@@ -454,10 +454,7 @@ async function processRackData(racks, thresholds) {
     // Amperage evaluation - ONLY evaluate MAXIMUM thresholds (not minimum)
     // Only evaluate if high thresholds are defined
     if (criticalHigh !== undefined && warningHigh !== undefined) {
-      if (current === 0) {
-        reasons.push('critical_amperage_zero_reading');
-        status = 'critical';
-      } else if (current >= criticalHigh) {
+      if (current >= criticalHigh) {
         reasons.push(`critical_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
         status = 'critical';
       } else if (current >= warningHigh) {
