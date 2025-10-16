@@ -541,13 +541,11 @@ async function processRackData(racks, thresholds) {
     }
 
     // Voltage evaluation
-    // Only skip evaluation if voltage is N/A, missing, or undefined
-    // IMPORTANT: 0V is a CRITICAL problem and should be evaluated
+    // Skip evaluation if voltage is N/A, missing, or zero
     if (rack.voltage !== 'N/A' && rack.voltage !== null && rack.voltage !== undefined) {
-      const voltage = parseFloat(rack.voltage);
+      const voltage = parseFloat(rack.voltage) || null;
 
-      // Evaluate voltage if it's a valid number (including 0)
-      if (!isNaN(voltage) && voltage >= 0) {
+      if (voltage !== null && !isNaN(voltage) && voltage > 0) {
       const voltageCriticalLow = getThresholdValue(effectiveThresholds, 'critical_voltage_low');
       const voltageCriticalHigh = getThresholdValue(effectiveThresholds, 'critical_voltage_high');
       const voltageWarningLow = getThresholdValue(effectiveThresholds, 'warning_voltage_low');
@@ -628,8 +626,7 @@ async function processRackData(racks, thresholds) {
   processedRacks.forEach(rack => {
     voltageStats.total++;
     const voltage = parseFloat(rack.voltage);
-    // Count all valid voltage values including 0V (which is a critical problem)
-    if (!isNaN(voltage) && voltage >= 0) {
+    if (voltage && !isNaN(voltage) && voltage > 0) {
       voltageStats.withVoltage++;
       if (rack.reasons) {
         if (rack.reasons.includes('critical_voltage_low')) voltageStats.criticalLow++;

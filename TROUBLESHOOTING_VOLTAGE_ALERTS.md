@@ -3,14 +3,6 @@
 ## Problema
 Las alertas de voltaje no se marcan aunque el voltaje supere los umbrales configurados.
 
-## ⚠️ IMPORTANTE: Voltaje 0V se Evalúa
-
-**El sistema evalúa correctamente voltajes de 0V como problema crítico.**
-
-- ✅ 0V es un problema real (pérdida de energía) que genera alerta CRÍTICA
-- ✅ 0V NO se ignora como dato inválido
-- ❌ NULL, undefined, 'N/A' NO se evalúan (no hay datos disponibles)
-
 ## Diagnóstico Paso a Paso
 
 ### PASO 1: Verificar que los umbrales existen en la Base de Datos
