@@ -283,15 +283,58 @@ async function fetchThresholdsFromDatabase() {
 
     const thresholds = result.recordset || [];
 
-    // Check for voltage thresholds
+    // Check for voltage thresholds and insert if missing
     const voltageThresholds = thresholds.filter(t => t.key && t.key.includes('voltage'));
-    if (voltageThresholds.length > 0) {
-      console.log('✅ Umbrales de voltaje encontrados en BD:');
+    if (voltageThresholds.length === 4) {
+      console.log('✅ Umbrales de voltaje encontrados en BD SQL Server:');
       voltageThresholds.forEach(t => {
         console.log(`   ${t.key}: ${t.value}${t.unit || ''}`);
       });
     } else {
-      console.error('❌ No se encontraron umbrales de voltaje en la base de datos');
+      console.warn(`⚠️ Solo se encontraron ${voltageThresholds.length}/4 umbrales de voltaje en SQL Server`);
+      console.log('📋 Intentando insertar umbrales de voltaje faltantes...');
+
+      // Define required voltage thresholds
+      const requiredVoltageThresholds = [
+        { key: 'critical_voltage_low', value: 200.0, unit: 'V', description: 'Critical low voltage threshold' },
+        { key: 'critical_voltage_high', value: 250.0, unit: 'V', description: 'Critical high voltage threshold' },
+        { key: 'warning_voltage_low', value: 210.0, unit: 'V', description: 'Warning low voltage threshold' },
+        { key: 'warning_voltage_high', value: 240.0, unit: 'V', description: 'Warning high voltage threshold' }
+      ];
+
+      // Insert missing thresholds
+      try {
+        await executeQuery(async (pool) => {
+          for (const threshold of requiredVoltageThresholds) {
+            // Check if this threshold already exists
+            const existing = thresholds.find(t => t.key === threshold.key);
+            if (!existing) {
+              await pool.request()
+                .input('key', sql.NVarChar, threshold.key)
+                .input('value', sql.Decimal(18, 4), threshold.value)
+                .input('unit', sql.NVarChar, threshold.unit)
+                .input('description', sql.NVarChar, threshold.description)
+                .query(`
+                  INSERT INTO dbo.threshold_configs (threshold_key, value, unit, description, created_at, updated_at)
+                  VALUES (@key, @value, @unit, @description, GETDATE(), GETDATE())
+                `);
+              console.log(`   ✅ Insertado: ${threshold.key} = ${threshold.value}${threshold.unit}`);
+              // Add to thresholds array
+              thresholds.push({
+                key: threshold.key,
+                value: threshold.value,
+                unit: threshold.unit,
+                description: threshold.description,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              });
+            }
+          }
+        });
+        console.log('✅ Umbrales de voltaje verificados y actualizados en SQL Server');
+      } catch (insertError) {
+        console.error('❌ Error insertando umbrales de voltaje:', insertError.message);
+      }
     }
 
     // Update cache
@@ -554,10 +597,12 @@ async function processRackData(racks, thresholds) {
       // Debug log for first 3 racks with voltage
       if (voltageDebugCount < 3) {
         console.log(`\n🔌 [Voltage Debug #${voltageDebugCount + 1}] Rack: ${rack.name} (ID: ${rack.id})`);
-        console.log(`   Current Voltage: ${voltage}V`);
-        console.log(`   Thresholds:`);
-        console.log(`     Critical: ${voltageCriticalLow}V - ${voltageCriticalHigh}V`);
-        console.log(`     Warning:  ${voltageWarningLow}V - ${voltageWarningHigh}V`);
+        console.log(`   Current Voltage: ${voltage}V (from NENG API totalVolts field)`);
+        console.log(`   Thresholds (from SQL Server database):`);
+        console.log(`     Critical Low:  ${voltageCriticalLow}V (key: critical_voltage_low)`);
+        console.log(`     Warning Low:   ${voltageWarningLow}V (key: warning_voltage_low)`);
+        console.log(`     Warning High:  ${voltageWarningHigh}V (key: warning_voltage_high)`);
+        console.log(`     Critical High: ${voltageCriticalHigh}V (key: critical_voltage_high)`);
         voltageDebugCount++;
       }
 
@@ -776,7 +821,7 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
 async function processCriticalAlert(pdu, reason, thresholds) {
   try {
     // Extract metric type and field from reason
-    const metricInfo = extractMetricInfo(reason, pdu);
+    const metricInfo = extractMetricInfo(reason, pdu, thresholds);
 
     if (!metricInfo) {
       console.log(`⚠️ Could not extract metric info from reason: ${reason}`);
@@ -850,9 +895,9 @@ async function processCriticalAlert(pdu, reason, thresholds) {
 /**
  * Extracts metric information from alert reason and PDU data
  */
-function extractMetricInfo(reason, pdu) {
+function extractMetricInfo(reason, pdu, thresholds) {
   let metricType, alertField, alertValue;
-  
+
   if (reason.includes('amperage') || reason.includes('current')) {
     metricType = 'amperage';
     alertField = 'current';
@@ -880,10 +925,10 @@ function extractMetricInfo(reason, pdu) {
   } else {
     return null;
   }
-  
-  // Extract threshold exceeded (this would need to be calculated based on thresholds)
-  const thresholdExceeded = getThresholdFromReason(reason);
-  
+
+  // Extract threshold exceeded from database thresholds
+  const thresholdExceeded = getThresholdFromReason(reason, thresholds);
+
   return {
     metricType,
     alertField,
@@ -894,21 +939,46 @@ function extractMetricInfo(reason, pdu) {
 
 /**
  * Gets the threshold value that was exceeded based on the reason
- * This is a simplified version - you might want to enhance this with actual threshold lookup
+ * Looks up the actual threshold from the database thresholds
  */
-function getThresholdFromReason(reason) {
-  // This is a placeholder - ideally you'd look up the actual threshold from your thresholds data
-  if (reason.includes('critical_amperage_high')) return 25.0;
-  if (reason.includes('critical_amperage_low')) return 1.0;
-  if (reason.includes('critical_temperature_high')) return 40.0;
-  if (reason.includes('critical_temperature_low')) return 5.0;
-  if (reason.includes('critical_humidity_high')) return 80.0;
-  if (reason.includes('critical_humidity_low')) return 20.0;
-  if (reason.includes('critical_voltage_high')) return 250.0;
-  if (reason.includes('critical_voltage_low')) return 200.0;
-  if (reason.includes('warning_voltage_high')) return 240.0;
-  if (reason.includes('warning_voltage_low')) return 210.0;
-  return null;
+function getThresholdFromReason(reason, thresholds) {
+  // Map reason to threshold key
+  const reasonToKeyMap = {
+    'critical_amperage_high_single_phase': 'critical_amperage_high_single_phase',
+    'critical_amperage_low_single_phase': 'critical_amperage_low_single_phase',
+    'critical_amperage_high_3_phase': 'critical_amperage_high_3_phase',
+    'critical_amperage_low_3_phase': 'critical_amperage_low_3_phase',
+    'warning_amperage_high_single_phase': 'warning_amperage_high_single_phase',
+    'warning_amperage_low_single_phase': 'warning_amperage_low_single_phase',
+    'warning_amperage_high_3_phase': 'warning_amperage_high_3_phase',
+    'warning_amperage_low_3_phase': 'warning_amperage_low_3_phase',
+    'critical_temperature_high': 'critical_temperature_high',
+    'critical_temperature_low': 'critical_temperature_low',
+    'warning_temperature_high': 'warning_temperature_high',
+    'warning_temperature_low': 'warning_temperature_low',
+    'critical_humidity_high': 'critical_humidity_high',
+    'critical_humidity_low': 'critical_humidity_low',
+    'warning_humidity_high': 'warning_humidity_high',
+    'warning_humidity_low': 'warning_humidity_low',
+    'critical_voltage_high': 'critical_voltage_high',
+    'critical_voltage_low': 'critical_voltage_low',
+    'warning_voltage_high': 'warning_voltage_high',
+    'warning_voltage_low': 'warning_voltage_low'
+  };
+
+  // Find the matching threshold key
+  const thresholdKey = reasonToKeyMap[reason];
+  if (!thresholdKey) {
+    // If no exact match, try partial matches for amperage with phase
+    for (const [key, value] of Object.entries(reasonToKeyMap)) {
+      if (reason.includes(key.replace('_single_phase', '').replace('_3_phase', ''))) {
+        return getThresholdValue(thresholds, value);
+      }
+    }
+    return null;
+  }
+
+  return getThresholdValue(thresholds, thresholdKey);
 }
 
 /**
