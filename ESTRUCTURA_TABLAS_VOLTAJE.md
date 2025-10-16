@@ -375,3 +375,191 @@ ORDER BY rack_id, threshold_key;
 ---
 
 **✅ Con estas tablas configuradas, el sistema tiene soporte completo para monitorear y alertar sobre problemas de voltaje en todos los PDUs.**
+
+---
+
+## ⚠️ ACTUALIZACIÓN: Evaluación de Voltaje 0V
+
+### Cambio Importante en la Evaluación
+
+**El sistema ahora evalúa correctamente voltajes de 0V como problema crítico.**
+
+#### Antes (INCORRECTO)
+```javascript
+// Ignoraba 0V como dato inválido
+if (voltage !== null && !isNaN(voltage) && voltage > 0) {
+  // Evaluar...
+}
+```
+
+#### Después (CORRECTO)
+```javascript
+// Evalúa 0V como problema crítico
+if (!isNaN(voltage) && voltage >= 0) {
+  // Evaluar...
+}
+```
+
+### Valores de Voltaje que se Evalúan
+
+| Valor | ¿Se Evalúa? | Estado | Razón |
+|-------|-------------|--------|-------|
+| **0V** | ✅ **SÍ** | **CRÍTICO** | Sin energía - Problema real |
+| 1-199V | ✅ SÍ | CRÍTICO | Por debajo del umbral |
+| 200-210V | ✅ SÍ | ADVERTENCIA | Zona de advertencia baja |
+| 211-239V | ✅ SÍ | NORMAL | Rango operativo |
+| 240-249V | ✅ SÍ | ADVERTENCIA | Zona de advertencia alta |
+| 250V+ | ✅ SÍ | CRÍTICO | Por encima del umbral |
+| NULL | ❌ NO | N/A | Sin datos disponibles |
+| undefined | ❌ NO | N/A | Sin datos disponibles |
+| 'N/A' | ❌ NO | N/A | Sin datos disponibles |
+
+### Ejemplo: PDU con 0V
+
+**Entrada del API NENG:**
+```json
+{
+  "id": "PDU-001",
+  "name": "Rack 1 - PDU Principal",
+  "totalVolts": 0
+}
+```
+
+**Evaluación:**
+```javascript
+voltage = parseFloat(0) = 0
+!isNaN(0) = true ✅
+0 >= 0 = true ✅
+
+// Comparación con umbrales
+0 <= 200 = true ✅  // CRÍTICO BAJO
+status = 'critical'
+reasons = ['critical_voltage_low']
+```
+
+**Resultado en Base de Datos:**
+```sql
+INSERT INTO active_critical_alerts (
+    rack_id,
+    rack_name,
+    metric_type,
+    alert_field,
+    alert_reason,
+    alert_value,
+    threshold_exceeded,
+    alert_started_at,
+    last_updated_at
+) VALUES (
+    'PDU-001',
+    'Rack 1 - PDU Principal',
+    'voltage',
+    'voltage',
+    'critical_voltage_low',
+    0.0,
+    200.0,
+    GETDATE(),
+    GETDATE()
+);
+```
+
+**Log del Servidor:**
+```
+🔌 [Voltage Debug #1] Rack: Rack 1 - PDU Principal (ID: PDU-001)
+   Current Voltage: 0V
+   Thresholds:
+     Critical: 200V - 250V
+     Warning:  210V - 240V
+   ❌ CRITICAL: Voltage 0V <= 200V
+```
+
+**Frontend:**
+- Tarjeta ROJA (critical)
+- Badge: "CRÍTICO"
+- Tooltip: "Voltaje: 0V"
+- Aparece en sección de alertas críticas
+
+### Por Qué es Importante
+
+1. **0V es un Problema Real**
+   - Indica pérdida total de energía en el PDU
+   - Requiere atención inmediata
+   - NO es un error de medición
+
+2. **Diferencia entre 0V y NULL**
+   - **0V**: El API midió y reportó que no hay voltaje (PROBLEMA)
+   - **NULL**: El API no tiene datos de voltaje (SIN DATOS)
+
+3. **Impacto Operativo**
+   - PDU sin energía = servicios caídos
+   - Alertar inmediatamente permite respuesta rápida
+   - Historial de alertas muestra cuándo ocurrió el corte
+
+### Verificación
+
+#### Query para ver PDUs con 0V
+```sql
+SELECT
+    rack_id,
+    rack_name,
+    alert_value as voltage,
+    alert_reason,
+    alert_started_at,
+    DATEDIFF(MINUTE, alert_started_at, GETDATE()) as minutes_down
+FROM active_critical_alerts
+WHERE metric_type = 'voltage'
+  AND alert_value = 0
+  AND alert_reason = 'critical_voltage_low'
+ORDER BY alert_started_at DESC;
+```
+
+#### Query para estadísticas de 0V
+```sql
+SELECT
+    COUNT(*) as total_racks_sin_energia,
+    MIN(alert_started_at) as primer_corte,
+    MAX(alert_started_at) as ultimo_corte
+FROM active_critical_alerts
+WHERE metric_type = 'voltage'
+  AND alert_value = 0;
+```
+
+### Flujo Actualizado para 0V
+
+```
+┌─────────────────────┐
+│   API NENG          │
+│   totalVolts: 0     │  ← API reporta sin voltaje
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│   Validación        │
+│   !isNaN(0) ✅      │  ← 0 es un número válido
+│   0 >= 0 ✅         │  ← 0 no es negativo
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│   Comparación       │
+│   0 <= 200 ✅       │  ← Por debajo del umbral crítico
+│   Status: critical  │
+│   Reason: critical_ │
+│   voltage_low       │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│   active_critical_  │
+│   alerts            │
+│   alert_value: 0.0  │  ← Guardado en BD
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│   Frontend          │
+│   🔴 CRÍTICO        │  ← Tarjeta roja
+│   Voltaje: 0V       │
+└─────────────────────┘
+```
+
+---
