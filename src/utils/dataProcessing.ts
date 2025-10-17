@@ -128,7 +128,6 @@ export function filterRacks(
   searchField: string = 'all',
   metricFilter: string = 'all',
   showAllRacks: boolean = false,
-  showZeroAmperageAlerts: boolean = true,
   maintenanceRacks: Set<string> = new Set()
 ): RackData[] {
   let filteredRacks = racks;
@@ -245,24 +244,6 @@ export function filterRacks(
       // Show ONLY if has alerts and NOT in maintenance
       return hasAlert;
     });
-
-    // Filter out zero amperage alerts if the toggle is disabled
-    // No need to check maintenance here since they're already excluded
-    if (!showZeroAmperageAlerts) {
-      filteredRacks = filteredRacks.filter(rack => {
-        // Keep racks that don't have critical_amperage_zero_reading as a reason
-        // OR have other alert reasons in addition to critical_amperage_zero_reading
-        if (!rack.reasons || rack.reasons.length === 0) {
-          return true;
-        }
-
-        const hasZeroAmperageAlert = rack.reasons.includes('critical_amperage_zero_reading');
-        const hasOtherAlerts = rack.reasons.some(reason => reason !== 'critical_amperage_zero_reading');
-
-        // Keep if: no zero amperage alert OR has other alerts in addition to zero amperage
-        return !hasZeroAmperageAlert || hasOtherAlerts;
-      });
-    }
 
     // Apply additional status filter if specified
     // No need to check maintenance here since they're already excluded

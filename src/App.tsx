@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { Activity, AlertTriangle, Settings, BarChart3, Zap, ZapOff, Download, RefreshCw, Wrench } from 'lucide-react';
+import { Activity, AlertTriangle, Settings, BarChart3, Zap, Download, RefreshCw, Wrench } from 'lucide-react';
 import CountryGroup from './components/CountryGroup';
 import ThresholdManager from './components/ThresholdManager';
 import RackThresholdManager from './components/RackThresholdManager';
@@ -35,8 +35,6 @@ function App() {
     activeCountryFilter,
     activeSiteFilter,
     activeDcFilter,
-    showZeroAmperageAlerts,
-    setShowZeroAmperageAlerts,
     availableCountries,
     availableSites,
     availableDcs,
@@ -996,7 +994,7 @@ function App() {
                 {renderAlertSummaryBlock("Resumen de Alertas por PDU", filteredAlertSummary.pduSummary, 'pdus')}
                 
                 {/* Active Filters Display */}
-                {(activeStatusFilter !== 'all' || activeMetricFilter !== 'all' || !showZeroAmperageAlerts) && (
+                {(activeStatusFilter !== 'all' || activeMetricFilter !== 'all') && (
                   <div className="bg-white rounded-lg shadow mb-6 p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
@@ -1019,17 +1017,11 @@ function App() {
                              activeMetricFilter === 'power' ? 'Potencia' : activeMetricFilter}
                           </span>
                         )}
-                        {!showZeroAmperageAlerts && (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                            Ocultando 0A Críticos
-                          </span>
-                        )}
                       </div>
                       <button
                         onClick={() => {
                           setActiveStatusFilter('all');
                           setActiveMetricFilter('all');
-                          setShowZeroAmperageAlerts(true);
                         }}
                         className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
                         title="Limpiar todos los filtros"
@@ -1040,43 +1032,6 @@ function App() {
                   </div>
                 )}
               </>
-            )}
-
-            {/* Zero Amperage Toggle - Only in Alerts View */}
-            {!showThresholds && activeView === 'alertas' && (
-              <div className="bg-white rounded-lg shadow mb-6 p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <h3 className="text-sm font-medium text-gray-900">Configuración de Alertas</h3>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => setShowZeroAmperageAlerts(!showZeroAmperageAlerts)}
-                        className={`inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                          showZeroAmperageAlerts
-                            ? 'bg-red-100 text-red-800 hover:bg-red-200 border border-red-300'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-300'
-                        }`}
-                        title={showZeroAmperageAlerts ? "Ocultar alertas críticas de amperaje 0A" : "Mostrar alertas críticas de amperaje 0A"}
-                      >
-                        {showZeroAmperageAlerts ? (
-                          <>
-                            <Zap className="h-4 w-4 mr-2" />
-                            Mostrando 0A Críticos
-                          </>
-                        ) : (
-                          <>
-                            <ZapOff className="h-4 w-4 mr-2" />
-                            Ocultando 0A Críticos
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    PDUs con amperaje de 0A se consideran críticas por defecto
-                  </div>
-                </div>
-              </div>
             )}
 
             {showThresholds && (

@@ -4,7 +4,6 @@ import { groupRacksByCountry, filterRacks } from '../utils/dataProcessing';
 
 interface UseRackDataOptions {
   forceShowAllRacks?: boolean;
-  showZeroAmperageAlerts?: boolean;
 }
 
 interface UseRackDataReturn {
@@ -25,7 +24,6 @@ interface UseRackDataReturn {
   availableSites: string[];
   availableDcs: string[];
   activeMetricFilter: string;
-  showZeroAmperageAlerts: boolean;
   toggleCountryExpansion: (country: string) => void;
   toggleSiteExpansion: (site: string) => void;
   toggleDcExpansion: (dc: string) => void;
@@ -34,7 +32,6 @@ interface UseRackDataReturn {
   setActiveSiteFilter: (site: string) => void;
   setActiveDcFilter: (dc: string) => void;
   setActiveMetricFilter: (metric: string) => void;
-  setShowZeroAmperageAlerts: (show: boolean) => void;
   refreshData: () => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
@@ -43,7 +40,7 @@ interface UseRackDataReturn {
 }
 
 export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn {
-  const { forceShowAllRacks = false, showZeroAmperageAlerts: initialShowZeroAmperageAlerts = true } = options;
+  const { forceShowAllRacks = false } = options;
   
   const [racks, setRacks] = useState<RackData[]>([]);
   const [originalRackGroups, setOriginalRackGroups] = useState<RackData[][]>([]);
@@ -60,7 +57,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchField, setSearchField] = useState<string>('all');
   const [activeMetricFilter, setActiveMetricFilter] = useState<string>('all');
-  const [showZeroAmperageAlerts, setShowZeroAmperageAlerts] = useState<boolean>(initialShowZeroAmperageAlerts);
 
   const fetchRacks = async () => {
     try {
@@ -268,7 +264,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     searchField,
     activeMetricFilter,
     forceShowAllRacks,
-    showZeroAmperageAlerts,
     maintenanceRacks
   );
   const groupedRacks = groupRacksByCountry(filteredRacks);
@@ -300,8 +295,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     activeMetricFilter,
     setActiveMetricFilter,
     searchQuery,
-    showZeroAmperageAlerts,
-    setShowZeroAmperageAlerts,
     setSearchQuery,
     searchField,
     setSearchField,
