@@ -222,7 +222,7 @@ export default function SiteGroup({
       {/* DC Groups within this Site */}
       {isExpanded && (
         <div className="space-y-4 px-3 pb-6">
-          {Object.entries(dcGroups).map(([dc, logicalRackGroups]) => (
+          {Object.entries(dcGroups).sort(([a], [b]) => a.localeCompare(b)).map(([dc, logicalRackGroups]) => (
             <DcGroup
               key={dc}
               dc={dc}
