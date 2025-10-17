@@ -2776,6 +2776,7 @@ app.post('/api/export/alerts', async (req, res) => {
       { header: 'N° Serie', key: 'serial', width: 20 },
       { header: 'Fase', key: 'phase', width: 15 },
       { header: 'Amperaje (A)', key: 'current', width: 15 },
+      { header: 'Voltaje (V)', key: 'voltage', width: 15 },
       { header: 'Temperatura (°C)', key: 'temperature', width: 18 },
       { header: 'Humedad (%)', key: 'humidity', width: 15 },
       { header: 'Estado de Alerta', key: 'alert_status', width: 18 },
@@ -2821,6 +2822,9 @@ app.post('/api/export/alerts', async (req, res) => {
         serial: pdu.serial || 'N/A',
         phase: pdu.phase || 'N/A',
         current: pdu.current != null ? parseFloat(pdu.current).toFixed(2) : 'N/A',
+        voltage: pdu.voltage != null && !isNaN(pdu.voltage) && pdu.voltage > 0
+          ? parseFloat(pdu.voltage).toFixed(2)
+          : 'N/A',
         temperature: pdu.sensorTemperature != null
           ? parseFloat(pdu.sensorTemperature).toFixed(2)
           : (pdu.temperature != null ? parseFloat(pdu.temperature).toFixed(2) : 'N/A'),
@@ -2849,8 +2853,8 @@ app.post('/api/export/alerts', async (req, res) => {
         pdu.reasons.forEach(reason => {
           const reasonLower = reason.toLowerCase();
 
-          // Check if alert is related to amperage/current
-          if (reasonLower.includes('amperage') || reasonLower.includes('current')) {
+          // Check if alert is related to amperage/current (only HIGH alerts, not low or zero)
+          if (reasonLower.includes('amperage') && reasonLower.includes('high')) {
             const currentCell = row.getCell('current');
             currentCell.fill = {
               type: 'pattern',
@@ -2858,6 +2862,17 @@ app.post('/api/export/alerts', async (req, res) => {
               fgColor: { argb: alertColor }
             };
             currentCell.font = { color: { argb: fontColor }, bold: true };
+          }
+
+          // Check if alert is related to voltage
+          if (reasonLower.includes('voltage')) {
+            const voltageCell = row.getCell('voltage');
+            voltageCell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: alertColor }
+            };
+            voltageCell.font = { color: { argb: fontColor }, bold: true };
           }
 
           // Check if alert is related to temperature
