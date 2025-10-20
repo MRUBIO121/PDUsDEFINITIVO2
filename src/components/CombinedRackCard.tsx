@@ -267,7 +267,7 @@ export default function CombinedRackCard({
               {/* PDU Name/ID */}
               <div className="flex items-center mb-3">
                 <span className="font-medium text-gray-700 text-sm">
-                  {rack.id}
+                  ID PDU {rack.id}
                 </span>
               </div>
 
