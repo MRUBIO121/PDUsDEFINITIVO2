@@ -251,7 +251,7 @@ export default function CombinedRackCard({
             <Server className="text-gray-600 mr-2 h-6 w-6" />
             <div>
               <h3 className="font-semibold text-gray-900 text-lg">
-                {commonInfo.name} (ID: {commonInfo.rackId || commonInfo.id})
+                {commonInfo.name}
               </h3>
               <p className="text-sm text-gray-600 mt-1">
                 {formatPhaseText(commonInfo.phase)}
@@ -264,34 +264,10 @@ export default function CombinedRackCard({
         <div className="grid grid-cols-1 gap-4">
           {racks.map((rack, index) => (
             <div key={rack.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              {/* PDU Header */}
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center">
-                  <div className={`w-2 h-2 rounded-full ${getStatusColor(rack.status)} mr-1.5 ${
-                    rack.status !== 'normal' ? 'animate-pulse' : ''
-                  }`}></div>
-                  {isInMaintenance ? (
-                    <>
-                      <Wrench className="w-3 h-3 text-slate-600 mr-1" />
-                      <span className="text-[10px] text-slate-700 font-medium">
-                        Mantenimiento
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-3 h-3 text-emerald-600 mr-1" />
-                      <span className="text-[10px] text-gray-700 font-medium">
-                        Conectado
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-              
               {/* PDU Name/ID */}
               <div className="flex items-center mb-3">
                 <span className="font-medium text-gray-700 text-sm">
-                  PDU #{index + 1} (ID PDU: {rack.id})
+                  {rack.id}
                 </span>
               </div>
 
