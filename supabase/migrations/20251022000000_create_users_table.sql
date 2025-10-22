@@ -27,7 +27,7 @@ PRINT '=========================================================================
 PRINT '';
 
 -- ============================================================================================================
--- TABLA: users
+-- TABLA: usersAlertado
 -- ============================================================================================================
 -- PROPOSITO: Almacena los usuarios del sistema con sus credenciales y roles
 --
@@ -50,19 +50,19 @@ PRINT '';
 --   - Check constraint en 'rol' para validar roles permitidos
 --
 -- INDICES:
---   - IX_users_usuario: Para búsquedas rápidas por nombre de usuario
---   - IX_users_rol: Para filtrar por rol
---   - IX_users_activo: Para filtrar usuarios activos
+--   - IX_usersAlertado_usuario: Para búsquedas rápidas por nombre de usuario
+--   - IX_usersAlertado_rol: Para filtrar por rol
+--   - IX_usersAlertado_activo: Para filtrar usuarios activos
 --
 -- ============================================================================================================
 
 PRINT '------------------------------------------------------------------------------------------------------------';
-PRINT 'Creando tabla: users';
+PRINT 'Creando tabla: usersAlertado';
 PRINT '------------------------------------------------------------------------------------------------------------';
 
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='users' AND xtype='U')
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='usersAlertado' AND xtype='U')
 BEGIN
-    CREATE TABLE users (
+    CREATE TABLE usersAlertado (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         usuario NVARCHAR(100) UNIQUE NOT NULL,
         password_hash NVARCHAR(255) NOT NULL,
@@ -73,15 +73,15 @@ BEGIN
     );
 
     -- Crear índices para optimizar búsquedas
-    CREATE INDEX IX_users_usuario ON users(usuario);
-    CREATE INDEX IX_users_rol ON users(rol);
-    CREATE INDEX IX_users_activo ON users(activo);
+    CREATE INDEX IX_usersAlertado_usuario ON usersAlertado(usuario);
+    CREATE INDEX IX_usersAlertado_rol ON usersAlertado(rol);
+    CREATE INDEX IX_usersAlertado_activo ON usersAlertado(activo);
 
-    PRINT '✅ Tabla users creada exitosamente con índices';
+    PRINT '✅ Tabla usersAlertado creada exitosamente con índices';
 END
 ELSE
 BEGIN
-    PRINT 'ℹ️  Tabla users ya existe';
+    PRINT 'ℹ️  Tabla usersAlertado ya existe';
 END
 GO
 
@@ -103,12 +103,12 @@ PRINT 'Insertando usuario administrador por defecto';
 PRINT '------------------------------------------------------------------------------------------------------------';
 
 -- Verificar si ya existe un usuario administrador
-IF NOT EXISTS (SELECT * FROM users WHERE usuario = 'admin')
+IF NOT EXISTS (SELECT * FROM usersAlertado WHERE usuario = 'admin')
 BEGIN
     -- Hash de bcrypt para la contraseña "Admin123!" con salt rounds 10
     -- NOTA: Este hash debe ser generado en el backend al ejecutar el script
     -- Por ahora usamos un placeholder que será reemplazado por el backend
-    INSERT INTO users (usuario, password_hash, rol, activo, fecha_creacion, fecha_modificacion)
+    INSERT INTO usersAlertado (usuario, password_hash, rol, activo, fecha_creacion, fecha_modificacion)
     VALUES (
         'admin',
         '$2a$10$xyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqr', -- Placeholder, será reemplazado
@@ -137,8 +137,8 @@ PRINT '=========================================================================
 PRINT 'VERIFICACIÓN: Contando usuarios en la tabla';
 PRINT '============================================================================================================';
 
-SELECT COUNT(*) as Total_Usuarios FROM users;
-SELECT usuario, rol, activo, fecha_creacion FROM users;
+SELECT COUNT(*) as Total_Usuarios FROM usersAlertado;
+SELECT usuario, rol, activo, fecha_creacion FROM usersAlertado;
 
 PRINT '';
 PRINT '============================================================================================================';
