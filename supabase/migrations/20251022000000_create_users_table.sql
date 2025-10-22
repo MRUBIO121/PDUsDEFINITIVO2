@@ -33,7 +33,8 @@ PRINT '';
 --
 -- DESCRIPCION:
 --   Esta tabla contiene toda la información de los usuarios que pueden acceder al sistema.
---   Las contraseñas se almacenan en texto plano para facilitar el acceso.
+--   IMPORTANTE: Las contraseñas se almacenan en TEXTO PLANO (sin cifrado).
+--   No se utiliza bcrypt ni ningún otro método de hash de contraseñas.
 --
 -- CAMPOS:
 --   - id                : Identificador único del usuario (GUID)
@@ -94,7 +95,7 @@ GO
 --   Usuario: admin
 --   Contraseña: Admin123!
 --
--- La contraseña se almacena en texto plano para facilitar el acceso
+-- IMPORTANTE: La contraseña se almacena en texto plano (sin cifrado)
 -- ============================================================================================================
 
 PRINT '------------------------------------------------------------------------------------------------------------';

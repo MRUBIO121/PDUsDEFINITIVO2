@@ -84,12 +84,97 @@ Nginx (Reverse Proxy)
 - **Monitoreo**: PM2 para gestión de procesos
 - **Fuente de datos**: API NENG externa en tiempo real
 
+## Sistema de Autenticación
+
+### Descripción
+El sistema utiliza autenticación basada en sesiones con contraseñas en **texto plano** (sin cifrado).
+
+### Credenciales por Defecto
+- **Usuario**: `admin`
+- **Contraseña**: `Admin123!`
+
+### Roles Disponibles
+1. **Administrador**: Control total incluyendo gestión de usuarios
+2. **Operador**: Control total excepto gestión de usuarios
+3. **Tecnico**: Ver alertas y gestionar mantenimiento solamente
+4. **Observador**: Solo lectura, sin permisos de modificación
+
+### Configuración
+Las contraseñas se almacenan en texto plano en la tabla `usersAlertado` de SQL Server.
+No se utiliza bcrypt ni ningún otro método de hash de contraseñas.
+
+**IMPORTANTE**: El archivo `.env` debe incluir `SESSION_SECRET` para que las sesiones funcionen correctamente.
+
+```env
+SESSION_SECRET=your_session_secret_here_change_in_production
+```
+
+### API de Autenticación
+
+#### Login
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "usuario": "admin",
+  "password": "Admin123!"
+}
+```
+
+#### Logout
+```http
+POST /api/auth/logout
+```
+
+#### Verificar Sesión
+```http
+GET /api/auth/session
+```
+
+### Gestión de Usuarios (Solo Administrador)
+
+#### Listar Usuarios
+```http
+GET /api/users
+```
+
+#### Crear Usuario
+```http
+POST /api/users
+Content-Type: application/json
+
+{
+  "usuario": "nuevo_usuario",
+  "password": "password123",
+  "rol": "Operador"
+}
+```
+
+#### Actualizar Usuario
+```http
+PUT /api/users/:id
+Content-Type: application/json
+
+{
+  "usuario": "usuario_actualizado",
+  "password": "nueva_password",
+  "rol": "Tecnico",
+  "activo": true
+}
+```
+
+#### Eliminar Usuario (Soft Delete)
+```http
+DELETE /api/users/:id
+```
+
 ## Instalación
 
 ### Prerrequisitos
 - Node.js >= 16.0.0
 - npm >= 8.0.0
-- SQL Server (para umbrales)
+- SQL Server (para umbrales y usuarios)
 - Acceso a Supabase (para mantenimiento)
 - Nginx (para proxy)
 - PM2 (para producción)
@@ -108,7 +193,7 @@ NENG_API_URL=https://api.neng.com/v1/energy/racks
 NENG_SENSORS_API_URL=https://api.neng.com/v1/energy/sensors
 NENG_API_KEY=tu_clave_api_neng
 
-# SQL Server (Umbrales)
+# SQL Server (Umbrales y Usuarios)
 SQL_SERVER_HOST=localhost
 SQL_SERVER_DATABASE=energy_monitor_db
 SQL_SERVER_USER=sa
@@ -119,9 +204,13 @@ SQL_SERVER_PORT=1433
 VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
 VITE_SUPABASE_ANON_KEY=tu_anon_key
 
+# Autenticación (REQUERIDO)
+SESSION_SECRET=your_session_secret_here_change_in_production
+
 # Servidor
 NODE_ENV=production
 PORT=3001
+FRONTEND_URL=http://localhost:5173
 ```
 
 3. **Construir el frontend**:

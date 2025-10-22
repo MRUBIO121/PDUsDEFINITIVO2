@@ -10,7 +10,6 @@ const path = require('path');
 const ExcelJS = require('exceljs');
 const multer = require('multer');
 const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
 const session = require('express-session');
 
 // Environment variables loaded from .env file
@@ -1067,7 +1066,7 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Verify password
+    // Verify password (plain text comparison - no hashing)
     const passwordMatch = password === user.password;
 
     if (!passwordMatch) {
