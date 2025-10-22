@@ -1068,14 +1068,6 @@ function App() {
               </>
             )}
 
-            {showThresholds && (
-              <ThresholdManager 
-                thresholds={thresholds}
-                onSaveSuccess={handleThresholdSaveSuccess}
-                onClose={() => setShowThresholds(false)}
-              />
-            )}
-
             {/* Rack Threshold Manager Modal */}
             {showRackThresholdsModal && selectedRackId && (
               <RackThresholdManager
@@ -1086,8 +1078,16 @@ function App() {
               />
             )}
 
+            {showThresholds ? (
+              <ThresholdManager
+                thresholds={thresholds}
+                onSaveSuccess={handleThresholdSaveSuccess}
+                onClose={() => setShowThresholds(false)}
+              />
+            ) : (
+              <>
             {/* Search Bar - Only show when threshold manager is closed and NOT in maintenance view */}
-            {!showThresholds && !showRackThresholdsModal && activeView !== 'mantenimiento' && (
+            {!showRackThresholdsModal && activeView !== 'mantenimiento' && (
               <div className="bg-white rounded-lg shadow mb-6 p-4">
                 <div className="flex items-center space-x-4 flex-wrap gap-2">
                   <label htmlFor="search-input" className="text-sm font-medium text-gray-700 whitespace-nowrap">
@@ -1317,6 +1317,8 @@ function App() {
                   </div>
                 )}
               </>
+            )}
+            </>
             )}
           </div>
         </div>
