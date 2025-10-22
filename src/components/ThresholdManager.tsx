@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, RefreshCw, AlertTriangle, CheckCircle, Database, X } from 'lucide-react';
+import { Settings, Save, RefreshCw, AlertTriangle, CheckCircle, Database, X, Users } from 'lucide-react';
 import { ThresholdData } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import UserManagement from './UserManagement';
 
 interface ThresholdManagerProps {
   thresholds: ThresholdData[];
@@ -9,6 +11,8 @@ interface ThresholdManagerProps {
 }
 
 export default function ThresholdManager({ thresholds, onSaveSuccess, onClose }: ThresholdManagerProps) {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<'thresholds' | 'users'>('thresholds');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -172,23 +176,67 @@ export default function ThresholdManager({ thresholds, onSaveSuccess, onClose }:
     return key.startsWith('critical_') ? 'critical' : 'warning';
   };
 
+  const isAdmin = user?.rol === 'Administrador';
+  const isReadOnly = user?.rol === 'Observador';
+
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-6 relative">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-gray-900 flex items-center mb-6">
-          <Database className="h-6 w-6 mr-2 text-blue-600" />
-          Configuración de Umbrales
+          <Settings className="h-6 w-6 mr-2 text-blue-600" />
+          Configuración
         </h2>
-        
+
         {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-          title="Cerrar Configuración de Umbrales"
+          title="Cerrar Configuración"
         >
           <X className="h-5 w-5" />
         </button>
       </div>
+
+      {/* Tabs */}
+      {isAdmin && (
+        <div className="mb-6 border-b border-gray-200">
+          <div className="flex space-x-4">
+            <button
+              onClick={() => setActiveTab('thresholds')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === 'thresholds'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Database className="h-4 w-4 inline mr-2" />
+              Umbrales Generales
+            </button>
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === 'users'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Users className="h-4 w-4 inline mr-2" />
+              Gestión de Usuarios
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Content */}
+      {activeTab === 'users' && isAdmin ? (
+        <UserManagement />
+      ) : (
+        <>
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Umbrales Generales del Sistema
+            </h3>
+          </div>
 
       {/* Status Messages */}
       {error && (
@@ -229,7 +277,7 @@ export default function ThresholdManager({ thresholds, onSaveSuccess, onClose }:
 
         <button
           onClick={saveThresholds}
-          disabled={saving || !hasChanges()}
+          disabled={saving || !hasChanges() || isReadOnly}
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <Save className={`h-4 w-4 mr-2 ${saving ? 'animate-pulse' : ''}`} />
@@ -275,6 +323,7 @@ export default function ThresholdManager({ thresholds, onSaveSuccess, onClose }:
                             className={`flex-1 block w-full rounded-md shadow-sm text-sm ${inputColor}`}
                             step="0.1"
                             min="0"
+                            disabled={isReadOnly}
                           />
                           {threshold.unit && (
                             <span className={`text-sm font-medium ${textColor}`}>
@@ -322,6 +371,7 @@ export default function ThresholdManager({ thresholds, onSaveSuccess, onClose }:
                             className={`flex-1 block w-full rounded-md shadow-sm text-sm ${inputColor}`}
                             step="0.1"
                             min="0"
+                            disabled={isReadOnly}
                           />
                           {threshold.unit && (
                             <span className={`text-sm font-medium ${textColor}`}>
@@ -433,6 +483,7 @@ export default function ThresholdManager({ thresholds, onSaveSuccess, onClose }:
                             className={`flex-1 block w-full rounded-md shadow-sm text-sm ${inputColor}`}
                             step="0.1"
                             min="0"
+                            disabled={isReadOnly}
                           />
                           {threshold.unit && (
                             <span className={`text-sm font-medium ${textColor}`}>
@@ -452,12 +503,14 @@ export default function ThresholdManager({ thresholds, onSaveSuccess, onClose }:
         </div>
       )}
 
-      {hasChanges() && (
+      {!isReadOnly && hasChanges() && (
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-700">
             ⚠️ Hay cambios sin guardar. Haz clic en "Guardar Cambios" para aplicarlos.
           </p>
         </div>
+      )}
+        </>
       )}
     </div>
   );

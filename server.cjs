@@ -10,6 +10,8 @@ const path = require('path');
 const ExcelJS = require('exceljs');
 const multer = require('multer');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const session = require('express-session');
 
 // Environment variables loaded from .env file
 
@@ -199,6 +201,41 @@ app.use(morgan('combined', {
     write: (message) => logger.info(message.trim())
   }
 }));
+
+// Session configuration for authentication
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'energy-monitor-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Authentication middleware to check if user is logged in
+function requireAuth(req, res, next) {
+  if (req.session && req.session.userId) {
+    return next();
+  }
+  return res.status(401).json({ success: false, message: 'No autorizado. Por favor inicie sesión.' });
+}
+
+// Authorization middleware to check user role
+function requireRole(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.session || !req.session.userId) {
+      return res.status(401).json({ success: false, message: 'No autorizado. Por favor inicie sesión.' });
+    }
+
+    if (!allowedRoles.includes(req.session.userRole)) {
+      return res.status(403).json({ success: false, message: 'No tiene permisos para realizar esta acción.' });
+    }
+
+    return next();
+  };
+}
 
 // Cache configuration
 let racksCache = {
@@ -990,8 +1027,387 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
   }
 }
 
+// ============================================================================================================
+// AUTHENTICATION ENDPOINTS
+// ============================================================================================================
+
+// POST /api/auth/login - Login endpoint
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { usuario, password } = req.body;
+
+    if (!usuario || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Usuario y contraseña son requeridos'
+      });
+    }
+
+    // Query user from database
+    const result = await executeQuery(async (pool) => {
+      return await pool.request()
+        .input('usuario', sql.NVarChar, usuario)
+        .query('SELECT id, usuario, password_hash, rol, activo FROM users WHERE usuario = @usuario');
+    });
+
+    if (result.recordset.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Usuario o contraseña incorrectos'
+      });
+    }
+
+    const user = result.recordset[0];
+
+    // Check if user is active
+    if (!user.activo) {
+      return res.status(401).json({
+        success: false,
+        message: 'Este usuario está desactivado'
+      });
+    }
+
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Usuario o contraseña incorrectos'
+      });
+    }
+
+    // Create session
+    req.session.userId = user.id;
+    req.session.usuario = user.usuario;
+    req.session.userRole = user.rol;
+
+    logger.info(`User logged in: ${user.usuario} (${user.rol})`);
+
+    res.json({
+      success: true,
+      message: 'Inicio de sesión exitoso',
+      user: {
+        id: user.id,
+        usuario: user.usuario,
+        rol: user.rol
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in login:', error);
+    logger.error('Login error', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error en el servidor al iniciar sesión'
+    });
+  }
+});
+
+// POST /api/auth/logout - Logout endpoint
+app.post('/api/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      logger.error('Logout error', { error: err.message });
+      return res.status(500).json({
+        success: false,
+        message: 'Error al cerrar sesión'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Sesión cerrada exitosamente'
+    });
+  });
+});
+
+// GET /api/auth/session - Check if user has active session
+app.get('/api/auth/session', (req, res) => {
+  if (req.session && req.session.userId) {
+    return res.json({
+      success: true,
+      authenticated: true,
+      user: {
+        id: req.session.userId,
+        usuario: req.session.usuario,
+        rol: req.session.userRole
+      }
+    });
+  }
+
+  res.json({
+    success: true,
+    authenticated: false,
+    user: null
+  });
+});
+
+// ============================================================================================================
+// USER MANAGEMENT ENDPOINTS (Only for Administrador role)
+// ============================================================================================================
+
+// GET /api/users - Get all users
+app.get('/api/users', requireAuth, requireRole('Administrador'), async (req, res) => {
+  try {
+    const result = await executeQuery(async (pool) => {
+      return await pool.request().query(`
+        SELECT id, usuario, rol, activo, fecha_creacion, fecha_modificacion
+        FROM users
+        ORDER BY fecha_creacion DESC
+      `);
+    });
+
+    res.json({
+      success: true,
+      users: result.recordset
+    });
+
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    logger.error('Fetch users error', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener usuarios'
+    });
+  }
+});
+
+// POST /api/users - Create new user
+app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, res) => {
+  try {
+    const { usuario, password, rol } = req.body;
+
+    // Validation
+    if (!usuario || !password || !rol) {
+      return res.status(400).json({
+        success: false,
+        message: 'Usuario, contraseña y rol son requeridos'
+      });
+    }
+
+    // Validate role
+    const validRoles = ['Administrador', 'Operador', 'Tecnico', 'Observador'];
+    if (!validRoles.includes(rol)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rol inválido'
+      });
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'La contraseña debe tener al menos 8 caracteres'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await executeQuery(async (pool) => {
+      return await pool.request()
+        .input('usuario', sql.NVarChar, usuario)
+        .query('SELECT id FROM users WHERE usuario = @usuario');
+    });
+
+    if (existingUser.recordset.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'El usuario ya existe'
+      });
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Insert user
+    await executeQuery(async (pool) => {
+      return await pool.request()
+        .input('usuario', sql.NVarChar, usuario)
+        .input('password_hash', sql.NVarChar, passwordHash)
+        .input('rol', sql.NVarChar, rol)
+        .input('activo', sql.Bit, true)
+        .input('fecha_creacion', sql.DateTime, new Date())
+        .input('fecha_modificacion', sql.DateTime, new Date())
+        .query(`
+          INSERT INTO users (id, usuario, password_hash, rol, activo, fecha_creacion, fecha_modificacion)
+          VALUES (NEWID(), @usuario, @password_hash, @rol, @activo, @fecha_creacion, @fecha_modificacion)
+        `);
+    });
+
+    logger.info(`User created: ${usuario} (${rol}) by ${req.session.usuario}`);
+
+    res.json({
+      success: true,
+      message: 'Usuario creado exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error creating user:', error);
+    logger.error('Create user error', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error al crear usuario'
+    });
+  }
+});
+
+// PUT /api/users/:id - Update user
+app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { usuario, password, rol, activo } = req.body;
+
+    // Validation
+    if (!usuario || !rol) {
+      return res.status(400).json({
+        success: false,
+        message: 'Usuario y rol son requeridos'
+      });
+    }
+
+    // Validate role
+    const validRoles = ['Administrador', 'Operador', 'Tecnico', 'Observador'];
+    if (!validRoles.includes(rol)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rol inválido'
+      });
+    }
+
+    // Check if user exists
+    const existingUser = await executeQuery(async (pool) => {
+      return await pool.request()
+        .input('id', sql.UniqueIdentifier, id)
+        .query('SELECT id FROM users WHERE id = @id');
+    });
+
+    if (existingUser.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    // Check if new username is already taken by another user
+    const duplicateCheck = await executeQuery(async (pool) => {
+      return await pool.request()
+        .input('id', sql.UniqueIdentifier, id)
+        .input('usuario', sql.NVarChar, usuario)
+        .query('SELECT id FROM users WHERE usuario = @usuario AND id != @id');
+    });
+
+    if (duplicateCheck.recordset.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre de usuario ya está en uso'
+      });
+    }
+
+    // Build update query
+    let updateQuery = `
+      UPDATE users
+      SET usuario = @usuario, rol = @rol, activo = @activo, fecha_modificacion = @fecha_modificacion
+    `;
+
+    const request = await executeQuery(async (pool) => {
+      const req = pool.request()
+        .input('id', sql.UniqueIdentifier, id)
+        .input('usuario', sql.NVarChar, usuario)
+        .input('rol', sql.NVarChar, rol)
+        .input('activo', sql.Bit, activo !== undefined ? activo : true)
+        .input('fecha_modificacion', sql.DateTime, new Date());
+
+      // If password is provided, update it
+      if (password && password.trim() !== '') {
+        if (password.length < 8) {
+          throw new Error('La contraseña debe tener al menos 8 caracteres');
+        }
+        const passwordHash = await bcrypt.hash(password, 10);
+        req.input('password_hash', sql.NVarChar, passwordHash);
+        updateQuery += ', password_hash = @password_hash';
+      }
+
+      updateQuery += ' WHERE id = @id';
+
+      return await req.query(updateQuery);
+    });
+
+    logger.info(`User updated: ${usuario} (${rol}) by ${req.session.usuario}`);
+
+    res.json({
+      success: true,
+      message: 'Usuario actualizado exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error updating user:', error);
+    logger.error('Update user error', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error al actualizar usuario'
+    });
+  }
+});
+
+// DELETE /api/users/:id - Delete user (soft delete)
+app.delete('/api/users/:id', requireAuth, requireRole('Administrador'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if user exists
+    const existingUser = await executeQuery(async (pool) => {
+      return await pool.request()
+        .input('id', sql.UniqueIdentifier, id)
+        .query('SELECT id, usuario FROM users WHERE id = @id');
+    });
+
+    if (existingUser.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    // Prevent deleting yourself
+    if (existingUser.recordset[0].id === req.session.userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'No puede eliminar su propio usuario'
+      });
+    }
+
+    // Soft delete: set activo to false
+    await executeQuery(async (pool) => {
+      return await pool.request()
+        .input('id', sql.UniqueIdentifier, id)
+        .input('fecha_modificacion', sql.DateTime, new Date())
+        .query('UPDATE users SET activo = 0, fecha_modificacion = @fecha_modificacion WHERE id = @id');
+    });
+
+    logger.info(`User deleted: ${existingUser.recordset[0].usuario} by ${req.session.usuario}`);
+
+    res.json({
+      success: true,
+      message: 'Usuario eliminado exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    logger.error('Delete user error', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error al eliminar usuario'
+    });
+  }
+});
+
+// ============================================================================================================
+// PROTECTED API ENDPOINTS - Apply authentication to existing endpoints
+// ============================================================================================================
+
 // Endpoint para obtener datos de racks de energía
-app.get('/api/racks/energy', async (req, res) => {
+app.get('/api/racks/energy', requireAuth, async (req, res) => {
   const requestId = Math.random().toString(36).substr(2, 9);
 
   try {

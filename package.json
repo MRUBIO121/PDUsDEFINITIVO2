@@ -14,10 +14,12 @@
     "server:dev": "nodemon server.cjs"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
+    "express-session": "^1.18.2",
     "helmet": "^7.2.0",
     "lucide-react": "^0.344.0",
     "morgan": "^1.10.1",

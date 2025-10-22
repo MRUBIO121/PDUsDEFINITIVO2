@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { Activity, AlertTriangle, Settings, BarChart3, Zap, Download, RefreshCw, Wrench } from 'lucide-react';
+import { Activity, AlertTriangle, Settings, BarChart3, Zap, Download, RefreshCw, Wrench, LogOut, User } from 'lucide-react';
 import CountryGroup from './components/CountryGroup';
 import ThresholdManager from './components/ThresholdManager';
 import RackThresholdManager from './components/RackThresholdManager';
@@ -9,8 +9,10 @@ import { useRackData } from './hooks/useRackData';
 import { useThresholds } from './hooks/useThresholds';
 import { getThresholdValue } from './utils/thresholdUtils';
 import { getMetricStatusColor, getAmperageStatusColor } from './utils/uiUtils';
+import { useAuth } from './contexts/AuthContext';
 
 function App() {
+  const { user, logout } = useAuth();
   const [showThresholds, setShowThresholds] = useState(false);
   const [showRackThresholdsModal, setShowRackThresholdsModal] = useState(false);
   const [selectedRackId, setSelectedRackId] = useState<string>('');
@@ -896,6 +898,22 @@ function App() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-4">
+                  {/* User Info */}
+                  <div className="flex items-center px-3 py-2 bg-gray-50 rounded-md border border-gray-200">
+                    <User className="h-4 w-4 mr-2 text-gray-600" />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-gray-900">{user?.usuario}</span>
+                      <span className={`text-xs font-semibold ${
+                        user?.rol === 'Administrador' ? 'text-red-600' :
+                        user?.rol === 'Operador' ? 'text-blue-600' :
+                        user?.rol === 'Tecnico' ? 'text-green-600' :
+                        'text-gray-600'
+                      }`}>
+                        {user?.rol}
+                      </span>
+                    </div>
+                  </div>
+
                   {/* Refresh Button */}
                   <button
                     onClick={() => {
@@ -914,33 +932,47 @@ function App() {
                     Refrescar
                   </button>
 
-                  {/* Export Button */}
-                  <button
-                    onClick={handleExportAlerts}
-                    disabled={isExporting || racksLoading || thresholdsLoading}
-                    className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md transition-colors ${
-                      isExporting
-                        ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                        : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                    title={isExporting ? "Exportando alertas..." : "Exportar todas las alertas a archivo Excel"}
-                  >
-                    <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
-                    {isExporting ? 'Exportando...' : 'Exportar Excel'}
-                  </button>
+                  {/* Export Button - Visible to all except Observador */}
+                  {user?.rol !== 'Observador' && (
+                    <button
+                      onClick={handleExportAlerts}
+                      disabled={isExporting || racksLoading || thresholdsLoading}
+                      className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md transition-colors ${
+                        isExporting
+                          ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                          : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                      title={isExporting ? "Exportando alertas..." : "Exportar todas las alertas a archivo Excel"}
+                    >
+                      <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
+                      {isExporting ? 'Exportando...' : 'Exportar Excel'}
+                    </button>
+                  )}
 
-                  {/* Settings Button */}
+                  {/* Settings Button - Hidden for Tecnico and Observador */}
+                  {(user?.rol === 'Administrador' || user?.rol === 'Operador') && (
+                    <button
+                      onClick={() => setShowThresholds(!showThresholds)}
+                      className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md transition-colors ${
+                        showThresholds
+                          ? 'text-blue-800 bg-blue-100 hover:bg-blue-200'
+                          : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                      }`}
+                      title={showThresholds ? "Cerrar Configuración" : "Abrir Configuración"}
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Configuración
+                    </button>
+                  )}
+
+                  {/* Logout Button */}
                   <button
-                    onClick={() => setShowThresholds(!showThresholds)}
-                    className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md transition-colors ${
-                      showThresholds
-                        ? 'text-blue-800 bg-blue-100 hover:bg-blue-200'
-                        : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
-                    }`}
-                    title={showThresholds ? "Cerrar Configuración de Umbrales" : "Abrir Configuración de Umbrales"}
+                    onClick={logout}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                    title="Cerrar sesión"
                   >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Configuración
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Salir
                   </button>
                 </div>
               </div>
