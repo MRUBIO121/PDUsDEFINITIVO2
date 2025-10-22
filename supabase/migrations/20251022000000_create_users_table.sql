@@ -33,12 +33,12 @@ PRINT '';
 --
 -- DESCRIPCION:
 --   Esta tabla contiene toda la información de los usuarios que pueden acceder al sistema.
---   Las contraseñas se almacenan hasheadas usando bcrypt para máxima seguridad.
+--   Las contraseñas se almacenan en texto plano para facilitar el acceso.
 --
 -- CAMPOS:
 --   - id                : Identificador único del usuario (GUID)
 --   - usuario           : Nombre de usuario único para login
---   - password_hash     : Contraseña hasheada con bcrypt
+--   - password          : Contraseña en texto plano
 --   - rol               : Rol del usuario (Administrador, Operador, Tecnico, Observador)
 --   - activo            : Indica si el usuario está activo (soft delete)
 --   - fecha_creacion    : Fecha de creación del usuario
@@ -65,7 +65,7 @@ BEGIN
     CREATE TABLE usersAlertado (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         usuario NVARCHAR(100) UNIQUE NOT NULL,
-        password_hash NVARCHAR(255) NOT NULL,
+        password NVARCHAR(255) NOT NULL,
         rol NVARCHAR(50) NOT NULL CHECK (rol IN ('Administrador', 'Operador', 'Tecnico', 'Observador')),
         activo BIT NOT NULL DEFAULT 1,
         fecha_creacion DATETIME DEFAULT GETDATE(),
@@ -94,8 +94,7 @@ GO
 --   Usuario: admin
 --   Contraseña: Admin123!
 --
--- El password_hash corresponde a "Admin123!" hasheado con bcrypt (salt rounds: 10)
--- Hash generado con: bcrypt.hashSync('Admin123!', 10)
+-- La contraseña se almacena en texto plano para facilitar el acceso
 -- ============================================================================================================
 
 PRINT '------------------------------------------------------------------------------------------------------------';
@@ -105,13 +104,10 @@ PRINT '-------------------------------------------------------------------------
 -- Verificar si ya existe un usuario administrador
 IF NOT EXISTS (SELECT * FROM usersAlertado WHERE usuario = 'admin')
 BEGIN
-    -- Hash de bcrypt para la contraseña "Admin123!" con salt rounds 10
-    -- NOTA: Este hash debe ser generado en el backend al ejecutar el script
-    -- Por ahora usamos un placeholder que será reemplazado por el backend
-    INSERT INTO usersAlertado (usuario, password_hash, rol, activo, fecha_creacion, fecha_modificacion)
+    INSERT INTO usersAlertado (usuario, password, rol, activo, fecha_creacion, fecha_modificacion)
     VALUES (
         'admin',
-        '$2a$10$xyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqr', -- Placeholder, será reemplazado
+        'Admin123!',
         'Administrador',
         1,
         GETDATE(),
