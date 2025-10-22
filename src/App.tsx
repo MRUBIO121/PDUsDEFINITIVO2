@@ -454,7 +454,6 @@ function App() {
     try {
       const response = await fetch('/api/maintenance/rack', {
         method: 'POST',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         },
@@ -494,7 +493,6 @@ function App() {
     try {
       const response = await fetch('/api/maintenance/chain', {
         method: 'POST',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         },
@@ -562,7 +560,6 @@ function App() {
     try {
       const response = await fetch('/api/export/alerts', {
         method: 'POST',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
