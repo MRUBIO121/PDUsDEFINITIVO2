@@ -10,7 +10,7 @@ const path = require('path');
 const ExcelJS = require('exceljs');
 const multer = require('multer');
 const crypto = require('crypto');
-// const bcrypt = require('bcryptjs'); // Removed - passwords stored in plain text
+const bcrypt = require('bcryptjs');
 const session = require('express-session');
 
 // Environment variables loaded from .env file
@@ -1047,7 +1047,7 @@ app.post('/api/auth/login', async (req, res) => {
     const result = await executeQuery(async (pool) => {
       return await pool.request()
         .input('usuario', sql.NVarChar, usuario)
-        .query('SELECT id, usuario, password, rol, activo FROM users WHERE usuario = @usuario');
+        .query('SELECT id, usuario, password_hash, rol, activo FROM users WHERE usuario = @usuario');
     });
 
     if (result.recordset.length === 0) {
@@ -1067,8 +1067,10 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Verify password (plain text comparison)
-    if (password !== user.password) {
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatch) {
       return res.status(401).json({
         success: false,
         message: 'Usuario o contraseña incorrectos'
@@ -1150,7 +1152,7 @@ app.get('/api/users', requireAuth, requireRole('Administrador'), async (req, res
   try {
     const result = await executeQuery(async (pool) => {
       return await pool.request().query(`
-        SELECT id, usuario, password, rol, activo, fecha_creacion, fecha_modificacion
+        SELECT id, usuario, rol, activo, fecha_creacion, fecha_modificacion
         FROM users
         ORDER BY fecha_creacion DESC
       `);
@@ -1215,18 +1217,21 @@ app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, re
       });
     }
 
-    // Insert user with plain text password
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Insert user
     await executeQuery(async (pool) => {
       return await pool.request()
         .input('usuario', sql.NVarChar, usuario)
-        .input('password', sql.NVarChar, password)
+        .input('password_hash', sql.NVarChar, passwordHash)
         .input('rol', sql.NVarChar, rol)
         .input('activo', sql.Bit, true)
         .input('fecha_creacion', sql.DateTime, new Date())
         .input('fecha_modificacion', sql.DateTime, new Date())
         .query(`
-          INSERT INTO users (id, usuario, password, rol, activo, fecha_creacion, fecha_modificacion)
-          VALUES (NEWID(), @usuario, @password, @rol, @activo, @fecha_creacion, @fecha_modificacion)
+          INSERT INTO users (id, usuario, password_hash, rol, activo, fecha_creacion, fecha_modificacion)
+          VALUES (NEWID(), @usuario, @password_hash, @rol, @activo, @fecha_creacion, @fecha_modificacion)
         `);
     });
 
@@ -1313,13 +1318,14 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
         .input('activo', sql.Bit, activo !== undefined ? activo : true)
         .input('fecha_modificacion', sql.DateTime, new Date());
 
-      // If password is provided, update it (plain text)
+      // If password is provided, update it
       if (password && password.trim() !== '') {
         if (password.length < 8) {
           throw new Error('La contraseña debe tener al menos 8 caracteres');
         }
-        req.input('password', sql.NVarChar, password);
-        updateQuery += ', password = @password';
+        const passwordHash = await bcrypt.hash(password, 10);
+        req.input('password_hash', sql.NVarChar, passwordHash);
+        updateQuery += ', password_hash = @password_hash';
       }
 
       updateQuery += ' WHERE id = @id';
