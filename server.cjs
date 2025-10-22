@@ -1047,7 +1047,7 @@ app.post('/api/auth/login', async (req, res) => {
     const result = await executeQuery(async (pool) => {
       return await pool.request()
         .input('usuario', sql.NVarChar, usuario)
-        .query('SELECT id, usuario, password_hash, rol, activo FROM users WHERE usuario = @usuario');
+        .query('SELECT id, usuario, password, rol, activo FROM usersAlertado WHERE usuario = @usuario');
     });
 
     if (result.recordset.length === 0) {
@@ -1068,7 +1068,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Verify password
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    const passwordMatch = password === user.password;
 
     if (!passwordMatch) {
       return res.status(401).json({
@@ -1153,7 +1153,7 @@ app.get('/api/users', requireAuth, requireRole('Administrador'), async (req, res
     const result = await executeQuery(async (pool) => {
       return await pool.request().query(`
         SELECT id, usuario, rol, activo, fecha_creacion, fecha_modificacion
-        FROM users
+        FROM usersAlertado
         ORDER BY fecha_creacion DESC
       `);
     });
@@ -1207,7 +1207,7 @@ app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, re
     const existingUser = await executeQuery(async (pool) => {
       return await pool.request()
         .input('usuario', sql.NVarChar, usuario)
-        .query('SELECT id FROM users WHERE usuario = @usuario');
+        .query('SELECT id FROM usersAlertado WHERE usuario = @usuario');
     });
 
     if (existingUser.recordset.length > 0) {
@@ -1217,21 +1217,21 @@ app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, re
       });
     }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
+    // Use plain text password (as requested)
+    const plainPassword = password;
 
     // Insert user
     await executeQuery(async (pool) => {
       return await pool.request()
         .input('usuario', sql.NVarChar, usuario)
-        .input('password_hash', sql.NVarChar, passwordHash)
+        .input('password', sql.NVarChar, plainPassword)
         .input('rol', sql.NVarChar, rol)
         .input('activo', sql.Bit, true)
         .input('fecha_creacion', sql.DateTime, new Date())
         .input('fecha_modificacion', sql.DateTime, new Date())
         .query(`
-          INSERT INTO users (id, usuario, password_hash, rol, activo, fecha_creacion, fecha_modificacion)
-          VALUES (NEWID(), @usuario, @password_hash, @rol, @activo, @fecha_creacion, @fecha_modificacion)
+          INSERT INTO usersAlertado (id, usuario, password, rol, activo, fecha_creacion, fecha_modificacion)
+          VALUES (NEWID(), @usuario, @password, @rol, @activo, @fecha_creacion, @fecha_modificacion)
         `);
     });
 
@@ -1279,7 +1279,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
     const existingUser = await executeQuery(async (pool) => {
       return await pool.request()
         .input('id', sql.UniqueIdentifier, id)
-        .query('SELECT id FROM users WHERE id = @id');
+        .query('SELECT id FROM usersAlertado WHERE id = @id');
     });
 
     if (existingUser.recordset.length === 0) {
@@ -1294,7 +1294,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
       return await pool.request()
         .input('id', sql.UniqueIdentifier, id)
         .input('usuario', sql.NVarChar, usuario)
-        .query('SELECT id FROM users WHERE usuario = @usuario AND id != @id');
+        .query('SELECT id FROM usersAlertado WHERE usuario = @usuario AND id != @id');
     });
 
     if (duplicateCheck.recordset.length > 0) {
@@ -1306,7 +1306,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
 
     // Build update query
     let updateQuery = `
-      UPDATE users
+      UPDATE usersAlertado
       SET usuario = @usuario, rol = @rol, activo = @activo, fecha_modificacion = @fecha_modificacion
     `;
 
@@ -1323,9 +1323,8 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
         if (password.length < 8) {
           throw new Error('La contraseña debe tener al menos 8 caracteres');
         }
-        const passwordHash = await bcrypt.hash(password, 10);
-        req.input('password_hash', sql.NVarChar, passwordHash);
-        updateQuery += ', password_hash = @password_hash';
+        req.input('password', sql.NVarChar, password);
+        updateQuery += ', password = @password';
       }
 
       updateQuery += ' WHERE id = @id';
@@ -1359,7 +1358,7 @@ app.delete('/api/users/:id', requireAuth, requireRole('Administrador'), async (r
     const existingUser = await executeQuery(async (pool) => {
       return await pool.request()
         .input('id', sql.UniqueIdentifier, id)
-        .query('SELECT id, usuario FROM users WHERE id = @id');
+        .query('SELECT id, usuario FROM usersAlertado WHERE id = @id');
     });
 
     if (existingUser.recordset.length === 0) {
@@ -1382,7 +1381,7 @@ app.delete('/api/users/:id', requireAuth, requireRole('Administrador'), async (r
       return await pool.request()
         .input('id', sql.UniqueIdentifier, id)
         .input('fecha_modificacion', sql.DateTime, new Date())
-        .query('UPDATE users SET activo = 0, fecha_modificacion = @fecha_modificacion WHERE id = @id');
+        .query('UPDATE usersAlertado SET activo = 0, fecha_modificacion = @fecha_modificacion WHERE id = @id');
     });
 
     logger.info(`User deleted: ${existingUser.recordset[0].usuario} by ${req.session.usuario}`);
