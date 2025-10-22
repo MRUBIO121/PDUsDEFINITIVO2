@@ -67,6 +67,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       const timestamp = new Date().getTime();
       const response = await fetch(`/api/racks/energy?t=${timestamp}`, {
         cache: 'no-store',
+        credentials: 'include',
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
@@ -121,6 +122,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       const timestamp = new Date().getTime();
       const response = await fetch(`/api/maintenance?t=${timestamp}`, {
         cache: 'no-store',
+        credentials: 'include',
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
