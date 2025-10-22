@@ -83,6 +83,7 @@ export default function RackThresholdManager({ rackId, rackName, onSaveSuccess, 
 
       const response = await fetch(`/api/racks/${rackId}/thresholds`, {
         method: 'PUT',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -121,6 +122,7 @@ export default function RackThresholdManager({ rackId, rackName, onSaveSuccess, 
     try {
       const response = await fetch(`/api/racks/${rackId}/thresholds`, {
         method: 'DELETE',
+        credentials: 'include',
       });
       
       if (!response.ok) {

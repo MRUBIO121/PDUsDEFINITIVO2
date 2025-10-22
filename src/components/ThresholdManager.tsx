@@ -71,6 +71,7 @@ export default function ThresholdManager({ thresholds, onSaveSuccess, onClose }:
 
       const response = await fetch('/api/thresholds', {
         method: 'PUT',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },

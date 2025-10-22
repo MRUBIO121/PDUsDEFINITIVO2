@@ -59,6 +59,7 @@ export default function MaintenancePage() {
       const timestamp = new Date().getTime();
       const response = await fetch(`/api/maintenance?t=${timestamp}`, {
         cache: 'no-store',
+        credentials: 'include',
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
@@ -105,6 +106,7 @@ export default function MaintenancePage() {
 
       const response = await fetch(`/api/maintenance/entry/${encodeURIComponent(entryId)}`, {
         method: 'DELETE',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         }
@@ -143,6 +145,7 @@ export default function MaintenancePage() {
 
       const response = await fetch(`/api/maintenance/rack/${encodeURIComponent(rackId)}`, {
         method: 'DELETE',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         }
@@ -188,6 +191,7 @@ export default function MaintenancePage() {
 
       const response = await fetch('/api/maintenance/all', {
         method: 'DELETE',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         }

@@ -77,7 +77,9 @@ export default function ImportMaintenanceModal({ isOpen, onClose, onImportComple
 
   const handleDownloadTemplate = async () => {
     try {
-      const response = await fetch('/api/maintenance/template');
+      const response = await fetch('/api/maintenance/template', {
+        credentials: 'include'
+      });
       if (!response.ok) {
         throw new Error('Failed to download template');
       }
@@ -111,6 +113,7 @@ export default function ImportMaintenanceModal({ isOpen, onClose, onImportComple
 
       const response = await fetch('/api/maintenance/import-excel', {
         method: 'POST',
+        credentials: 'include',
         body: formData
       });
 

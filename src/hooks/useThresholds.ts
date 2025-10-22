@@ -31,6 +31,7 @@ export function useThresholds(options: UseThresholdsOptions = {}): UseThresholds
       const timestamp = new Date().getTime();
       const fetchOptions = {
         cache: 'no-store' as RequestCache,
+        credentials: 'include' as RequestCredentials,
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
