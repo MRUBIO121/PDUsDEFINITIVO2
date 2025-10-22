@@ -187,9 +187,13 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 
+// CORS configuration - must be before session middleware
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+  exposedHeaders: ['set-cookie']
 }));
 
 app.use(express.json({ limit: '10mb' }));
@@ -207,19 +211,49 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'energy-monitor-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,
+  name: 'sessionId', // Custom session cookie name
+  proxy: true, // Trust proxy (important for Vite dev server)
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // Allow cookies in dev mode
+    path: '/',
   }
 }));
 
+// Session debugging middleware - logs session info for each request
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  console.log('  Session ID:', req.sessionID);
+  console.log('  Session exists:', !!req.session);
+  console.log('  User ID in session:', req.session?.userId || 'none');
+  console.log('  Cookies:', req.headers.cookie || 'none');
+  next();
+});
+
 // Authentication middleware to check if user is logged in
 function requireAuth(req, res, next) {
+  console.log('[requireAuth] Checking authentication...');
+  console.log('[requireAuth] Session exists:', !!req.session);
+  console.log('[requireAuth] Session ID:', req.sessionID);
+  console.log('[requireAuth] User ID:', req.session?.userId || 'none');
+
   if (req.session && req.session.userId) {
+    console.log('[requireAuth] ✅ Authentication successful for user:', req.session.usuario);
     return next();
   }
-  return res.status(401).json({ success: false, message: 'No autorizado. Por favor inicie sesión.' });
+
+  console.log('[requireAuth] ❌ Authentication failed - No valid session');
+  console.log('[requireAuth] Session object:', JSON.stringify(req.session));
+  return res.status(401).json({
+    success: false,
+    message: 'No autorizado. Por favor inicie sesión.',
+    debug: {
+      sessionExists: !!req.session,
+      hasUserId: !!req.session?.userId
+    }
+  });
 }
 
 // Authorization middleware to check user role
@@ -1071,27 +1105,46 @@ app.post('/api/auth/login', async (req, res) => {
     const passwordMatch = password === user.password;
 
     if (!passwordMatch) {
+      console.log(`[Login] ❌ Password mismatch for user: ${usuario}`);
       return res.status(401).json({
         success: false,
         message: 'Usuario o contraseña incorrectos'
       });
     }
 
+    console.log(`[Login] ✅ Password verified for user: ${usuario}`);
+    console.log(`[Login] Session before save - ID: ${req.sessionID}`);
+
     // Create session
     req.session.userId = user.id;
     req.session.usuario = user.usuario;
     req.session.userRole = user.rol;
 
-    logger.info(`User logged in: ${user.usuario} (${user.rol})`);
+    console.log(`[Login] Session data set - User ID: ${user.id}, Usuario: ${user.usuario}, Role: ${user.rol}`);
 
-    res.json({
-      success: true,
-      message: 'Inicio de sesión exitoso',
-      user: {
-        id: user.id,
-        usuario: user.usuario,
-        rol: user.rol
+    // Save session explicitly and wait for it to complete
+    req.session.save((err) => {
+      if (err) {
+        console.error('[Login] ❌ Error saving session:', err);
+        logger.error('Session save error', { error: err.message });
+        return res.status(500).json({
+          success: false,
+          message: 'Error al guardar la sesión'
+        });
       }
+
+      console.log(`[Login] ✅ Session saved successfully - Session ID: ${req.sessionID}`);
+      logger.info(`User logged in: ${user.usuario} (${user.rol})`);
+
+      res.json({
+        success: true,
+        message: 'Inicio de sesión exitoso',
+        user: {
+          id: user.id,
+          usuario: user.usuario,
+          rol: user.rol
+        }
+      });
     });
 
   } catch (error) {
