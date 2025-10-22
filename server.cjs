@@ -217,7 +217,7 @@ app.use(session({
   cookie: {
     secure: false, // Set to false to work with HTTP in production
     httpOnly: true,
-    maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
     sameSite: 'lax' // Allow cookies to be sent with same-site requests
   }
 }));
