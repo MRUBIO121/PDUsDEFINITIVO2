@@ -14,8 +14,6 @@
     "server:dev": "nodemon server.cjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.47.10",
-    "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "exceljs": "^4.4.0",
@@ -26,7 +24,6 @@
     "morgan": "^1.10.1",
     "mssql": "^11.0.1",
     "multer": "^2.0.2",
-    "pg": "^8.13.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.9.3",

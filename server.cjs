@@ -11,8 +11,6 @@ const ExcelJS = require('exceljs');
 const multer = require('multer');
 const crypto = require('crypto');
 const session = require('express-session');
-const pgSession = require('connect-pg-simple')(session);
-const { Pool } = require('pg');
 
 // Environment variables loaded from .env file
 
@@ -45,16 +43,6 @@ const logsDir = path.join(__dirname, 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
-
-// PostgreSQL Pool for Session Storage (Supabase)
-// Extract project ref from SUPABASE_URL (e.g., https://dxafxtlqogjaoqxfjbti.supabase.co)
-const supabaseProjectRef = process.env.SUPABASE_URL ? process.env.SUPABASE_URL.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] : null;
-const pgPool = new Pool({
-  connectionString: supabaseProjectRef && process.env.SUPABASE_SERVICE_ROLE_KEY
-    ? `postgresql://postgres.${supabaseProjectRef}:${process.env.SUPABASE_SERVICE_ROLE_KEY}@aws-0-us-east-1.pooler.supabase.com:6543/postgres`
-    : undefined,
-  ssl: { rejectUnauthorized: false }
-});
 
 // SQL Server Configuration
 const sqlConfig = {
@@ -213,20 +201,14 @@ app.use(morgan('combined', {
   }
 }));
 
-// Session configuration for authentication with PostgreSQL store
+// Session configuration for authentication
 app.use(session({
-  store: new pgSession({
-    pool: pgPool,
-    tableName: 'sessions',
-    createTableIfMissing: false // Table already created via migration
-  }),
   secret: process.env.SESSION_SECRET || 'energy-monitor-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // Set to true only if using HTTPS
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: 'lax',
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
