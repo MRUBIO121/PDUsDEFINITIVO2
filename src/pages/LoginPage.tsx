@@ -112,12 +112,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-xs text-gray-500">
-              Sistema de Monitoreo de Energía v1.0
-            </p>
-          </div>
         </div>
 
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
