@@ -826,96 +826,103 @@ function App() {
     <Routes>
       <Route path="/" element={
         <div className="min-h-screen bg-gray-100">
-          <div className="bg-white shadow">
+          <div className="bg-white shadow-md border-b border-gray-200">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between items-center py-6">
-                <div className="flex items-center space-x-6">
-                  <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
-                      Monitoreo de Racks y PDUs
-                    </h1>
-                    <div className="flex items-center mt-1">
-                      <span className="text-sm text-gray-600">
-                        {globalAlertSummary.totalAlertingPdus} PDUs con alertas de {racks.length} PDUs totales
-                      </span>
-                      {globalAlertSummary.totalAlertingPdus > 0 && (
-                        <div className="ml-3 flex items-center space-x-2">
-                          {globalAlertSummary.pduSummary.critical.total > 0 && (
-                            <div className="flex items-center">
-                              <div className="w-2 h-2 bg-red-600 rounded-full mr-1 animate-pulse"></div>
-                              <span className="text-xs font-medium text-red-700">
-                                {globalAlertSummary.pduSummary.critical.total} crítico{globalAlertSummary.pduSummary.critical.total !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-                          )}
-                          {globalAlertSummary.pduSummary.warning.total > 0 && (
-                            <div className="flex items-center">
-                              <div className="w-2 h-2 bg-yellow-500 rounded-full mr-1 animate-pulse"></div>
-                              <span className="text-xs font-medium text-yellow-700">
-                                {globalAlertSummary.pduSummary.warning.total} advertencia{globalAlertSummary.pduSummary.warning.total !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* View Toggle Buttons */}
-                  <div className="flex items-center bg-gray-100 rounded-lg p-1">
-                    <button
-                      onClick={() => {
-                        setActiveView('principal');
-                        setActiveStatusFilter('all');
-                        setActiveMetricFilter('all');
-                      }}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                        activeView === 'principal'
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'text-gray-700 hover:text-gray-900 hover:bg-white'
-                      }`}
-                    >
-                      Principal
-                    </button>
-                    <button
-                      onClick={() => setActiveView('alertas')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                        activeView === 'alertas'
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'text-gray-700 hover:text-gray-900 hover:bg-white'
-                      }`}
-                    >
-                      Alertas
-                    </button>
-                    <button
-                      onClick={() => setActiveView('mantenimiento')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                        activeView === 'mantenimiento'
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'text-gray-700 hover:text-gray-900 hover:bg-white'
-                      }`}
-                    >
-                      Mantenimiento
-                    </button>
+              {/* Top Row - Title and User Info */}
+              <div className="flex justify-between items-center py-4 border-b border-gray-100">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    Monitoreo de Racks y PDUs
+                  </h1>
+                  <div className="flex items-center mt-1">
+                    <span className="text-sm text-gray-600">
+                      {globalAlertSummary.totalAlertingPdus} PDUs con alertas de {racks.length} PDUs totales
+                    </span>
+                    {globalAlertSummary.totalAlertingPdus > 0 && (
+                      <div className="ml-3 flex items-center space-x-3">
+                        {globalAlertSummary.pduSummary.critical.total > 0 && (
+                          <div className="flex items-center">
+                            <div className="w-2 h-2 bg-red-600 rounded-full mr-1 animate-pulse"></div>
+                            <span className="text-xs font-medium text-red-700">
+                              {globalAlertSummary.pduSummary.critical.total} crítico{globalAlertSummary.pduSummary.critical.total !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        )}
+                        {globalAlertSummary.pduSummary.warning.total > 0 && (
+                          <div className="flex items-center">
+                            <div className="w-2 h-2 bg-yellow-500 rounded-full mr-1 animate-pulse"></div>
+                            <span className="text-xs font-medium text-yellow-700">
+                              {globalAlertSummary.pduSummary.warning.total} advertencia{globalAlertSummary.pduSummary.warning.total !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center space-x-4">
-                  {/* User Info */}
-                  <div className="flex items-center px-3 py-2 bg-gray-50 rounded-md border border-gray-200">
-                    <User className="h-4 w-4 mr-2 text-gray-600" />
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium text-gray-900">{user?.usuario}</span>
-                      <span className={`text-xs font-semibold ${
-                        user?.rol === 'Administrador' ? 'text-red-600' :
-                        user?.rol === 'Operador' ? 'text-blue-600' :
-                        user?.rol === 'Tecnico' ? 'text-green-600' :
-                        'text-gray-600'
-                      }`}>
-                        {user?.rol}
-                      </span>
-                    </div>
-                  </div>
 
+                {/* User Info */}
+                <div className="flex items-center px-4 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                  <User className="h-5 w-5 mr-2 text-gray-600" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-900">{user?.usuario}</span>
+                    <span className={`text-xs font-semibold ${
+                      user?.rol === 'Administrador' ? 'text-red-600' :
+                      user?.rol === 'Operador' ? 'text-blue-600' :
+                      user?.rol === 'Tecnico' ? 'text-green-600' :
+                      'text-gray-600'
+                    }`}>
+                      {user?.rol}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Row - Navigation and Actions */}
+              <div className="flex justify-between items-center py-3">
+                {/* View Toggle Buttons */}
+                <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-1">
+                  <button
+                    onClick={() => {
+                      setActiveView('principal');
+                      setActiveStatusFilter('all');
+                      setActiveMetricFilter('all');
+                    }}
+                    className={`px-5 py-2.5 rounded-md text-sm font-medium transition-all ${
+                      activeView === 'principal'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-gray-700 hover:text-gray-900 hover:bg-white'
+                    }`}
+                  >
+                    <Activity className="h-4 w-4 inline mr-2" />
+                    Principal
+                  </button>
+                  <button
+                    onClick={() => setActiveView('alertas')}
+                    className={`px-5 py-2.5 rounded-md text-sm font-medium transition-all ${
+                      activeView === 'alertas'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-gray-700 hover:text-gray-900 hover:bg-white'
+                    }`}
+                  >
+                    <AlertTriangle className="h-4 w-4 inline mr-2" />
+                    Alertas
+                  </button>
+                  <button
+                    onClick={() => setActiveView('mantenimiento')}
+                    className={`px-5 py-2.5 rounded-md text-sm font-medium transition-all ${
+                      activeView === 'mantenimiento'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-gray-700 hover:text-gray-900 hover:bg-white'
+                    }`}
+                  >
+                    <Wrench className="h-4 w-4 inline mr-2" />
+                    Mantenimiento
+                  </button>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-3">
                   {/* Refresh Button */}
                   <button
                     onClick={() => {
@@ -923,10 +930,10 @@ function App() {
                       refreshThresholds();
                     }}
                     disabled={racksLoading || thresholdsLoading}
-                    className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md transition-colors ${
+                    className={`inline-flex items-center px-4 py-2.5 border text-sm font-medium rounded-lg transition-all ${
                       racksLoading || thresholdsLoading
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50 hover:text-gray-900'
+                        ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                        : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50 hover:border-gray-400 hover:shadow-sm'
                     }`}
                     title="Refrescar datos"
                   >
@@ -939,15 +946,15 @@ function App() {
                     <button
                       onClick={handleExportAlerts}
                       disabled={isExporting || racksLoading || thresholdsLoading}
-                      className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md transition-colors ${
+                      className={`inline-flex items-center px-4 py-2.5 border text-sm font-medium rounded-lg transition-all ${
                         isExporting
-                          ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                          : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50 hover:text-gray-900'
+                          ? 'bg-green-100 text-green-700 border-green-200 cursor-not-allowed'
+                          : 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100 hover:border-green-300 hover:shadow-sm'
                       }`}
                       title={isExporting ? "Exportando alertas..." : "Exportar todas las alertas a archivo Excel"}
                     >
                       <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
-                      {isExporting ? 'Exportando...' : 'Exportar Excel'}
+                      Exportar
                     </button>
                   )}
 
@@ -955,10 +962,10 @@ function App() {
                   {(user?.rol === 'Administrador' || user?.rol === 'Operador') && (
                     <button
                       onClick={() => setShowThresholds(!showThresholds)}
-                      className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md transition-colors ${
+                      className={`inline-flex items-center px-4 py-2.5 border text-sm font-medium rounded-lg transition-all ${
                         showThresholds
-                          ? 'text-blue-800 bg-blue-100 hover:bg-blue-200'
-                          : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                          ? 'text-blue-700 bg-blue-100 border-blue-200 shadow-sm'
+                          : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300 hover:shadow-sm'
                       }`}
                       title={showThresholds ? "Cerrar Configuración" : "Abrir Configuración"}
                     >
@@ -970,7 +977,7 @@ function App() {
                   {/* Logout Button */}
                   <button
                     onClick={logout}
-                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                    className="inline-flex items-center px-4 py-2.5 border border-red-200 text-sm font-medium rounded-lg text-red-700 bg-red-50 hover:bg-red-100 hover:border-red-300 hover:shadow-sm transition-all"
                     title="Cerrar sesión"
                   >
                     <LogOut className="h-4 w-4 mr-2" />
