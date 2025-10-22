@@ -10,7 +10,7 @@ const path = require('path');
 const ExcelJS = require('exceljs');
 const multer = require('multer');
 const crypto = require('crypto');
-// const session = require('express-session'); // Disabled - using Supabase Auth
+const session = require('express-session');
 
 // Environment variables loaded from .env file
 
@@ -201,41 +201,40 @@ app.use(morgan('combined', {
   }
 }));
 
-// Session configuration disabled - Authentication handled by Supabase
-// If you need server-side sessions in the future, use connect-session-knex or similar
-// app.use(session({
-//   secret: process.env.SESSION_SECRET || 'energy-monitor-secret-key-change-in-production',
-//   resave: false,
-//   saveUninitialized: false,
-//   cookie: {
-//     secure: process.env.NODE_ENV === 'production',
-//     httpOnly: true,
-//     maxAge: 24 * 60 * 60 * 1000 // 24 hours
-//   }
-// }));
+// Session configuration for authentication
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'energy-monitor-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
 
-// Authentication middleware disabled - handled by Supabase
-// function requireAuth(req, res, next) {
-//   if (req.session && req.session.userId) {
-//     return next();
-//   }
-//   return res.status(401).json({ success: false, message: 'No autorizado. Por favor inicie sesión.' });
-// }
+// Authentication middleware to check if user is logged in
+function requireAuth(req, res, next) {
+  if (req.session && req.session.userId) {
+    return next();
+  }
+  return res.status(401).json({ success: false, message: 'No autorizado. Por favor inicie sesión.' });
+}
 
-// Authorization middleware disabled - handled by Supabase
-// function requireRole(...allowedRoles) {
-//   return (req, res, next) => {
-//     if (!req.session || !req.session.userId) {
-//       return res.status(401).json({ success: false, message: 'No autorizado. Por favor inicie sesión.' });
-//     }
-//
-//     if (!allowedRoles.includes(req.session.userRole)) {
-//       return res.status(403).json({ success: false, message: 'No tiene permisos para realizar esta acción.' });
-//     }
-//
-//     return next();
-//   };
-// }
+// Authorization middleware to check user role
+function requireRole(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.session || !req.session.userId) {
+      return res.status(401).json({ success: false, message: 'No autorizado. Por favor inicie sesión.' });
+    }
+
+    if (!allowedRoles.includes(req.session.userRole)) {
+      return res.status(403).json({ success: false, message: 'No tiene permisos para realizar esta acción.' });
+    }
+
+    return next();
+  };
+}
 
 // Cache configuration
 let racksCache = {
