@@ -73,6 +73,13 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
           'Pragma': 'no-cache'
         }
       });
+
+      // If unauthorized, silently fail (user not logged in yet)
+      if (response.status === 401) {
+        setLoading(false);
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -129,6 +136,11 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         }
       });
 
+      // If unauthorized, silently fail (user not logged in yet)
+      if (response.status === 401) {
+        return;
+      }
+
       if (!response.ok) {
         console.error('Failed to fetch maintenance racks');
         return;
@@ -167,13 +179,20 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   };
 
   useEffect(() => {
-    fetchAllData();
+    // Small delay to ensure component is fully mounted and authenticated
+    const initTimer = setTimeout(() => {
+      fetchAllData();
+    }, 100);
 
     // Set up polling every 30 seconds
     const interval = setInterval(() => {
       fetchAllData();
     }, 30000);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(interval);
+    };
   }, []);
 
   const toggleCountryExpansion = (country: string) => {

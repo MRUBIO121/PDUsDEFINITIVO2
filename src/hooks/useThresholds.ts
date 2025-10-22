@@ -41,6 +41,13 @@ export function useThresholds(options: UseThresholdsOptions = {}): UseThresholds
       if (rackId) {
         // Fetch rack-specific thresholds
         const response = await fetch(`/api/racks/${rackId}/thresholds?t=${timestamp}`, fetchOptions);
+
+        // If unauthorized, silently fail (user not logged in yet)
+        if (response.status === 401) {
+          setLoading(false);
+          return;
+        }
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -68,6 +75,13 @@ export function useThresholds(options: UseThresholdsOptions = {}): UseThresholds
       } else {
         // Fetch global thresholds only
         const response = await fetch(`/api/thresholds?t=${timestamp}`, fetchOptions);
+
+        // If unauthorized, silently fail (user not logged in yet)
+        if (response.status === 401) {
+          setLoading(false);
+          return;
+        }
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -96,7 +110,12 @@ export function useThresholds(options: UseThresholdsOptions = {}): UseThresholds
   };
 
   useEffect(() => {
-    fetchThresholds();
+    // Small delay to ensure component is fully mounted and authenticated
+    const initTimer = setTimeout(() => {
+      fetchThresholds();
+    }, 100);
+
+    return () => clearTimeout(initTimer);
   }, [rackId]);
 
   return {
