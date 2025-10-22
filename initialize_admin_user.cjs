@@ -3,7 +3,7 @@
  *
  * Este script:
  * 1. Se conecta a SQL Server
- * 2. Verifica si existe la tabla users
+ * 2. Verifica si existe la tabla usersAlertado
  * 3. Crea un usuario administrador con contraseña hasheada usando bcrypt
  *
  * Ejecutar este script DESPUÉS de ejecutar create_users_table.sql
@@ -36,24 +36,24 @@ async function initializeAdminUser() {
     pool = await sql.connect(sqlConfig);
     console.log('✅ Conectado a SQL Server');
 
-    // Check if users table exists
+    // Check if usersAlertado table exists
     const tableCheck = await pool.request().query(`
       SELECT COUNT(*) as tableExists
       FROM INFORMATION_SCHEMA.TABLES
-      WHERE TABLE_NAME = 'users'
+      WHERE TABLE_NAME = 'usersAlertado'
     `);
 
     if (tableCheck.recordset[0].tableExists === 0) {
-      console.error('❌ La tabla "users" no existe. Por favor ejecute primero el script create_users_table.sql');
+      console.error('❌ La tabla "usersAlertado" no existe. Por favor ejecute primero el script create_users_table.sql');
       process.exit(1);
     }
 
-    console.log('✅ Tabla "users" encontrada');
+    console.log('✅ Tabla "usersAlertado" encontrada');
 
     // Check if admin user already exists
     const adminCheck = await pool.request()
       .input('usuario', sql.NVarChar, 'admin')
-      .query('SELECT id FROM users WHERE usuario = @usuario');
+      .query('SELECT id FROM usersAlertado WHERE usuario = @usuario');
 
     if (adminCheck.recordset.length > 0) {
       console.log('ℹ️  El usuario administrador ya existe. Actualizando contraseña...');
@@ -68,7 +68,7 @@ async function initializeAdminUser() {
         .input('password_hash', sql.NVarChar, passwordHash)
         .input('fecha_modificacion', sql.DateTime, new Date())
         .query(`
-          UPDATE users
+          UPDATE usersAlertado
           SET password_hash = @password_hash, fecha_modificacion = @fecha_modificacion
           WHERE usuario = @usuario
         `);
@@ -100,7 +100,7 @@ async function initializeAdminUser() {
         .input('fecha_creacion', sql.DateTime, new Date())
         .input('fecha_modificacion', sql.DateTime, new Date())
         .query(`
-          INSERT INTO users (id, usuario, password_hash, rol, activo, fecha_creacion, fecha_modificacion)
+          INSERT INTO usersAlertado (id, usuario, password_hash, rol, activo, fecha_creacion, fecha_modificacion)
           VALUES (NEWID(), @usuario, @password_hash, @rol, @activo, @fecha_creacion, @fecha_modificacion)
         `);
 
@@ -116,7 +116,7 @@ async function initializeAdminUser() {
     }
 
     // Show all users in database
-    const allUsers = await pool.request().query('SELECT usuario, rol, activo, fecha_creacion FROM users');
+    const allUsers = await pool.request().query('SELECT usuario, rol, activo, fecha_creacion FROM usersAlertado');
     console.log('Usuarios en la base de datos:');
     console.table(allUsers.recordset);
 
