@@ -1047,7 +1047,7 @@ app.post('/api/auth/login', async (req, res) => {
     const result = await executeQuery(async (pool) => {
       return await pool.request()
         .input('usuario', sql.NVarChar, usuario)
-        .query('SELECT id, usuario, password_hash, rol, activo FROM usersAlertado WHERE usuario = @usuario');
+        .query('SELECT id, usuario, password_hash, rol, activo FROM users WHERE usuario = @usuario');
     });
 
     if (result.recordset.length === 0) {
@@ -1153,7 +1153,7 @@ app.get('/api/users', requireAuth, requireRole('Administrador'), async (req, res
     const result = await executeQuery(async (pool) => {
       return await pool.request().query(`
         SELECT id, usuario, rol, activo, fecha_creacion, fecha_modificacion
-        FROM usersAlertado
+        FROM users
         ORDER BY fecha_creacion DESC
       `);
     });
@@ -1207,7 +1207,7 @@ app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, re
     const existingUser = await executeQuery(async (pool) => {
       return await pool.request()
         .input('usuario', sql.NVarChar, usuario)
-        .query('SELECT id FROM usersAlertado WHERE usuario = @usuario');
+        .query('SELECT id FROM users WHERE usuario = @usuario');
     });
 
     if (existingUser.recordset.length > 0) {
@@ -1230,7 +1230,7 @@ app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, re
         .input('fecha_creacion', sql.DateTime, new Date())
         .input('fecha_modificacion', sql.DateTime, new Date())
         .query(`
-          INSERT INTO usersAlertado (id, usuario, password_hash, rol, activo, fecha_creacion, fecha_modificacion)
+          INSERT INTO users (id, usuario, password_hash, rol, activo, fecha_creacion, fecha_modificacion)
           VALUES (NEWID(), @usuario, @password_hash, @rol, @activo, @fecha_creacion, @fecha_modificacion)
         `);
     });
@@ -1279,7 +1279,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
     const existingUser = await executeQuery(async (pool) => {
       return await pool.request()
         .input('id', sql.UniqueIdentifier, id)
-        .query('SELECT id FROM usersAlertado WHERE id = @id');
+        .query('SELECT id FROM users WHERE id = @id');
     });
 
     if (existingUser.recordset.length === 0) {
@@ -1294,7 +1294,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
       return await pool.request()
         .input('id', sql.UniqueIdentifier, id)
         .input('usuario', sql.NVarChar, usuario)
-        .query('SELECT id FROM usersAlertado WHERE usuario = @usuario AND id != @id');
+        .query('SELECT id FROM users WHERE usuario = @usuario AND id != @id');
     });
 
     if (duplicateCheck.recordset.length > 0) {
@@ -1306,7 +1306,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
 
     // Build update query
     let updateQuery = `
-      UPDATE usersAlertado
+      UPDATE users
       SET usuario = @usuario, rol = @rol, activo = @activo, fecha_modificacion = @fecha_modificacion
     `;
 
@@ -1359,7 +1359,7 @@ app.delete('/api/users/:id', requireAuth, requireRole('Administrador'), async (r
     const existingUser = await executeQuery(async (pool) => {
       return await pool.request()
         .input('id', sql.UniqueIdentifier, id)
-        .query('SELECT id, usuario FROM usersAlertado WHERE id = @id');
+        .query('SELECT id, usuario FROM users WHERE id = @id');
     });
 
     if (existingUser.recordset.length === 0) {
@@ -1382,7 +1382,7 @@ app.delete('/api/users/:id', requireAuth, requireRole('Administrador'), async (r
       return await pool.request()
         .input('id', sql.UniqueIdentifier, id)
         .input('fecha_modificacion', sql.DateTime, new Date())
-        .query('UPDATE usersAlertado SET activo = 0, fecha_modificacion = @fecha_modificacion WHERE id = @id');
+        .query('UPDATE users SET activo = 0, fecha_modificacion = @fecha_modificacion WHERE id = @id');
     });
 
     logger.info(`User deleted: ${existingUser.recordset[0].usuario} by ${req.session.usuario}`);
