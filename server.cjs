@@ -186,13 +186,21 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 
+// CORS configuration - Allow requests from frontend
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || true, // Allow all origins in production when serving from same server
   credentials: true
 }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Serve static files from 'dist' folder in production
+const distPath = path.join(__dirname, 'dist');
+if (fs.existsSync(distPath)) {
+  console.log('📁 Serving static files from dist folder');
+  app.use(express.static(distPath));
+}
 
 // Morgan logging middleware
 app.use(morgan('combined', {
@@ -207,9 +215,10 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: false, // Set to false to work with HTTP in production
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax' // Allow cookies to be sent with same-site requests
   }
 }));
 
@@ -3374,11 +3383,18 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
+// Catch-all handler: serve index.html for any non-API routes (for React Router)
+app.get('*', (req, res) => {
+  // Only serve index.html for non-API routes
+  if (!req.path.startsWith('/api')) {
+    const indexPath = path.join(__dirname, 'dist', 'index.html');
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
+  }
+
+  // 404 for API routes not found
   console.warn(`⚠️ 404 - Route not found: ${req.method} ${req.originalUrl}`);
-  console.warn(`   Headers:`, req.headers);
-  console.warn(`   Body:`, req.body);
   res.status(404).json({
     success: false,
     message: `Route ${req.method} ${req.originalUrl} not found`,
