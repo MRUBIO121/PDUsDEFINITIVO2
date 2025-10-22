@@ -47,10 +47,10 @@ Si no se especifica, se usará una clave por defecto (NO recomendado en producci
 Ejecutar el script SQL en SQL Server Management Studio o mediante línea de comandos:
 
 ```bash
-sqlcmd -S localhost -U sa -P tu_password -d energy_monitor_db -i create_users_table.sql
+sqlcmd -S localhost -U sa -P tu_password -d energy_monitor_db -i supabase/migrations/20251022000000_create_users_table.sql
 ```
 
-O abrir el archivo `create_users_table.sql` en SQL Server Management Studio y ejecutarlo.
+O abrir el archivo `supabase/migrations/20251022000000_create_users_table.sql` en SQL Server Management Studio y ejecutarlo.
 
 ### 4. Inicializar Usuario Administrador
 
@@ -245,9 +245,8 @@ Para desplegar en producción:
 
 1. Cambiar `SESSION_SECRET` en `.env` a un valor aleatorio y seguro
 2. Asegurar que `NODE_ENV=production` está configurado
-3. Cambiar la contraseña del usuario admin inmediatamente
-4. Configurar HTTPS para que las cookies secure funcionen
-5. Revisar los logs en `./logs/` para detectar intentos de acceso no autorizado
+3. Configurar HTTPS para que las cookies secure funcionen
+4. Revisar los logs en `./logs/` para detectar intentos de acceso no autorizado
 
 ## Soporte
 

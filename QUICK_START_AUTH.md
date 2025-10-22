@@ -4,7 +4,7 @@
 
 ### 1. Crear la tabla de usuarios en SQL Server
 ```bash
-sqlcmd -S localhost -U sa -P tu_password -d energy_monitor_db -i create_users_table.sql
+sqlcmd -S localhost -U sa -P tu_password -d energy_monitor_db -i supabase/migrations/20251022000000_create_users_table.sql
 ```
 
 ### 2. Inicializar el usuario administrador
@@ -44,7 +44,7 @@ Abrir el navegador en `http://localhost:5173` (o el puerto configurado)
 
 ## Archivos Importantes
 
-- `create_users_table.sql` - Script para crear tabla de usuarios
+- `supabase/migrations/20251022000000_create_users_table.sql` - Script para crear tabla de usuarios
 - `initialize_admin_user.cjs` - Script para crear usuario admin
 - `INSTRUCCIONES_AUTENTICACION.md` - Documentación completa
 
@@ -65,7 +65,7 @@ node initialize_admin_user.cjs
 
 **Tabla no existe:**
 ```bash
-sqlcmd -S localhost -U sa -P tu_password -d energy_monitor_db -i create_users_table.sql
+sqlcmd -S localhost -U sa -P tu_password -d energy_monitor_db -i supabase/migrations/20251022000000_create_users_table.sql
 ```
 
 **Sesión expirada:**
