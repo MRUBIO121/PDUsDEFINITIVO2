@@ -224,20 +224,9 @@ app.use(session({
 
 // Authentication middleware to check if user is logged in
 function requireAuth(req, res, next) {
-  console.log('🔐 Auth Check:', {
-    path: req.path,
-    hasSession: !!req.session,
-    sessionId: req.sessionID,
-    userId: req.session?.userId,
-    cookie: req.headers.cookie ? 'present' : 'missing'
-  });
-
   if (req.session && req.session.userId) {
-    console.log('✅ Auth Success - User:', req.session.usuario);
     return next();
   }
-
-  console.log('❌ Auth Failed - No session or userId');
   return res.status(401).json({ success: false, message: 'No autorizado. Por favor inicie sesión.' });
 }
 
@@ -1097,41 +1086,20 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Create session
-    console.log('🔑 Creating session for user:', usuario);
     req.session.userId = user.id;
     req.session.usuario = user.usuario;
     req.session.userRole = user.rol;
 
-    console.log('📝 Session data before save:', {
-      sessionId: req.sessionID,
-      userId: req.session.userId,
-      usuario: req.session.usuario,
-      userRole: req.session.userRole
-    });
+    logger.info(`User logged in: ${user.usuario} (${user.rol})`);
 
-    // Save session explicitly to ensure it's persisted
-    req.session.save((err) => {
-      if (err) {
-        console.error('❌ Error saving session:', err);
-        logger.error('Session save error', { error: err.message });
-        return res.status(500).json({
-          success: false,
-          message: 'Error al guardar la sesión'
-        });
+    res.json({
+      success: true,
+      message: 'Inicio de sesión exitoso',
+      user: {
+        id: user.id,
+        usuario: user.usuario,
+        rol: user.rol
       }
-
-      console.log('✅ Session saved successfully for user:', usuario);
-      logger.info(`User logged in: ${user.usuario} (${user.rol})`);
-
-      res.json({
-        success: true,
-        message: 'Inicio de sesión exitoso',
-        user: {
-          id: user.id,
-          usuario: user.usuario,
-          rol: user.rol
-        }
-      });
     });
 
   } catch (error) {
