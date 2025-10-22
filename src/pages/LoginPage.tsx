@@ -128,9 +128,6 @@ export default function LoginPage() {
             <p>Usuario: <span className="font-mono font-semibold">admin</span></p>
             <p>Contraseña: <span className="font-mono font-semibold">Admin123!</span></p>
           </div>
-          <p className="text-xs text-blue-600 mt-2">
-            Cambie la contraseña después del primer acceso
-          </p>
         </div>
       </div>
     </div>

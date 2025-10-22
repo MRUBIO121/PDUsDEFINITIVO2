@@ -82,9 +82,6 @@ async function initializeAdminUser() {
       console.log('  Contraseña:  Admin123!');
       console.log('═══════════════════════════════════════════════════════');
       console.log('');
-      console.log('⚠️  IMPORTANTE: Cambie esta contraseña inmediatamente');
-      console.log('   después del primer acceso al sistema por seguridad.');
-      console.log('');
 
     } else {
       console.log('🔄 Creando usuario administrador...');
@@ -115,9 +112,6 @@ async function initializeAdminUser() {
       console.log('  Usuario:     admin');
       console.log('  Contraseña:  Admin123!');
       console.log('═══════════════════════════════════════════════════════');
-      console.log('');
-      console.log('⚠️  IMPORTANTE: Cambie esta contraseña inmediatamente');
-      console.log('   después del primer acceso al sistema por seguridad.');
       console.log('');
     }
 

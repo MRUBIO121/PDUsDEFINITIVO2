@@ -94,9 +94,6 @@ GO
 --   Usuario: admin
 --   Contraseña: Admin123!
 --
--- IMPORTANTE: Esta contraseña es temporal y debe ser cambiada inmediatamente después
---             del primer acceso al sistema por razones de seguridad.
---
 -- El password_hash corresponde a "Admin123!" hasheado con bcrypt (salt rounds: 10)
 -- Hash generado con: bcrypt.hashSync('Admin123!', 10)
 -- ============================================================================================================
@@ -123,8 +120,7 @@ BEGIN
 
     PRINT '✅ Usuario administrador creado exitosamente';
     PRINT '   Usuario: admin';
-    PRINT '   Contraseña temporal: Admin123!';
-    PRINT '   ⚠️  IMPORTANTE: Cambie esta contraseña inmediatamente por seguridad';
+    PRINT '   Contraseña: Admin123!';
 END
 ELSE
 BEGIN
@@ -158,8 +154,7 @@ PRINT '';
 PRINT 'PRÓXIMOS PASOS:';
 PRINT '  1. Ejecutar este script en SQL Server Management Studio o desde el backend';
 PRINT '  2. Acceder al sistema con usuario "admin" y contraseña "Admin123!"';
-PRINT '  3. Cambiar la contraseña del administrador inmediatamente';
-PRINT '  4. Crear usuarios adicionales según sea necesario';
+PRINT '  3. Crear usuarios adicionales según sea necesario';
 PRINT '';
 PRINT '============================================================================================================';
 GO

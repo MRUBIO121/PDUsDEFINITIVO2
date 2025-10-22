@@ -26,8 +26,6 @@ Abrir el navegador en `http://localhost:5173` (o el puerto configurado)
 - Usuario: `admin`
 - Contraseña: `Admin123!`
 
-⚠️ **IMPORTANTE**: Cambiar la contraseña después del primer acceso.
-
 ## Roles Disponibles
 
 | Rol | Permisos |

@@ -62,8 +62,6 @@ node initialize_admin_user.cjs
 
 Este script creará el usuario `admin` con contraseña `Admin123!`
 
-**IMPORTANTE**: Cambiar esta contraseña inmediatamente después del primer acceso.
-
 ## Credenciales por Defecto
 
 ```
