@@ -364,6 +364,25 @@ export default function UserManagement() {
                   <option value="Tecnico">Técnico</option>
                   <option value="Observador">Observador</option>
                 </select>
+
+                {/* Role Descriptions */}
+                <div className="mt-3 p-3 bg-gray-50 rounded-md border border-gray-200">
+                  <p className="text-xs font-semibold text-gray-700 mb-2">Permisos por rol:</p>
+                  <div className="space-y-2 text-xs text-gray-600">
+                    <div className={`p-2 rounded ${formData.rol === 'Administrador' ? 'bg-red-50 border border-red-200' : ''}`}>
+                      <span className="font-semibold text-red-700">Administrador:</span> Acceso total. Gestiona usuarios, umbrales, exporta y maneja mantenimientos.
+                    </div>
+                    <div className={`p-2 rounded ${formData.rol === 'Operador' ? 'bg-blue-50 border border-blue-200' : ''}`}>
+                      <span className="font-semibold text-blue-700">Operador:</span> Gestiona umbrales, exporta y maneja mantenimientos. No gestiona usuarios.
+                    </div>
+                    <div className={`p-2 rounded ${formData.rol === 'Tecnico' ? 'bg-green-50 border border-green-200' : ''}`}>
+                      <span className="font-semibold text-green-700">Técnico:</span> Exporta alertas y maneja mantenimientos. No accede a configuración.
+                    </div>
+                    <div className={`p-2 rounded ${formData.rol === 'Observador' ? 'bg-gray-50 border border-gray-300' : ''}`}>
+                      <span className="font-semibold text-gray-700">Observador:</span> Solo lectura. No puede exportar, configurar ni gestionar mantenimientos.
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">
