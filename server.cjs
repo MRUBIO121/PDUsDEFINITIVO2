@@ -3310,6 +3310,7 @@ app.post('/api/export/alerts', requireAuth, async (req, res) => {
   try {
     // Use cached racks data if available and valid, otherwise return error
     if (!isCacheValid(racksCache)) {
+      console.error('❌ EXPORT ALERTS: Cache is invalid or expired');
       return res.status(503).json({
         success: false,
         message: 'Rack data not available. Please wait for data to be loaded or refresh the page.',
@@ -3320,7 +3321,26 @@ app.post('/api/export/alerts', requireAuth, async (req, res) => {
     const racksData = racksCache.data;
 
     if (!racksData || !Array.isArray(racksData)) {
-      throw new Error('Failed to fetch racks data from NENG API');
+      console.error('❌ EXPORT ALERTS: Invalid cache data structure', {
+        hasData: !!racksData,
+        isArray: Array.isArray(racksData),
+        dataType: typeof racksData,
+        cacheAge: racksCache.timestamp ? Date.now() - racksCache.timestamp : 'unknown'
+      });
+      return res.status(503).json({
+        success: false,
+        message: 'Rack data is not in the expected format. Please refresh the page to reload data.',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (racksData.length === 0) {
+      console.warn('⚠️ EXPORT ALERTS: Cache contains empty array');
+      return res.status(503).json({
+        success: false,
+        message: 'No rack data available. Please wait for data to be loaded.',
+        timestamp: new Date().toISOString()
+      });
     }
 
     // Get maintenance racks from database
