@@ -86,9 +86,36 @@ ELSE
 BEGIN
     PRINT 'ℹ️  Tabla usersAlertado ya existe';
 
-    -- Agregar columna sitio_asignado si no existe
-    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('usersAlertado') AND name = 'sitio_asignado')
+    -- Verificar si existe la columna antigua sitio_asignado
+    IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('usersAlertado') AND name = 'sitio_asignado')
     BEGIN
+        PRINT 'ℹ️  Columna antigua sitio_asignado encontrada, migrando a sitios_asignados...';
+
+        -- Agregar nueva columna si no existe
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('usersAlertado') AND name = 'sitios_asignados')
+        BEGIN
+            ALTER TABLE usersAlertado ADD sitios_asignados NVARCHAR(MAX) NULL;
+            PRINT '✅ Columna sitios_asignados creada';
+        END
+
+        -- Migrar datos de sitio_asignado a sitios_asignados (convertir a JSON array)
+        UPDATE usersAlertado
+        SET sitios_asignados = CASE
+            WHEN sitio_asignado IS NOT NULL AND sitio_asignado != ''
+            THEN '["' + sitio_asignado + '"]'
+            ELSE NULL
+        END
+        WHERE sitios_asignados IS NULL;
+
+        PRINT '✅ Datos migrados de sitio_asignado a sitios_asignados';
+
+        -- Eliminar columna antigua
+        ALTER TABLE usersAlertado DROP COLUMN sitio_asignado;
+        PRINT '✅ Columna antigua sitio_asignado eliminada';
+    END
+    ELSE IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('usersAlertado') AND name = 'sitios_asignados')
+    BEGIN
+        -- Si no existe ninguna de las dos, crear la nueva
         ALTER TABLE usersAlertado ADD sitios_asignados NVARCHAR(MAX) NULL;
         PRINT '✅ Columna sitios_asignados añadida a tabla existente';
     END
