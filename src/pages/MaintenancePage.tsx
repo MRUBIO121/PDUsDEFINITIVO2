@@ -40,6 +40,7 @@ export default function MaintenancePage() {
   const [removingAll, setRemovingAll] = useState(false);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [siteFilter, setSiteFilter] = useState<string>('all');
 
   const toggleExpanded = (entryId: string) => {
     setExpandedEntries(prev => {
@@ -94,6 +95,13 @@ export default function MaintenancePage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Initialize site filter based on user's assigned sites
+  useEffect(() => {
+    if (user?.sitios_asignados && user.sitios_asignados.length === 1) {
+      setSiteFilter(user.sitios_asignados[0]);
+    }
+  }, [user]);
+
   const handleRemoveEntry = async (entryId: string, entryType: string, identifier: string, entrySite?: string) => {
     // Check if user has permission
     if (user?.rol === 'Observador') {
@@ -101,8 +109,8 @@ export default function MaintenancePage() {
       return;
     }
 
-    // Check if user has site restrictions
-    if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
+    // Check if user has site restrictions (applies to ALL users including Administrators)
+    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
       if (!entrySite || !user.sitios_asignados.includes(entrySite)) {
         alert(`No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
@@ -154,8 +162,8 @@ export default function MaintenancePage() {
       return;
     }
 
-    // Check if user has site restrictions
-    if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
+    // Check if user has site restrictions (applies to ALL users including Administrators)
+    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
       if (!rackSite || !user.sitios_asignados.includes(rackSite)) {
         alert(`No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
@@ -283,9 +291,23 @@ export default function MaintenancePage() {
     );
   }
 
-  // Count unique racks across all maintenance entries
+  // Get unique sites from all maintenance entries
+  const availableSites = Array.from(
+    new Set(
+      maintenanceEntries
+        .map(entry => entry.site)
+        .filter((site): site is string => site !== null && site !== undefined && site !== '')
+    )
+  ).sort();
+
+  // Filter maintenance entries by selected site
+  const filteredMaintenanceEntries = siteFilter === 'all'
+    ? maintenanceEntries
+    : maintenanceEntries.filter(entry => entry.site === siteFilter);
+
+  // Count unique racks across filtered maintenance entries
   const uniqueRackIds = new Set<string>();
-  maintenanceEntries.forEach(entry => {
+  filteredMaintenanceEntries.forEach(entry => {
     entry.racks.forEach(rack => {
       uniqueRackIds.add(rack.rack_id);
     });
@@ -336,7 +358,7 @@ export default function MaintenancePage() {
           </p>
 
           {/* Info banner for users with site restrictions */}
-          {user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0 && (
+          {user?.sitios_asignados && user.sitios_asignados.length > 0 && (
             <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -355,12 +377,46 @@ export default function MaintenancePage() {
             </div>
           )}
 
+          {/* Site Filter */}
+          {availableSites.length > 1 && (
+            <div className="mt-4 bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Filtrar por Sitio:
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setSiteFilter('all')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    siteFilter === 'all'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Todos los sitios
+                </button>
+                {availableSites.map((site) => (
+                  <button
+                    key={site}
+                    onClick={() => setSiteFilter(site)}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      siteFilter === site
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {site}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {maintenanceEntries.length > 0 && (
             <div className="mt-4 flex gap-6 text-sm">
               <div className="bg-white px-4 py-2 rounded-lg border border-slate-200">
-                <span className="font-semibold text-slate-900">{maintenanceEntries.length}</span>
+                <span className="font-semibold text-slate-900">{filteredMaintenanceEntries.length}</span>
                 <span className="text-slate-600 ml-2">
-                  {maintenanceEntries.length === 1 ? 'entrada' : 'entradas'} de mantenimiento
+                  {filteredMaintenanceEntries.length === 1 ? 'entrada' : 'entradas'} de mantenimiento
                 </span>
               </div>
               <div className="bg-white px-4 py-2 rounded-lg border border-slate-200">
@@ -373,19 +429,23 @@ export default function MaintenancePage() {
           )}
         </div>
 
-        {maintenanceEntries.length === 0 ? (
+        {filteredMaintenanceEntries.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-12 text-center">
             <Wrench className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-700 mb-2">
-              No hay equipos en mantenimiento
+              {maintenanceEntries.length === 0
+                ? 'No hay equipos en mantenimiento'
+                : 'No hay equipos en mantenimiento para el sitio seleccionado'}
             </h3>
             <p className="text-slate-500">
-              Todos los equipos están activos y generando alertas normalmente
+              {maintenanceEntries.length === 0
+                ? 'Todos los equipos están activos y generando alertas normalmente'
+                : 'Intenta seleccionar otro sitio o "Todos los sitios"'}
             </p>
           </div>
         ) : (
           <div className="space-y-6">
-            {maintenanceEntries.map(entry => {
+            {filteredMaintenanceEntries.map(entry => {
               const isChainEntry = entry.entry_type === 'chain';
               const displayTitle = isChainEntry
                 ? `Chain ${entry.chain} - DC ${entry.dc}`
@@ -397,7 +457,8 @@ export default function MaintenancePage() {
               const isExpanded = expandedEntries.has(entry.id);
 
               // Check if user can finish this maintenance entry
-              const canFinishMaintenance = user?.rol === 'Administrador' ||
+              // ALL users (including Administrators) are restricted by their assigned sites
+              const canFinishMaintenance =
                 !user?.sitios_asignados ||
                 user.sitios_asignados.length === 0 ||
                 (entry.site && user.sitios_asignados.includes(entry.site));
@@ -523,7 +584,8 @@ export default function MaintenancePage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {entry.racks.map(rack => {
                           // Check if user can finish this specific rack's maintenance
-                          const canFinishRackMaintenance = user?.rol === 'Administrador' ||
+                          // ALL users (including Administrators) are restricted by their assigned sites
+                          const canFinishRackMaintenance =
                             !user?.sitios_asignados ||
                             user.sitios_asignados.length === 0 ||
                             (rack.site && user.sitios_asignados.includes(rack.site));
