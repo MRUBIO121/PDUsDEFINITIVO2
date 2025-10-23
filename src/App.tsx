@@ -475,11 +475,13 @@ function App() {
       }
     }
 
-    const reason = prompt(`¿Por qué se está enviando el rack "${rackName}" a mantenimiento?`, 'Mantenimiento programado');
+    const userReason = prompt(`¿Por qué se está enviando el rack "${rackName}" a mantenimiento?`, 'Mantenimiento programado');
 
-    if (reason === null) {
+    if (userReason === null) {
       return;
     }
+
+    const reason = `(${user?.usuario || 'Usuario'}) ${userReason || 'Mantenimiento programado'}`;
 
     try {
       const response = await fetch('/api/maintenance/rack', {
@@ -491,8 +493,8 @@ function App() {
         body: JSON.stringify({
           rackId,
           rackData,
-          reason: reason || 'Mantenimiento programado',
-          startedBy: 'Usuario'
+          reason,
+          startedBy: user?.usuario || 'Usuario'
         })
       });
 
@@ -523,11 +525,13 @@ function App() {
       }
     }
 
-    const reason = prompt(`¿Por qué se está enviando el chain "${chain}" del DC "${dc}" (Site: ${site}) a mantenimiento?\n\nNOTA: Se enviarán TODOS los racks únicos con chain "${chain}" en el datacenter "${dc}" y sitio "${site}".`, 'Mantenimiento programado');
+    const userReason = prompt(`¿Por qué se está enviando el chain "${chain}" del DC "${dc}" (Site: ${site}) a mantenimiento?\n\nNOTA: Se enviarán TODOS los racks únicos con chain "${chain}" en el datacenter "${dc}" y sitio "${site}".`, 'Mantenimiento programado');
 
-    if (reason === null) {
+    if (userReason === null) {
       return;
     }
+
+    const reason = `(${user?.usuario || 'Usuario'}) ${userReason || 'Mantenimiento programado'}`;
 
     try {
       const response = await fetch('/api/maintenance/chain', {
@@ -541,8 +545,8 @@ function App() {
           site,
           dc,
           rackData,
-          reason: reason || 'Mantenimiento programado',
-          startedBy: 'Usuario'
+          reason,
+          startedBy: user?.usuario || 'Usuario'
         })
       });
 
