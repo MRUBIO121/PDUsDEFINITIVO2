@@ -344,9 +344,7 @@ export default function UserManagement() {
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   required
-                  minLength={8}
                 />
-                <p className="mt-1 text-xs text-gray-500">Mínimo 8 caracteres</p>
               </div>
 
               <div>
@@ -443,7 +441,6 @@ export default function UserManagement() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  minLength={8}
                 />
                 <p className="mt-1 text-xs text-gray-500">
                   Dejar en blanco para mantener la contraseña actual
