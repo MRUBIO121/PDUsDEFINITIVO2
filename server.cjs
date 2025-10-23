@@ -245,80 +245,6 @@ function requireRole(...allowedRoles) {
   };
 }
 
-// Authorization middleware to check if user can access a specific site
-function canAccessSite(site) {
-  return (req, res, next) => {
-    if (!req.session || !req.session.userId) {
-      return res.status(401).json({ success: false, message: 'No autorizado. Por favor inicie sesión.' });
-    }
-
-    const userRole = req.session.userRole;
-    const sitiosAsignados = req.session.sitiosAsignados;
-
-    // Administradores y Operadores tienen acceso a todos los sitios
-    if (userRole === 'Administrador' || userRole === 'Operador') {
-      return next();
-    }
-
-    // Si el usuario no tiene sitios asignados (null o vacío), no tiene acceso
-    if (!sitiosAsignados || !Array.isArray(sitiosAsignados) || sitiosAsignados.length === 0) {
-      return res.status(403).json({
-        success: false,
-        message: 'No tiene permisos para gestionar este sitio. Su usuario no tiene sitios asignados.'
-      });
-    }
-
-    // Verificar si el sitio está en la lista de sitios asignados
-    const normalizedSite = String(site || '').trim().toLowerCase();
-    const hasAccess = sitiosAsignados.some(s =>
-      String(s || '').trim().toLowerCase() === normalizedSite
-    );
-
-    if (!hasAccess) {
-      return res.status(403).json({
-        success: false,
-        message: `No tiene permisos para gestionar el sitio "${site}". Solo puede gestionar: ${sitiosAsignados.join(', ')}`
-      });
-    }
-
-    return next();
-  };
-}
-
-// Helper function to check if user can manage a site (for use in route handlers)
-function checkSiteAccess(req, site) {
-  const userRole = req.session.userRole;
-  const sitiosAsignados = req.session.sitiosAsignados;
-
-  // Administradores y Operadores tienen acceso a todos los sitios
-  if (userRole === 'Administrador' || userRole === 'Operador') {
-    return { allowed: true };
-  }
-
-  // Si el usuario no tiene sitios asignados (null o vacío), no tiene acceso
-  if (!sitiosAsignados || !Array.isArray(sitiosAsignados) || sitiosAsignados.length === 0) {
-    return {
-      allowed: false,
-      message: 'No tiene permisos para gestionar este sitio. Su usuario no tiene sitios asignados.'
-    };
-  }
-
-  // Verificar si el sitio está en la lista de sitios asignados
-  const normalizedSite = String(site || '').trim().toLowerCase();
-  const hasAccess = sitiosAsignados.some(s =>
-    String(s || '').trim().toLowerCase() === normalizedSite
-  );
-
-  if (!hasAccess) {
-    return {
-      allowed: false,
-      message: `No tiene permisos para gestionar el sitio "${site}". Solo puede gestionar: ${sitiosAsignados.join(', ')}`
-    };
-  }
-
-  return { allowed: true };
-}
-
 // Cache configuration
 let racksCache = {
   data: null,
@@ -2250,7 +2176,7 @@ app.get('/api/maintenance', async (req, res) => {
 });
 
 // Add single rack to maintenance
-app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
+app.post('/api/maintenance/rack', async (req, res) => {
   try {
     const {
       rackId,
@@ -2326,40 +2252,6 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       const dc = rack.dc || 'Unknown';
       const site = rack.site || 'Unknown';
 
-      // Check if user has permission to manage this site
-      return { site, dc, rack, chain, sanitizedRackId };
-    });
-
-    if (result.error === 'already_exists') {
-      return res.status(409).json({
-        success: false,
-        message: `Rack ${sanitizedRackId} is already in maintenance`,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    if (result.error === 'not_found') {
-      return res.status(404).json({
-        success: false,
-        message: 'Rack not found. Please provide rack data in request body.',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Check site access permissions
-    const siteAccess = checkSiteAccess(req, result.site);
-    if (!siteAccess.allowed) {
-      return res.status(403).json({
-        success: false,
-        message: siteAccess.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Proceed with adding to maintenance
-    const finalResult = await executeQuery(async (pool) => {
-      const { site, dc, rack, chain, sanitizedRackId } = result;
-
       // Create maintenance entry
       const entryId = require('crypto').randomUUID();
 
@@ -2402,12 +2294,28 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       return { success: true, entryId, chain, dc };
     });
 
-    logger.info(`Rack ${sanitizedRackId} added to maintenance individually by ${req.session.usuario}`);
+    if (result.error === 'already_exists') {
+      return res.status(409).json({
+        success: false,
+        message: `Rack ${sanitizedRackId} is already in maintenance`,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (result.error === 'not_found') {
+      return res.status(404).json({
+        success: false,
+        message: 'Rack not found. Please provide rack data in request body.',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    logger.info(`Rack ${sanitizedRackId} added to maintenance individually`);
 
     res.json({
       success: true,
       message: `Rack ${sanitizedRackId} added to maintenance`,
-      data: { rackId: sanitizedRackId, chain: finalResult.chain, dc: finalResult.dc, entryId: finalResult.entryId },
+      data: { rackId: sanitizedRackId, chain: result.chain, dc: result.dc, entryId: result.entryId },
       timestamp: new Date().toISOString()
     });
 
@@ -2423,7 +2331,7 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
 });
 
 // Add all racks from a chain to maintenance
-app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
+app.post('/api/maintenance/chain', async (req, res) => {
   const requestId = `CHAIN_MAINT_${Date.now()}`;
   console.log(`\n[${requestId}] 📥 POST /api/maintenance/chain - Request received`);
   console.log(`[${requestId}] 📋 Body:`, JSON.stringify(req.body, null, 2));
@@ -2449,7 +2357,6 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
     // Validate and sanitize inputs
     const sanitizedChain = String(chain || '').trim();
     const sanitizedDc = String(dc || '').trim();
-    const sanitizedSite = String(site || '').trim();
 
     if (!sanitizedChain || !sanitizedDc) {
       return res.status(400).json({
@@ -2457,19 +2364,6 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
         message: 'Invalid chain or dc values',
         timestamp: new Date().toISOString()
       });
-    }
-
-    // Check if user has permission to manage this site
-    if (sanitizedSite) {
-      const siteAccess = checkSiteAccess(req, sanitizedSite);
-      if (!siteAccess.allowed) {
-        console.log(`[${requestId}] ❌ Access denied: ${siteAccess.message}`);
-        return res.status(403).json({
-          success: false,
-          message: siteAccess.message,
-          timestamp: new Date().toISOString()
-        });
-      }
     }
 
     // Fetch ALL power data from NENG API to get all racks in this chain and dc
@@ -2748,7 +2642,7 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
 });
 
 // Remove a single rack from maintenance
-app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
+app.delete('/api/maintenance/rack/:rackId', async (req, res) => {
   try {
     const { rackId } = req.params;
 
@@ -2763,11 +2657,11 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
     const sanitizedRackId = String(rackId).trim();
 
     const result = await executeQuery(async (pool) => {
-      // Get the maintenance entry ID and site for this rack
+      // Get the maintenance entry ID for this rack
       const entryResult = await pool.request()
         .input('rack_id', sql.NVarChar, sanitizedRackId)
         .query(`
-          SELECT me.id as maintenance_entry_id, me.entry_type, me.site, mrd.site as rack_site
+          SELECT maintenance_entry_id, entry_type
           FROM maintenance_rack_details mrd
           JOIN maintenance_entries me ON mrd.maintenance_entry_id = me.id
           WHERE mrd.rack_id = @rack_id
@@ -2779,33 +2673,7 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
 
       const entryId = entryResult.recordset[0].maintenance_entry_id;
       const entryType = entryResult.recordset[0].entry_type;
-      const site = entryResult.recordset[0].site || entryResult.recordset[0].rack_site;
 
-      return { entryId, entryType, site };
-    });
-
-    if (result.error === 'not_found') {
-      return res.status(404).json({
-        success: false,
-        message: `Rack ${sanitizedRackId} is not in maintenance`,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Check if user has permission to manage this site
-    if (result.site) {
-      const siteAccess = checkSiteAccess(req, result.site);
-      if (!siteAccess.allowed) {
-        return res.status(403).json({
-          success: false,
-          message: siteAccess.message,
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-
-    // Proceed with deletion
-    await executeQuery(async (pool) => {
       // Delete the rack detail
       await pool.request()
         .input('rack_id', sql.NVarChar, sanitizedRackId)
@@ -2816,9 +2684,9 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
 
       // If this was an individual rack entry, delete the entry too
       // If it was a chain entry, check if there are any racks left
-      if (result.entryType === 'individual_rack') {
+      if (entryType === 'individual_rack') {
         await pool.request()
-          .input('entry_id', sql.UniqueIdentifier, result.entryId)
+          .input('entry_id', sql.UniqueIdentifier, entryId)
           .query(`
             DELETE FROM maintenance_entries
             WHERE id = @entry_id
@@ -2826,7 +2694,7 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
       } else {
         // Check if the chain entry has any remaining racks
         const remainingRacks = await pool.request()
-          .input('entry_id', sql.UniqueIdentifier, result.entryId)
+          .input('entry_id', sql.UniqueIdentifier, entryId)
           .query(`
             SELECT COUNT(*) as count
             FROM maintenance_rack_details
@@ -2836,7 +2704,7 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
         // If no racks remain, delete the entry
         if (remainingRacks.recordset[0].count === 0) {
           await pool.request()
-            .input('entry_id', sql.UniqueIdentifier, result.entryId)
+            .input('entry_id', sql.UniqueIdentifier, entryId)
             .query(`
               DELETE FROM maintenance_entries
               WHERE id = @entry_id
@@ -2847,7 +2715,15 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
       return { success: true };
     });
 
-    logger.info(`Rack ${sanitizedRackId} removed from maintenance by ${req.session.usuario}`);
+    if (result.error === 'not_found') {
+      return res.status(404).json({
+        success: false,
+        message: `Rack ${sanitizedRackId} is not in maintenance`,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    logger.info(`Rack ${sanitizedRackId} removed from maintenance`);
 
     res.json({
       success: true,
@@ -2870,7 +2746,7 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
 });
 
 // Remove an entire maintenance entry (individual rack or full chain) by entry ID
-app.delete('/api/maintenance/entry/:entryId', requireAuth, async (req, res) => {
+app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
   try {
     const { entryId } = req.params;
 
@@ -2887,7 +2763,7 @@ app.delete('/api/maintenance/entry/:entryId', requireAuth, async (req, res) => {
       const entryInfo = await pool.request()
         .input('entry_id', sql.UniqueIdentifier, entryId)
         .query(`
-          SELECT entry_type, rack_id, chain, dc, site,
+          SELECT entry_type, rack_id, chain, dc,
                  (SELECT COUNT(*) FROM maintenance_rack_details WHERE maintenance_entry_id = @entry_id) as rack_count
           FROM maintenance_entries
           WHERE id = @entry_id
@@ -2898,7 +2774,16 @@ app.delete('/api/maintenance/entry/:entryId', requireAuth, async (req, res) => {
       }
 
       const entry = entryInfo.recordset[0];
-      return { entry };
+
+      // Delete the maintenance entry (CASCADE will delete all related rack details)
+      await pool.request()
+        .input('entry_id', sql.UniqueIdentifier, entryId)
+        .query(`
+          DELETE FROM maintenance_entries
+          WHERE id = @entry_id
+        `);
+
+      return { success: true, entry };
     });
 
     if (result.error === 'not_found') {
@@ -2911,36 +2796,11 @@ app.delete('/api/maintenance/entry/:entryId', requireAuth, async (req, res) => {
 
     const entry = result.entry;
 
-    // Check if user has permission to manage this site
-    if (entry.site) {
-      const siteAccess = checkSiteAccess(req, entry.site);
-      if (!siteAccess.allowed) {
-        return res.status(403).json({
-          success: false,
-          message: siteAccess.message,
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-
-    // Proceed with deletion
-    await executeQuery(async (pool) => {
-      // Delete the maintenance entry (CASCADE will delete all related rack details)
-      await pool.request()
-        .input('entry_id', sql.UniqueIdentifier, entryId)
-        .query(`
-          DELETE FROM maintenance_entries
-          WHERE id = @entry_id
-        `);
-
-      return { success: true };
-    });
-
     const message = entry.entry_type === 'chain'
       ? `Chain ${entry.chain} from DC ${entry.dc} removed from maintenance (${entry.rack_count} racks)`
       : `Rack ${entry.rack_id} removed from maintenance`;
 
-    logger.info(`${message} by ${req.session.usuario}`);
+    logger.info(message);
 
     res.json({
       success: true,
@@ -2969,70 +2829,11 @@ app.delete('/api/maintenance/entry/:entryId', requireAuth, async (req, res) => {
 });
 
 // Remove ALL maintenance entries and racks
-app.delete('/api/maintenance/all', requireAuth, async (req, res) => {
+app.delete('/api/maintenance/all', async (req, res) => {
   const requestId = crypto.randomUUID().slice(0, 8);
   console.log(`\n[${requestId}] 📥 DELETE /api/maintenance/all - Request received`);
 
   try {
-    // First, check what sites have maintenance entries
-    const sitesCheck = await executeQuery(async (pool) => {
-      const sitesResult = await pool.request().query(`
-        SELECT DISTINCT site
-        FROM maintenance_entries
-        WHERE site IS NOT NULL AND site != ''
-      `);
-
-      const entry_count_result = await pool.request().query(`
-        SELECT COUNT(*) as count FROM maintenance_entries
-      `);
-
-      return {
-        sites: sitesResult.recordset.map(r => r.site),
-        entry_count: entry_count_result.recordset[0].count
-      };
-    });
-
-    if (sitesCheck.entry_count === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'No maintenance entries to remove',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Check if user has permission to manage all these sites
-    const userRole = req.session.userRole;
-    const sitiosAsignados = req.session.sitiosAsignados;
-
-    // Administradores y Operadores tienen acceso a todos los sitios
-    if (userRole !== 'Administrador' && userRole !== 'Operador') {
-      // For other roles, check if they have access to all sites with maintenance entries
-      if (!sitiosAsignados || !Array.isArray(sitiosAsignados) || sitiosAsignados.length === 0) {
-        return res.status(403).json({
-          success: false,
-          message: 'No tiene permisos para finalizar todos los mantenimientos. Su usuario no tiene sitios asignados.',
-          timestamp: new Date().toISOString()
-        });
-      }
-
-      // Check if user has access to all sites with maintenance
-      const unauthorizedSites = sitesCheck.sites.filter(site => {
-        const normalizedSite = String(site || '').trim().toLowerCase();
-        return !sitiosAsignados.some(s =>
-          String(s || '').trim().toLowerCase() === normalizedSite
-        );
-      });
-
-      if (unauthorizedSites.length > 0) {
-        return res.status(403).json({
-          success: false,
-          message: `No tiene permisos para finalizar todos los mantenimientos. No puede gestionar los siguientes sitios: ${unauthorizedSites.join(', ')}`,
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-
-    // Proceed with deletion
     const result = await executeQuery(async (pool) => {
       // Get count before deletion
       const countResult = await pool.request().query(`
@@ -3066,7 +2867,7 @@ app.delete('/api/maintenance/all', requireAuth, async (req, res) => {
       });
     }
 
-    logger.info(`All maintenance entries removed by ${req.session.usuario}`, {
+    logger.info('All maintenance entries removed', {
       requestId,
       entry_count: result.entry_count,
       rack_count: result.rack_count
