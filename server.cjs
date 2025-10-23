@@ -3547,21 +3547,17 @@ app.post('/api/export/alerts', requireAuth, async (req, res) => {
     const now = new Date();
     const timestamp = now.toISOString().replace(/[:.]/g, '-').substring(0, 19);
     const filename = `alertas_${timestamp}.xlsx`;
-    const filepath = path.join(__dirname, filename);
 
-    // Write the Excel file to project root
-    await workbook.xlsx.writeFile(filepath);
+    console.log(`✅ EXPORT ALERTS: Sending Excel file to browser with ${pdusWithAlerts.length} PDUs with alerts`);
 
-    console.log(`✅ EXPORT ALERTS: Excel file created with ${pdusWithAlerts.length} PDUs with alerts`);
+    // Set headers to trigger download in browser
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 
-    res.json({
-      success: true,
-      message: 'Alerts exported successfully to Excel',
-      filename: filename,
-      filepath: filepath,
-      count: pdusWithAlerts.length,
-      timestamp: now.toISOString()
-    });
+    // Write the Excel file directly to the response stream
+    await workbook.xlsx.write(res);
+    res.end();
 
   } catch (error) {
     console.error('❌ Error exporting alerts to Excel:', error);
