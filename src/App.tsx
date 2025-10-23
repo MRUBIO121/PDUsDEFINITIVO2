@@ -23,6 +23,7 @@ function App() {
   const [showAllDcs, setShowAllDcs] = useState(false);
   const [activeView, setActiveView] = useState<'principal' | 'alertas' | 'mantenimiento'>('principal');
   const [isGeoFiltersExpanded, setIsGeoFiltersExpanded] = useState(false);
+  const [hasInitializedFilters, setHasInitializedFilters] = useState(false);
   
   const {
     racks,
@@ -63,6 +64,16 @@ function App() {
     error: thresholdsError,
     refreshThresholds
   } = useThresholds();
+
+  // Initialize site filter based on user's assigned site
+  React.useEffect(() => {
+    if (user && !hasInitializedFilters && availableSites.length > 0) {
+      if (user.sitio_asignado && availableSites.includes(user.sitio_asignado)) {
+        setActiveSiteFilter(user.sitio_asignado);
+      }
+      setHasInitializedFilters(true);
+    }
+  }, [user, hasInitializedFilters, availableSites]);
 
   // Create wrapper functions for threshold-dependent utilities
   const getThresholdValueWrapper = (key: string) => getThresholdValue(thresholds, key);
@@ -440,12 +451,30 @@ function App() {
   };
 
   const handleConfigureThresholds = (rackId: string, rackName: string) => {
+    // Check if user has permission based on role and assigned site
+    if (user?.rol !== 'Administrador' && user?.sitio_asignado) {
+      // Find rack data to check its site
+      const rackData = racks.find(r => r.rackId === rackId);
+      if (rackData && rackData.site !== user.sitio_asignado) {
+        alert(`No tienes permisos para configurar umbrales de racks fuera de tu sitio asignado (${user.sitio_asignado})`);
+        return;
+      }
+    }
+
     setSelectedRackId(rackId);
     setSelectedRackName(rackName);
     setShowRackThresholdsModal(true);
   };
 
   const handleSendRackToMaintenance = async (rackId: string, chain: string, rackName: string, rackData?: any) => {
+    // Check if user has permission based on role and assigned site
+    if (user?.rol !== 'Administrador' && user?.sitio_asignado) {
+      if (rackData && rackData.site !== user.sitio_asignado) {
+        alert(`No tienes permisos para enviar a mantenimiento racks fuera de tu sitio asignado (${user.sitio_asignado})`);
+        return;
+      }
+    }
+
     const reason = prompt(`¿Por qué se está enviando el rack "${rackName}" a mantenimiento?`, 'Mantenimiento programado');
 
     if (reason === null) {
@@ -486,6 +515,14 @@ function App() {
   };
 
   const handleSendChainToMaintenance = async (chain: string, site: string, dc: string, rackData?: any) => {
+    // Check if user has permission based on role and assigned site
+    if (user?.rol !== 'Administrador' && user?.sitio_asignado) {
+      if (site !== user.sitio_asignado) {
+        alert(`No tienes permisos para enviar a mantenimiento chains fuera de tu sitio asignado (${user.sitio_asignado})`);
+        return;
+      }
+    }
+
     const reason = prompt(`¿Por qué se está enviando el chain "${chain}" del DC "${dc}" (Site: ${site}) a mantenimiento?\n\nNOTA: Se enviarán TODOS los racks únicos con chain "${chain}" en el datacenter "${dc}" y sitio "${site}".`, 'Mantenimiento programado');
 
     if (reason === null) {

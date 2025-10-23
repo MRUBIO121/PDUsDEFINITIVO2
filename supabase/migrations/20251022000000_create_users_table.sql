@@ -68,6 +68,7 @@ BEGIN
         usuario NVARCHAR(100) UNIQUE NOT NULL,
         password NVARCHAR(255) NOT NULL,
         rol NVARCHAR(50) NOT NULL CHECK (rol IN ('Administrador', 'Operador', 'Tecnico', 'Observador')),
+        sitio_asignado NVARCHAR(100) NULL,
         activo BIT NOT NULL DEFAULT 1,
         fecha_creacion DATETIME DEFAULT GETDATE(),
         fecha_modificacion DATETIME DEFAULT GETDATE()
@@ -77,12 +78,25 @@ BEGIN
     CREATE INDEX IX_usersAlertado_usuario ON usersAlertado(usuario);
     CREATE INDEX IX_usersAlertado_rol ON usersAlertado(rol);
     CREATE INDEX IX_usersAlertado_activo ON usersAlertado(activo);
+    CREATE INDEX IX_usersAlertado_sitio_asignado ON usersAlertado(sitio_asignado);
 
     PRINT '✅ Tabla usersAlertado creada exitosamente con índices';
 END
 ELSE
 BEGIN
     PRINT 'ℹ️  Tabla usersAlertado ya existe';
+
+    -- Agregar columna sitio_asignado si no existe
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('usersAlertado') AND name = 'sitio_asignado')
+    BEGIN
+        ALTER TABLE usersAlertado ADD sitio_asignado NVARCHAR(100) NULL;
+        CREATE INDEX IX_usersAlertado_sitio_asignado ON usersAlertado(sitio_asignado);
+        PRINT '✅ Columna sitio_asignado añadida a tabla existente';
+    END
+    ELSE
+    BEGIN
+        PRINT 'ℹ️  Columna sitio_asignado ya existe';
+    END
 END
 GO
 
@@ -105,11 +119,12 @@ PRINT '-------------------------------------------------------------------------
 -- Verificar si ya existe un usuario administrador
 IF NOT EXISTS (SELECT * FROM usersAlertado WHERE usuario = 'admin')
 BEGIN
-    INSERT INTO usersAlertado (usuario, password, rol, activo, fecha_creacion, fecha_modificacion)
+    INSERT INTO usersAlertado (usuario, password, rol, sitio_asignado, activo, fecha_creacion, fecha_modificacion)
     VALUES (
         'admin',
         'Admin123!',
         'Administrador',
+        NULL,
         1,
         GETDATE(),
         GETDATE()

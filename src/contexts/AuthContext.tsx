@@ -4,6 +4,7 @@ export interface User {
   id: string;
   usuario: string;
   rol: 'Administrador' | 'Operador' | 'Tecnico' | 'Observador';
+  sitio_asignado: string | null;
 }
 
 interface AuthContextType {

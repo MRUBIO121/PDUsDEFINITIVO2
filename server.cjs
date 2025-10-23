@@ -1055,7 +1055,7 @@ app.post('/api/auth/login', async (req, res) => {
     const result = await executeQuery(async (pool) => {
       return await pool.request()
         .input('usuario', sql.NVarChar, usuario)
-        .query('SELECT id, usuario, password, rol, activo FROM usersAlertado WHERE usuario = @usuario');
+        .query('SELECT id, usuario, password, rol, sitio_asignado, activo FROM usersAlertado WHERE usuario = @usuario');
     });
 
     if (result.recordset.length === 0) {
@@ -1089,6 +1089,7 @@ app.post('/api/auth/login', async (req, res) => {
     req.session.userId = user.id;
     req.session.usuario = user.usuario;
     req.session.userRole = user.rol;
+    req.session.sitioAsignado = user.sitio_asignado;
 
     logger.info(`User logged in: ${user.usuario} (${user.rol})`);
 
@@ -1098,7 +1099,8 @@ app.post('/api/auth/login', async (req, res) => {
       user: {
         id: user.id,
         usuario: user.usuario,
-        rol: user.rol
+        rol: user.rol,
+        sitio_asignado: user.sitio_asignado
       }
     });
 
@@ -1139,7 +1141,8 @@ app.get('/api/auth/session', (req, res) => {
       user: {
         id: req.session.userId,
         usuario: req.session.usuario,
-        rol: req.session.userRole
+        rol: req.session.userRole,
+        sitio_asignado: req.session.sitioAsignado
       }
     });
   }
