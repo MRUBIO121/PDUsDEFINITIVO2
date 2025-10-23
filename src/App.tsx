@@ -607,34 +607,72 @@ function App() {
     try {
       const response = await fetch('/api/export/alerts', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
       });
 
       if (!response.ok) {
+        // Try to parse JSON error message
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+        }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const result = await response.json();
+      // Check if response is JSON (no alerts case) or Excel file
+      const contentType = response.headers.get('content-type');
 
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to export alerts');
-      }
-
-      if (result.count === 0) {
-        setExportMessage('No hay alertas para exportar en este momento.');
+      if (contentType && contentType.includes('application/json')) {
+        // No alerts to export case
+        const result = await response.json();
+        if (result.count === 0) {
+          setExportMessage('No hay alertas para exportar en este momento.');
+        } else {
+          setExportMessage('Archivo Excel generado exitosamente.');
+        }
       } else {
-        setExportMessage(`✅ Archivo Excel generado exitosamente: ${result.filename} (${result.count} alertas)`);
+        // Excel file received - trigger download
+        const blob = await response.blob();
+
+        // Get filename from Content-Disposition header or use default
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'alertas.xlsx';
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+          if (filenameMatch) {
+            filename = filenameMatch[1];
+          }
+        }
+
+        // Create a temporary URL for the blob
+        const url = window.URL.createObjectURL(blob);
+
+        // Create a temporary anchor element and trigger download
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+
+        // Cleanup
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        setExportMessage(`✅ Archivo descargado exitosamente: ${filename}`);
       }
-      
+
       // Clear success message after 8 seconds
       setTimeout(() => setExportMessage(null), 8000);
 
     } catch (err) {
       console.error('Error exporting alerts:', err);
       setExportError(err instanceof Error ? err.message : 'Error al exportar las alertas');
-      
+
       // Clear error message after 8 seconds
       setTimeout(() => setExportError(null), 8000);
     } finally {
