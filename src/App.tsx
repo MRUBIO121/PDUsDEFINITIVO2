@@ -24,6 +24,31 @@ function App() {
   const [activeView, setActiveView] = useState<'principal' | 'alertas' | 'mantenimiento'>('principal');
   const [isGeoFiltersExpanded, setIsGeoFiltersExpanded] = useState(false);
   const [hasInitializedFilters, setHasInitializedFilters] = useState(false);
+
+  // Helper function to check if user has access to a site
+  // Handles Cantabria Norte/Sur unification
+  const userHasAccessToSite = (siteName: string): boolean => {
+    if (!user?.sitios_asignados || user.sitios_asignados.length === 0) {
+      return true; // No restrictions
+    }
+
+    // Normalize site name for Cantabria check
+    const normalizedSite = siteName.toLowerCase().includes('cantabria') ? 'Cantabria' : siteName;
+
+    // Check if user has direct access
+    if (user.sitios_asignados.includes(siteName)) {
+      return true;
+    }
+
+    // Check if this is a Cantabria site and user has any Cantabria access
+    if (normalizedSite === 'Cantabria') {
+      return user.sitios_asignados.some(assignedSite =>
+        assignedSite.toLowerCase().includes('cantabria')
+      );
+    }
+
+    return false;
+  };
   
   const {
     racks,
@@ -68,10 +93,25 @@ function App() {
   // Initialize site filter based on user's assigned sites
   React.useEffect(() => {
     if (user && !hasInitializedFilters && availableSites.length > 0) {
-      if (user.sitios_asignados && user.sitios_asignados.length === 1) {
-        const assignedSite = user.sitios_asignados[0];
-        if (availableSites.includes(assignedSite)) {
-          setActiveSiteFilter(assignedSite);
+      if (user.sitios_asignados && user.sitios_asignados.length > 0) {
+        // Check if user has any Cantabria site assigned
+        const hasCantabriaNorte = user.sitios_asignados.some(site =>
+          site.toLowerCase().includes('cantabria norte')
+        );
+        const hasCantabriaSur = user.sitios_asignados.some(site =>
+          site.toLowerCase().includes('cantabria sur')
+        );
+
+        // If user has any Cantabria site, set filter to unified "Cantabria"
+        if ((hasCantabriaNorte || hasCantabriaSur) && availableSites.includes('Cantabria')) {
+          setActiveSiteFilter('Cantabria');
+        }
+        // Otherwise, if user has exactly 1 site, use that site
+        else if (user.sitios_asignados.length === 1) {
+          const assignedSite = user.sitios_asignados[0];
+          if (availableSites.includes(assignedSite)) {
+            setActiveSiteFilter(assignedSite);
+          }
         }
       }
       setHasInitializedFilters(true);
@@ -458,7 +498,7 @@ function App() {
     if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
       // Find rack data to check its site
       const rackData = racks.find(r => r.rackId === rackId);
-      if (rackData && !user.sitios_asignados.includes(rackData.site)) {
+      if (rackData && !userHasAccessToSite(rackData.site)) {
         alert(`No tienes permisos para configurar umbrales de racks fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
       }
@@ -472,7 +512,7 @@ function App() {
   const handleSendRackToMaintenance = async (rackId: string, chain: string, rackName: string, rackData?: any) => {
     // Check if user has permission based on assigned sites (applies to ALL users including Administrators)
     if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
-      if (rackData && !user.sitios_asignados.includes(rackData.site)) {
+      if (rackData && !userHasAccessToSite(rackData.site)) {
         alert(`No tienes permisos para enviar a mantenimiento racks fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
       }
@@ -522,7 +562,7 @@ function App() {
   const handleSendChainToMaintenance = async (chain: string, site: string, dc: string, rackData?: any) => {
     // Check if user has permission based on assigned sites (applies to ALL users including Administrators)
     if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
-      if (!user.sitios_asignados.includes(site)) {
+      if (!userHasAccessToSite(site)) {
         alert(`No tienes permisos para enviar a mantenimiento chains fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
       }

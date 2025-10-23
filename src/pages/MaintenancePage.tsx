@@ -42,6 +42,32 @@ export default function MaintenancePage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [siteFilter, setSiteFilter] = useState<string>('all');
 
+  // Helper function to check if user has access to a site
+  // Handles Cantabria Norte/Sur unification
+  const userHasAccessToSite = (siteName: string | null | undefined): boolean => {
+    if (!siteName) return false;
+    if (!user?.sitios_asignados || user.sitios_asignados.length === 0) {
+      return true; // No restrictions
+    }
+
+    // Normalize site name for Cantabria check
+    const normalizedSite = siteName.toLowerCase().includes('cantabria') ? 'Cantabria' : siteName;
+
+    // Check if user has direct access
+    if (user.sitios_asignados.includes(siteName)) {
+      return true;
+    }
+
+    // Check if this is a Cantabria site and user has any Cantabria access
+    if (normalizedSite === 'Cantabria') {
+      return user.sitios_asignados.some(assignedSite =>
+        assignedSite.toLowerCase().includes('cantabria')
+      );
+    }
+
+    return false;
+  };
+
   const toggleExpanded = (entryId: string) => {
     setExpandedEntries(prev => {
       const newSet = new Set(prev);
@@ -97,8 +123,23 @@ export default function MaintenancePage() {
 
   // Initialize site filter based on user's assigned sites
   useEffect(() => {
-    if (user?.sitios_asignados && user.sitios_asignados.length === 1) {
-      setSiteFilter(user.sitios_asignados[0]);
+    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
+      // Check if user has any Cantabria site assigned
+      const hasCantabriaNorte = user.sitios_asignados.some(site =>
+        site.toLowerCase().includes('cantabria norte')
+      );
+      const hasCantabriaSur = user.sitios_asignados.some(site =>
+        site.toLowerCase().includes('cantabria sur')
+      );
+
+      // If user has any Cantabria site, set filter to unified "Cantabria"
+      if (hasCantabriaNorte || hasCantabriaSur) {
+        setSiteFilter('Cantabria');
+      }
+      // Otherwise, if user has exactly 1 site, use that site
+      else if (user.sitios_asignados.length === 1) {
+        setSiteFilter(user.sitios_asignados[0]);
+      }
     }
   }, [user]);
 
@@ -111,7 +152,7 @@ export default function MaintenancePage() {
 
     // Check if user has site restrictions (applies to ALL users including Administrators)
     if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
-      if (!entrySite || !user.sitios_asignados.includes(entrySite)) {
+      if (!userHasAccessToSite(entrySite)) {
         alert(`No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
       }
@@ -164,7 +205,7 @@ export default function MaintenancePage() {
 
     // Check if user has site restrictions (applies to ALL users including Administrators)
     if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
-      if (!rackSite || !user.sitios_asignados.includes(rackSite)) {
+      if (!userHasAccessToSite(rackSite)) {
         alert(`No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
       }
@@ -458,10 +499,7 @@ export default function MaintenancePage() {
 
               // Check if user can finish this maintenance entry
               // ALL users (including Administrators) are restricted by their assigned sites
-              const canFinishMaintenance =
-                !user?.sitios_asignados ||
-                user.sitios_asignados.length === 0 ||
-                (entry.site && user.sitios_asignados.includes(entry.site));
+              const canFinishMaintenance = userHasAccessToSite(entry.site);
 
               return (
                 <div
@@ -585,10 +623,7 @@ export default function MaintenancePage() {
                         {entry.racks.map(rack => {
                           // Check if user can finish this specific rack's maintenance
                           // ALL users (including Administrators) are restricted by their assigned sites
-                          const canFinishRackMaintenance =
-                            !user?.sitios_asignados ||
-                            user.sitios_asignados.length === 0 ||
-                            (rack.site && user.sitios_asignados.includes(rack.site));
+                          const canFinishRackMaintenance = userHasAccessToSite(rack.site);
 
                           return (
                         <div
