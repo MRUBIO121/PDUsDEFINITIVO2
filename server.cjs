@@ -3306,18 +3306,28 @@ app.get('/api/health', (req, res) => {
 });
 
 // Endpoint para exportar alertas a Excel
-app.post('/api/export/alerts', requireAuth, async (req, res) => {
+app.post('/api/export/alerts', async (req, res) => {
   try {
-    // Use cached racks data if available and valid, otherwise return error
-    if (!isCacheValid(racksCache)) {
-      return res.status(503).json({
-        success: false,
-        message: 'Rack data not available. Please wait for data to be loaded or refresh the page.',
-        timestamp: new Date().toISOString()
-      });
+    // Get current racks with alerts from NENG API (real-time data)
+    // We can use the internal endpoint to get processed data
+    const internalResponse = await fetch(`http://localhost:${port}/api/racks/energy`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!internalResponse.ok) {
+      throw new Error('Failed to fetch racks data from internal API');
     }
 
-    const racksData = racksCache.data;
+    const racksResponse = await internalResponse.json();
+
+    if (!racksResponse.success || !racksResponse.data) {
+      throw new Error('Invalid response from racks API');
+    }
+
+    const racksData = racksResponse.data;
 
     if (!racksData || !Array.isArray(racksData)) {
       throw new Error('Failed to fetch racks data from NENG API');
