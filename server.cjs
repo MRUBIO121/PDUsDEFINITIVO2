@@ -1055,7 +1055,7 @@ app.post('/api/auth/login', async (req, res) => {
     const result = await executeQuery(async (pool) => {
       return await pool.request()
         .input('usuario', sql.NVarChar, usuario)
-        .query('SELECT id, usuario, password, rol, sitio_asignado, activo FROM usersAlertado WHERE usuario = @usuario');
+        .query('SELECT id, usuario, password, rol, sitios_asignados, activo FROM usersAlertado WHERE usuario = @usuario');
     });
 
     if (result.recordset.length === 0) {
@@ -1089,7 +1089,7 @@ app.post('/api/auth/login', async (req, res) => {
     req.session.userId = user.id;
     req.session.usuario = user.usuario;
     req.session.userRole = user.rol;
-    req.session.sitioAsignado = user.sitio_asignado;
+    req.session.sitiosAsignados = user.sitios_asignados;
 
     logger.info(`User logged in: ${user.usuario} (${user.rol})`);
 
@@ -1100,7 +1100,7 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         usuario: user.usuario,
         rol: user.rol,
-        sitio_asignado: user.sitio_asignado
+        sitios_asignados: user.sitios_asignados
       }
     });
 
@@ -1142,7 +1142,7 @@ app.get('/api/auth/session', (req, res) => {
         id: req.session.userId,
         usuario: req.session.usuario,
         rol: req.session.userRole,
-        sitio_asignado: req.session.sitioAsignado
+        sitios_asignados: req.session.sitiosAsignados
       }
     });
   }
@@ -1163,7 +1163,7 @@ app.get('/api/users', requireAuth, requireRole('Administrador'), async (req, res
   try {
     const result = await executeQuery(async (pool) => {
       return await pool.request().query(`
-        SELECT id, usuario, rol, activo, fecha_creacion, fecha_modificacion
+        SELECT id, usuario, rol, sitios_asignados, activo, fecha_creacion, fecha_modificacion
         FROM usersAlertado
         ORDER BY fecha_creacion DESC
       `);
@@ -1187,7 +1187,7 @@ app.get('/api/users', requireAuth, requireRole('Administrador'), async (req, res
 // POST /api/users - Create new user
 app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, res) => {
   try {
-    const { usuario, password, rol } = req.body;
+    const { usuario, password, rol, sitios_asignados } = req.body;
 
     // Validation
     if (!usuario || !password || !rol) {
@@ -1240,9 +1240,10 @@ app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, re
         .input('activo', sql.Bit, true)
         .input('fecha_creacion', sql.DateTime, new Date())
         .input('fecha_modificacion', sql.DateTime, new Date())
+        .input('sitios_asignados', sql.NVarChar, sitios_asignados || null)
         .query(`
-          INSERT INTO usersAlertado (id, usuario, password, rol, activo, fecha_creacion, fecha_modificacion)
-          VALUES (NEWID(), @usuario, @password, @rol, @activo, @fecha_creacion, @fecha_modificacion)
+          INSERT INTO usersAlertado (id, usuario, password, rol, sitios_asignados, activo, fecha_creacion, fecha_modificacion)
+          VALUES (NEWID(), @usuario, @password, @rol, @sitios_asignados, @activo, @fecha_creacion, @fecha_modificacion)
         `);
     });
 
@@ -1267,7 +1268,7 @@ app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, re
 app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { usuario, password, rol, activo } = req.body;
+    const { usuario, password, rol, activo, sitios_asignados } = req.body;
 
     // Validation
     if (!usuario || !rol) {
@@ -1318,7 +1319,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
     // Build update query
     let updateQuery = `
       UPDATE usersAlertado
-      SET usuario = @usuario, rol = @rol, activo = @activo, fecha_modificacion = @fecha_modificacion
+      SET usuario = @usuario, rol = @rol, activo = @activo, sitios_asignados = @sitios_asignados, fecha_modificacion = @fecha_modificacion
     `;
 
     const request = await executeQuery(async (pool) => {
@@ -1327,6 +1328,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
         .input('usuario', sql.NVarChar, usuario)
         .input('rol', sql.NVarChar, rol)
         .input('activo', sql.Bit, activo !== undefined ? activo : true)
+        .input('sitios_asignados', sql.NVarChar, sitios_asignados || null)
         .input('fecha_modificacion', sql.DateTime, new Date());
 
       // If password is provided, update it
@@ -1408,6 +1410,36 @@ app.delete('/api/users/:id', requireAuth, requireRole('Administrador'), async (r
     res.status(500).json({
       success: false,
       message: 'Error al eliminar usuario'
+    });
+  }
+});
+
+// GET /api/available-sites - Get list of available sites from racks data
+app.get('/api/available-sites', requireAuth, requireRole('Administrador'), async (req, res) => {
+  try {
+    const result = await executeQuery(async (pool) => {
+      return await pool.request().query(`
+        SELECT DISTINCT site
+        FROM power_racks
+        WHERE site IS NOT NULL AND site != '' AND site != 'N/A'
+        ORDER BY site
+      `);
+    });
+
+    const sites = result.recordset.map(row => row.site);
+
+    res.json({
+      success: true,
+      sites: sites
+    });
+
+  } catch (error) {
+    console.error('Error fetching available sites:', error);
+    logger.error('Fetch available sites error', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener sitios disponibles',
+      sites: []
     });
   }
 });
