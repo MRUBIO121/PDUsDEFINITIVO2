@@ -1935,28 +1935,6 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
       });
     }
 
-    // Validate user has permission for this rack's site
-    if (req.session.sitiosAsignados && req.session.sitiosAsignados.length > 0) {
-      const rackSiteCheck = await executeQuery(async (pool) => {
-        const result = await pool.request()
-          .input('rack_id', sql.NVarChar, rackId)
-          .query(`
-            SELECT TOP 1 site
-            FROM dbo.alerts
-            WHERE rackId = @rack_id
-          `);
-        return result.recordset.length > 0 ? result.recordset[0].site : null;
-      });
-
-      if (rackSiteCheck && !req.session.sitiosAsignados.includes(rackSiteCheck)) {
-        return res.status(403).json({
-          success: false,
-          message: 'No tienes permisos para configurar umbrales de racks fuera de tus sitios asignados',
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-
     // Define valid threshold keys
     const validKeys = [
       'critical_temperature_low', 'critical_temperature_high',
@@ -2045,28 +2023,6 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
 app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
   try {
     const { rackId } = req.params;
-
-    // Validate user has permission for this rack's site
-    if (req.session.sitiosAsignados && req.session.sitiosAsignados.length > 0) {
-      const rackSiteCheck = await executeQuery(async (pool) => {
-        const result = await pool.request()
-          .input('rack_id', sql.NVarChar, rackId)
-          .query(`
-            SELECT TOP 1 site
-            FROM dbo.alerts
-            WHERE rackId = @rack_id
-          `);
-        return result.recordset.length > 0 ? result.recordset[0].site : null;
-      });
-
-      if (rackSiteCheck && !req.session.sitiosAsignados.includes(rackSiteCheck)) {
-        return res.status(403).json({
-          success: false,
-          message: 'No tienes permisos para configurar umbrales de racks fuera de tus sitios asignados',
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
 
     const result = await executeQuery(async (pool) => {
       return await pool.request()
@@ -2247,17 +2203,6 @@ app.post('/api/maintenance/rack', async (req, res) => {
       });
     }
 
-    // Validate user has permission for this site
-    if (req.session.sitiosAsignados && req.session.sitiosAsignados.length > 0) {
-      if (rackData && rackData.site && !req.session.sitiosAsignados.includes(rackData.site)) {
-        return res.status(403).json({
-          success: false,
-          message: 'No tienes permisos para enviar a mantenimiento racks fuera de tus sitios asignados',
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-
     const result = await executeQuery(async (pool) => {
       // Check if rack is already in maintenance
       const existingCheck = await pool.request()
@@ -2419,17 +2364,6 @@ app.post('/api/maintenance/chain', async (req, res) => {
         message: 'Invalid chain or dc values',
         timestamp: new Date().toISOString()
       });
-    }
-
-    // Validate user has permission for this site
-    if (req.session.sitiosAsignados && req.session.sitiosAsignados.length > 0) {
-      if (site && !req.session.sitiosAsignados.includes(site)) {
-        return res.status(403).json({
-          success: false,
-          message: 'No tienes permisos para enviar a mantenimiento chains fuera de tus sitios asignados',
-          timestamp: new Date().toISOString()
-        });
-      }
     }
 
     // Fetch ALL power data from NENG API to get all racks in this chain and dc
@@ -2722,28 +2656,6 @@ app.delete('/api/maintenance/rack/:rackId', async (req, res) => {
 
     const sanitizedRackId = String(rackId).trim();
 
-    // Validate user has permission for this rack's site
-    if (req.session.sitiosAsignados && req.session.sitiosAsignados.length > 0) {
-      const rackSiteCheck = await executeQuery(async (pool) => {
-        const result = await pool.request()
-          .input('rack_id', sql.NVarChar, sanitizedRackId)
-          .query(`
-            SELECT TOP 1 site
-            FROM maintenance_rack_details
-            WHERE rack_id = @rack_id
-          `);
-        return result.recordset.length > 0 ? result.recordset[0].site : null;
-      });
-
-      if (rackSiteCheck && !req.session.sitiosAsignados.includes(rackSiteCheck)) {
-        return res.status(403).json({
-          success: false,
-          message: 'No tienes permisos para finalizar mantenimientos de racks fuera de tus sitios asignados',
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-
     const result = await executeQuery(async (pool) => {
       // Get the maintenance entry ID for this rack
       const entryResult = await pool.request()
@@ -2844,28 +2756,6 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
         message: 'entryId parameter is required',
         timestamp: new Date().toISOString()
       });
-    }
-
-    // Validate user has permission for this entry's site
-    if (req.session.sitiosAsignados && req.session.sitiosAsignados.length > 0) {
-      const entrySiteCheck = await executeQuery(async (pool) => {
-        const result = await pool.request()
-          .input('entry_id', sql.UniqueIdentifier, entryId)
-          .query(`
-            SELECT TOP 1 site
-            FROM maintenance_entries
-            WHERE id = @entry_id
-          `);
-        return result.recordset.length > 0 ? result.recordset[0].site : null;
-      });
-
-      if (entrySiteCheck && !req.session.sitiosAsignados.includes(entrySiteCheck)) {
-        return res.status(403).json({
-          success: false,
-          message: 'No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados',
-          timestamp: new Date().toISOString()
-        });
-      }
     }
 
     const result = await executeQuery(async (pool) => {
