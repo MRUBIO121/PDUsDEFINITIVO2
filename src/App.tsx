@@ -836,23 +836,28 @@ function App() {
                   </h1>
                   <div className="flex items-center mt-1">
                     <span className="text-sm text-gray-600">
-                      {globalAlertSummary.totalAlertingPdus} PDUs con alertas de {racks.length} PDUs totales
+                      {globalAlertSummary.totalAlertingRacks} Racks con alertas de {originalRackGroups.length} Racks totales
+                      {originalRackGroups.length > 0 && (
+                        <span className="ml-1 text-xs font-semibold text-blue-700">
+                          ({((globalAlertSummary.totalAlertingRacks / originalRackGroups.length) * 100).toFixed(1)}%)
+                        </span>
+                      )}
                     </span>
-                    {globalAlertSummary.totalAlertingPdus > 0 && (
+                    {globalAlertSummary.totalAlertingRacks > 0 && (
                       <div className="ml-3 flex items-center space-x-3">
-                        {globalAlertSummary.pduSummary.critical.total > 0 && (
+                        {globalAlertSummary.rackSummary.critical.total > 0 && (
                           <div className="flex items-center">
                             <div className="w-2 h-2 bg-red-600 rounded-full mr-1 animate-pulse"></div>
                             <span className="text-xs font-medium text-red-700">
-                              {globalAlertSummary.pduSummary.critical.total} crítico{globalAlertSummary.pduSummary.critical.total !== 1 ? 's' : ''}
+                              {globalAlertSummary.rackSummary.critical.total} crítico{globalAlertSummary.rackSummary.critical.total !== 1 ? 's' : ''}
                             </span>
                           </div>
                         )}
-                        {globalAlertSummary.pduSummary.warning.total > 0 && (
+                        {globalAlertSummary.rackSummary.warning.total > 0 && (
                           <div className="flex items-center">
                             <div className="w-2 h-2 bg-yellow-500 rounded-full mr-1 animate-pulse"></div>
                             <span className="text-xs font-medium text-yellow-700">
-                              {globalAlertSummary.pduSummary.warning.total} advertencia{globalAlertSummary.pduSummary.warning.total !== 1 ? 's' : ''}
+                              {globalAlertSummary.rackSummary.warning.total} advertencia{globalAlertSummary.rackSummary.warning.total !== 1 ? 's' : ''}
                             </span>
                           </div>
                         )}
@@ -932,8 +937,8 @@ function App() {
                     disabled={racksLoading || thresholdsLoading}
                     className={`inline-flex items-center px-4 py-2.5 border text-sm font-medium rounded-lg transition-all ${
                       racksLoading || thresholdsLoading
-                        ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                        : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50 hover:border-gray-400 hover:shadow-sm'
+                        ? 'bg-blue-100 text-blue-400 border-blue-200 cursor-not-allowed'
+                        : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300 hover:shadow-sm'
                     }`}
                     title="Refrescar datos"
                   >
@@ -948,8 +953,8 @@ function App() {
                       disabled={isExporting || racksLoading || thresholdsLoading}
                       className={`inline-flex items-center px-4 py-2.5 border text-sm font-medium rounded-lg transition-all ${
                         isExporting
-                          ? 'bg-green-100 text-green-700 border-green-200 cursor-not-allowed'
-                          : 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100 hover:border-green-300 hover:shadow-sm'
+                          ? 'bg-blue-100 text-blue-700 border-blue-200 cursor-not-allowed'
+                          : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300 hover:shadow-sm'
                       }`}
                       title={isExporting ? "Exportando alertas..." : "Exportar todas las alertas a archivo Excel"}
                     >
