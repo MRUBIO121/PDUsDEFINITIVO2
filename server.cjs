@@ -245,6 +245,32 @@ function requireRole(...allowedRoles) {
   };
 }
 
+// Helper function to check if user has permission to manage a specific site
+function canManageSite(userRole, sitiosAsignados, siteName) {
+  // Administrador can manage all sites
+  if (userRole === 'Administrador') {
+    return true;
+  }
+
+  // Observador cannot manage any site
+  if (userRole === 'Observador') {
+    return false;
+  }
+
+  // Operador and Tecnico can only manage their assigned sites
+  if (userRole === 'Operador' || userRole === 'Tecnico') {
+    // If user has no sites assigned, they cannot manage anything
+    if (!sitiosAsignados || !Array.isArray(sitiosAsignados) || sitiosAsignados.length === 0) {
+      return false;
+    }
+
+    // Check if the site is in their assigned sites
+    return sitiosAsignados.includes(siteName);
+  }
+
+  return false;
+}
+
 // Cache configuration
 let racksCache = {
   data: null,
@@ -2176,7 +2202,7 @@ app.get('/api/maintenance', async (req, res) => {
 });
 
 // Add single rack to maintenance
-app.post('/api/maintenance/rack', async (req, res) => {
+app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
   try {
     const {
       rackId,
@@ -2199,6 +2225,16 @@ app.post('/api/maintenance/rack', async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Invalid rackId: must be a non-empty string',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Check permissions before proceeding
+    const siteName = rackData?.site;
+    if (!canManageSite(req.session.userRole, req.session.sitiosAsignados, siteName)) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para gestionar este sitio',
         timestamp: new Date().toISOString()
       });
     }
@@ -2331,7 +2367,7 @@ app.post('/api/maintenance/rack', async (req, res) => {
 });
 
 // Add all racks from a chain to maintenance
-app.post('/api/maintenance/chain', async (req, res) => {
+app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
   const requestId = `CHAIN_MAINT_${Date.now()}`;
   console.log(`\n[${requestId}] 📥 POST /api/maintenance/chain - Request received`);
   console.log(`[${requestId}] 📋 Body:`, JSON.stringify(req.body, null, 2));
@@ -2362,6 +2398,16 @@ app.post('/api/maintenance/chain', async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Invalid chain or dc values',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Check permissions before proceeding
+    if (!canManageSite(req.session.userRole, req.session.sitiosAsignados, site)) {
+      console.log(`[${requestId}] ❌ Permission denied: user cannot manage site ${site}`);
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para gestionar este sitio',
         timestamp: new Date().toISOString()
       });
     }
@@ -2642,7 +2688,7 @@ app.post('/api/maintenance/chain', async (req, res) => {
 });
 
 // Remove a single rack from maintenance
-app.delete('/api/maintenance/rack/:rackId', async (req, res) => {
+app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
   try {
     const { rackId } = req.params;
 
@@ -2657,11 +2703,11 @@ app.delete('/api/maintenance/rack/:rackId', async (req, res) => {
     const sanitizedRackId = String(rackId).trim();
 
     const result = await executeQuery(async (pool) => {
-      // Get the maintenance entry ID for this rack
+      // Get the maintenance entry ID and site for this rack
       const entryResult = await pool.request()
         .input('rack_id', sql.NVarChar, sanitizedRackId)
         .query(`
-          SELECT maintenance_entry_id, entry_type
+          SELECT mrd.maintenance_entry_id, me.entry_type, mrd.site
           FROM maintenance_rack_details mrd
           JOIN maintenance_entries me ON mrd.maintenance_entry_id = me.id
           WHERE mrd.rack_id = @rack_id
@@ -2669,6 +2715,13 @@ app.delete('/api/maintenance/rack/:rackId', async (req, res) => {
 
       if (entryResult.recordset.length === 0) {
         return { error: 'not_found' };
+      }
+
+      const siteName = entryResult.recordset[0].site;
+
+      // Check permissions
+      if (!canManageSite(req.session.userRole, req.session.sitiosAsignados, siteName)) {
+        return { error: 'forbidden' };
       }
 
       const entryId = entryResult.recordset[0].maintenance_entry_id;
@@ -2723,6 +2776,14 @@ app.delete('/api/maintenance/rack/:rackId', async (req, res) => {
       });
     }
 
+    if (result.error === 'forbidden') {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para gestionar este sitio',
+        timestamp: new Date().toISOString()
+      });
+    }
+
     logger.info(`Rack ${sanitizedRackId} removed from maintenance`);
 
     res.json({
@@ -2746,7 +2807,7 @@ app.delete('/api/maintenance/rack/:rackId', async (req, res) => {
 });
 
 // Remove an entire maintenance entry (individual rack or full chain) by entry ID
-app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
+app.delete('/api/maintenance/entry/:entryId', requireAuth, async (req, res) => {
   try {
     const { entryId } = req.params;
 
@@ -2763,10 +2824,10 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
       const entryInfo = await pool.request()
         .input('entry_id', sql.UniqueIdentifier, entryId)
         .query(`
-          SELECT entry_type, rack_id, chain, dc,
+          SELECT me.entry_type, me.rack_id, me.chain, me.dc, me.site,
                  (SELECT COUNT(*) FROM maintenance_rack_details WHERE maintenance_entry_id = @entry_id) as rack_count
-          FROM maintenance_entries
-          WHERE id = @entry_id
+          FROM maintenance_entries me
+          WHERE me.id = @entry_id
         `);
 
       if (entryInfo.recordset.length === 0) {
@@ -2774,6 +2835,11 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
       }
 
       const entry = entryInfo.recordset[0];
+
+      // Check permissions
+      if (!canManageSite(req.session.userRole, req.session.sitiosAsignados, entry.site)) {
+        return { error: 'forbidden' };
+      }
 
       // Delete the maintenance entry (CASCADE will delete all related rack details)
       await pool.request()
@@ -2790,6 +2856,14 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Maintenance entry not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (result.error === 'forbidden') {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para gestionar este sitio',
         timestamp: new Date().toISOString()
       });
     }
@@ -2829,11 +2903,58 @@ app.delete('/api/maintenance/entry/:entryId', async (req, res) => {
 });
 
 // Remove ALL maintenance entries and racks
-app.delete('/api/maintenance/all', async (req, res) => {
+app.delete('/api/maintenance/all', requireAuth, requireRole('Administrador', 'Operador'), async (req, res) => {
   const requestId = crypto.randomUUID().slice(0, 8);
   console.log(`\n[${requestId}] 📥 DELETE /api/maintenance/all - Request received`);
 
   try {
+    // If user is Operador with assigned sites, validate they can only delete entries from their sites
+    if (req.session.userRole === 'Operador' && req.session.sitiosAsignados && req.session.sitiosAsignados.length > 0) {
+      const result = await executeQuery(async (pool) => {
+        // Get count of entries before deletion
+        const countResult = await pool.request().query(`
+          SELECT COUNT(*) as entryCount,
+                 (SELECT COUNT(*) FROM maintenance_rack_details) as rackCount
+          FROM maintenance_entries
+        `);
+
+        const { entryCount, rackCount } = countResult.recordset[0];
+
+        // Build WHERE clause to filter by assigned sites
+        const sitesFilter = req.session.sitiosAsignados.map(s => `'${s.replace(/'/g, "''")}'`).join(',');
+
+        // Delete rack details first for the allowed sites
+        await pool.request().query(`
+          DELETE FROM maintenance_rack_details
+          WHERE maintenance_entry_id IN (
+            SELECT id FROM maintenance_entries WHERE site IN (${sitesFilter})
+          )
+        `);
+
+        // Delete maintenance entries for the allowed sites
+        const deleteResult = await pool.request().query(`
+          DELETE FROM maintenance_entries
+          WHERE site IN (${sitesFilter})
+        `);
+
+        return {
+          entriesRemoved: deleteResult.rowsAffected[0],
+          racksRemoved: rackCount
+        };
+      });
+
+      const successMessage = `Removidas ${result.entriesRemoved} entradas de mantenimiento de sus sitios asignados (${result.racksRemoved} racks)`;
+      logger.info(successMessage);
+
+      return res.json({
+        success: true,
+        message: successMessage,
+        data: result,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // For Administrador, delete everything
     const result = await executeQuery(async (pool) => {
       // Get count before deletion
       const countResult = await pool.request().query(`
@@ -2941,7 +3062,7 @@ app.get('/api/maintenance/template', (req, res) => {
 });
 
 // Endpoint to import racks from Excel
-app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res) => {
+app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), async (req, res) => {
   const requestId = crypto.randomUUID();
   console.log(`\n[${requestId}] 📥 POST /api/maintenance/import-excel - Request received`);
 
@@ -3046,9 +3167,21 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
       const alreadyInMaintenance = [];
       const successfulInserts = [];
       const failedInserts = [];
+      const permissionDenied = [];
 
       for (const rack of racks) {
         try {
+          // Check permissions before proceeding
+          if (!canManageSite(req.session.userRole, req.session.sitiosAsignados, rack.site)) {
+            permissionDenied.push({
+              row: rack.rowNumber,
+              rack_id: rack.rack_id,
+              site: rack.site,
+              error: 'No tiene permisos para gestionar este sitio'
+            });
+            continue;
+          }
+
           const existingCheck = await pool.request()
             .input('rack_id', sql.NVarChar, rack.rack_id)
             .query(`
@@ -3121,7 +3254,8 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
       return {
         successfulInserts,
         alreadyInMaintenance,
-        failedInserts
+        failedInserts,
+        permissionDenied
       };
     });
 
@@ -3129,10 +3263,12 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
       total: racks.length,
       successful: result.successfulInserts.length,
       alreadyInMaintenance: result.alreadyInMaintenance.length,
-      failed: result.failedInserts.length + errors.length,
+      permissionDenied: result.permissionDenied.length,
+      failed: result.failedInserts.length + errors.length + result.permissionDenied.length,
       errors: [
         ...errors.map(e => ({ ...e, type: 'validation' })),
         ...result.alreadyInMaintenance.map(e => ({ ...e, type: 'duplicate', error: 'Already in maintenance' })),
+        ...result.permissionDenied.map(e => ({ ...e, type: 'permission_denied' })),
         ...result.failedInserts.map(e => ({ ...e, type: 'insert_failed' }))
       ]
     };
