@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { Activity, AlertTriangle, Settings, BarChart3, Zap, Download, RefreshCw, Wrench, LogOut, User } from 'lucide-react';
+import { Activity, AlertTriangle, Settings, BarChart3, Zap, Download, RefreshCw, Wrench, LogOut, User, ChevronDown, ChevronUp } from 'lucide-react';
 import CountryGroup from './components/CountryGroup';
 import ThresholdManager from './components/ThresholdManager';
 import RackThresholdManager from './components/RackThresholdManager';
@@ -22,6 +22,7 @@ function App() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [showAllDcs, setShowAllDcs] = useState(false);
   const [activeView, setActiveView] = useState<'principal' | 'alertas' | 'mantenimiento'>('principal');
+  const [isGeoFiltersExpanded, setIsGeoFiltersExpanded] = useState(false);
   
   const {
     racks,
@@ -1170,116 +1171,139 @@ function App() {
 
             {/* Geographical Filters - Only show when threshold manager is closed and NOT in maintenance view */}
             {!showThresholds && !showRackThresholdsModal && activeView !== 'mantenimiento' && (
-              <div className="bg-white rounded-lg shadow mb-6 p-4">
-                <div className="space-y-6">
-                  <h3 className="text-lg font-medium text-gray-900">
+              <div className="bg-white rounded-lg shadow mb-6 overflow-hidden">
+                <div
+                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => setIsGeoFiltersExpanded(!isGeoFiltersExpanded)}
+                >
+                  <h3 className="text-lg font-medium text-gray-900 flex items-center">
                     Filtros Geográficos
+                    {(activeCountryFilter !== 'all' || activeSiteFilter !== 'all' || activeDcFilter !== 'all') && (
+                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {[
+                          activeCountryFilter !== 'all' && 'País',
+                          activeSiteFilter !== 'all' && 'Sitio',
+                          activeDcFilter !== 'all' && 'DC'
+                        ].filter(Boolean).join(', ')}
+                      </span>
+                    )}
                   </h3>
-                  
-                  {/* Country Filter */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      País:
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => setActiveCountryFilter('all')}
-                        className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                          activeCountryFilter === 'all'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        Todos
-                      </button>
-                      {availableCountries.filter(country => country !== 'N/A').map((country) => (
-                        <button
-                          key={country}
-                          onClick={() => setActiveCountryFilter(country)}
-                          className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                            activeCountryFilter === country
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {country}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Site Filter */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Sitio:
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => setActiveSiteFilter('all')}
-                        className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                          activeSiteFilter === 'all'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        Todos
-                      </button>
-                      {availableSites.map((site) => (
-                        <button
-                          key={site}
-                          onClick={() => setActiveSiteFilter(site)}
-                          className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                            activeSiteFilter === site
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {site}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Data Center Filter */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Data Center:
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => setActiveDcFilter('all')}
-                        className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                          activeDcFilter === 'all'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        Todos
-                      </button>
-                      {(showAllDcs ? availableDcs : availableDcs.slice(0, 4)).map((dc) => (
-                        <button
-                          key={dc}
-                          onClick={() => setActiveDcFilter(dc)}
-                          className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                            activeDcFilter === dc
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {dc}
-                        </button>
-                      ))}
-                      {availableDcs.length > 4 && (
-                        <button
-                          onClick={() => setShowAllDcs(!showAllDcs)}
-                          className="px-3 py-2 rounded-md text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
-                        >
-                          {showAllDcs ? 'Mostrar menos' : 'Mostrar más'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  {isGeoFiltersExpanded ? (
+                    <ChevronUp className="w-5 h-5 text-gray-500" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-gray-500" />
+                  )}
                 </div>
+
+                {isGeoFiltersExpanded && (
+                  <div className="border-t border-gray-200 p-4">
+                    <div className="space-y-6">
+                      {/* Country Filter */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                          País:
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setActiveCountryFilter('all')}
+                            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                              activeCountryFilter === 'all'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            Todos
+                          </button>
+                          {availableCountries.filter(country => country !== 'N/A').map((country) => (
+                            <button
+                              key={country}
+                              onClick={() => setActiveCountryFilter(country)}
+                              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                activeCountryFilter === country
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {country}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Site Filter */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                          Sitio:
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setActiveSiteFilter('all')}
+                            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                              activeSiteFilter === 'all'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            Todos
+                          </button>
+                          {availableSites.map((site) => (
+                            <button
+                              key={site}
+                              onClick={() => setActiveSiteFilter(site)}
+                              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                activeSiteFilter === site
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {site}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Data Center Filter */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                          Data Center:
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setActiveDcFilter('all')}
+                            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                              activeDcFilter === 'all'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            Todos
+                          </button>
+                          {(showAllDcs ? availableDcs : availableDcs.slice(0, 4)).map((dc) => (
+                            <button
+                              key={dc}
+                              onClick={() => setActiveDcFilter(dc)}
+                              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                activeDcFilter === dc
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {dc}
+                            </button>
+                          ))}
+                          {availableDcs.length > 4 && (
+                            <button
+                              onClick={() => setShowAllDcs(!showAllDcs)}
+                              className="px-3 py-2 rounded-md text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+                            >
+                              {showAllDcs ? 'Mostrar menos' : 'Mostrar más'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {/* Main Content */}
