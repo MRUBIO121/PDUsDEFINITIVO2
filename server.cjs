@@ -1271,13 +1271,7 @@ app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, re
       });
     }
 
-    // Validate password strength
-    if (password.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: 'La contraseña debe tener al menos 8 caracteres'
-      });
-    }
+    // No password validation - allow any password
 
     // Check if user already exists
     const existingUser = await executeQuery(async (pool) => {
@@ -1408,9 +1402,6 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
 
       // If password is provided, update it
       if (password && password.trim() !== '') {
-        if (password.length < 8) {
-          throw new Error('La contraseña debe tener al menos 8 caracteres');
-        }
         req.input('password', sql.NVarChar, password);
         updateQuery += ', password = @password';
       }
