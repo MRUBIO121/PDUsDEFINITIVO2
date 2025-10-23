@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2, ChevronDown, ChevronUp, Upload, XCircle } from 'lucide-react';
 import ImportMaintenanceModal from '../components/ImportMaintenanceModal';
+import { useAuth } from '../contexts/AuthContext';
 
 interface RackDetail {
   rack_id: string;
@@ -30,6 +31,7 @@ interface MaintenanceEntry {
 }
 
 export default function MaintenancePage() {
+  const { user } = useAuth();
   const [maintenanceEntries, setMaintenanceEntries] = useState<MaintenanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +95,12 @@ export default function MaintenancePage() {
   }, []);
 
   const handleRemoveEntry = async (entryId: string, entryType: string, identifier: string) => {
+    // Check if user has permission
+    if (user?.rol === 'Observador') {
+      alert('No tienes permisos para finalizar mantenimientos.');
+      return;
+    }
+
     const confirmMessage = entryType === 'chain'
       ? `¿Seguro que quieres sacar toda la chain "${identifier}" de mantenimiento?`
       : `¿Seguro que quieres sacar el rack "${identifier}" de mantenimiento?`;
@@ -132,6 +140,12 @@ export default function MaintenancePage() {
   };
 
   const handleRemoveIndividualRack = async (rackId: string, entryType: string) => {
+    // Check if user has permission
+    if (user?.rol === 'Observador') {
+      alert('No tienes permisos para finalizar mantenimientos.');
+      return;
+    }
+
     const confirmMessage = entryType === 'chain'
       ? `¿Seguro que quieres sacar solo este rack "${rackId}" de mantenimiento? (La chain seguirá en mantenimiento)`
       : `¿Seguro que quieres sacar el rack "${rackId}" de mantenimiento?`;
@@ -171,6 +185,12 @@ export default function MaintenancePage() {
   };
 
   const handleRemoveAll = async () => {
+    // Check if user has permission
+    if (user?.rol === 'Observador') {
+      alert('No tienes permisos para finalizar mantenimientos.');
+      return;
+    }
+
     if (maintenanceEntries.length === 0) {
       return;
     }
@@ -266,7 +286,7 @@ export default function MaintenancePage() {
               <h1 className="text-3xl font-bold text-slate-900">Modo Mantenimiento</h1>
             </div>
             <div className="flex items-center gap-3">
-              {maintenanceEntries.length > 0 && (
+              {maintenanceEntries.length > 0 && user?.rol !== 'Observador' && (
                 <button
                   onClick={handleRemoveAll}
                   disabled={removingAll}
@@ -417,30 +437,32 @@ export default function MaintenancePage() {
                         )}
                       </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveEntry(
-                            entry.id,
-                            entry.entry_type,
-                            isChainEntry ? `${entry.chain} (DC ${entry.dc})` : entry.rack_id || ''
-                          );
-                        }}
-                        disabled={removingEntryId === entry.id}
-                        className="ml-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {removingEntryId === entry.id ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                            Procesando...
-                          </>
-                        ) : (
-                          <>
-                            <Wrench className="w-4 h-4" />
-                            Finalizar Mantenimiento
-                          </>
-                        )}
-                      </button>
+                      {user?.rol !== 'Observador' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveEntry(
+                              entry.id,
+                              entry.entry_type,
+                              isChainEntry ? `${entry.chain} (DC ${entry.dc})` : entry.rack_id || ''
+                            );
+                          }}
+                          disabled={removingEntryId === entry.id}
+                          className="ml-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {removingEntryId === entry.id ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                              Procesando...
+                            </>
+                          ) : (
+                            <>
+                              <Wrench className="w-4 h-4" />
+                              Finalizar Mantenimiento
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -455,7 +477,7 @@ export default function MaintenancePage() {
                           key={rack.rack_id}
                           className="border border-slate-200 rounded-lg p-4 bg-slate-50 relative group"
                         >
-                          {isChainEntry && (
+                          {isChainEntry && user?.rol !== 'Observador' && (
                             <button
                               onClick={() => handleRemoveIndividualRack(rack.rack_id, entry.entry_type)}
                               disabled={removingRackId === rack.rack_id}
