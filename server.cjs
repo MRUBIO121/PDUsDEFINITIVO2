@@ -1158,20 +1158,56 @@ app.get('/api/auth/session', (req, res) => {
 // USER MANAGEMENT ENDPOINTS (Only for Administrador role)
 // ============================================================================================================
 
+// GET /api/sites - Get all available sites from rack data
+app.get('/api/sites', requireAuth, async (req, res) => {
+  try {
+    const result = await executeQuery(async (pool) => {
+      return await pool.request().query(`
+        SELECT DISTINCT site
+        FROM dbo.pdus
+        WHERE site IS NOT NULL AND site != ''
+        ORDER BY site
+      `);
+    });
+
+    const sites = result.recordset.map(row => row.site);
+
+    res.json({
+      success: true,
+      sites: sites
+    });
+
+  } catch (error) {
+    console.error('Error fetching sites:', error);
+    logger.error('Fetch sites error', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener sitios',
+      sites: []
+    });
+  }
+});
+
 // GET /api/users - Get all users
 app.get('/api/users', requireAuth, requireRole('Administrador'), async (req, res) => {
   try {
     const result = await executeQuery(async (pool) => {
       return await pool.request().query(`
-        SELECT id, usuario, rol, activo, fecha_creacion, fecha_modificacion
+        SELECT id, usuario, rol, sitios_asignados, activo, fecha_creacion, fecha_modificacion
         FROM usersAlertado
         ORDER BY fecha_creacion DESC
       `);
     });
 
+    // Parse sitios_asignados JSON
+    const users = result.recordset.map(user => ({
+      ...user,
+      sitios_asignados: user.sitios_asignados ? JSON.parse(user.sitios_asignados) : null
+    }));
+
     res.json({
       success: true,
-      users: result.recordset
+      users: users
     });
 
   } catch (error) {
@@ -1187,7 +1223,7 @@ app.get('/api/users', requireAuth, requireRole('Administrador'), async (req, res
 // POST /api/users - Create new user
 app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, res) => {
   try {
-    const { usuario, password, rol } = req.body;
+    const { usuario, password, rol, sitios_asignados } = req.body;
 
     // Validation
     if (!usuario || !password || !rol) {
@@ -1231,22 +1267,28 @@ app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, re
     // Use plain text password (as requested)
     const plainPassword = password;
 
+    // Convert sitios_asignados array to JSON string
+    const sitiosJson = sitios_asignados && Array.isArray(sitios_asignados) && sitios_asignados.length > 0
+      ? JSON.stringify(sitios_asignados)
+      : null;
+
     // Insert user
     await executeQuery(async (pool) => {
       return await pool.request()
         .input('usuario', sql.NVarChar, usuario)
         .input('password', sql.NVarChar, plainPassword)
         .input('rol', sql.NVarChar, rol)
+        .input('sitios_asignados', sql.NVarChar, sitiosJson)
         .input('activo', sql.Bit, true)
         .input('fecha_creacion', sql.DateTime, new Date())
         .input('fecha_modificacion', sql.DateTime, new Date())
         .query(`
-          INSERT INTO usersAlertado (id, usuario, password, rol, activo, fecha_creacion, fecha_modificacion)
-          VALUES (NEWID(), @usuario, @password, @rol, @activo, @fecha_creacion, @fecha_modificacion)
+          INSERT INTO usersAlertado (id, usuario, password, rol, sitios_asignados, activo, fecha_creacion, fecha_modificacion)
+          VALUES (NEWID(), @usuario, @password, @rol, @sitios_asignados, @activo, @fecha_creacion, @fecha_modificacion)
         `);
     });
 
-    logger.info(`User created: ${usuario} (${rol}) by ${req.session.usuario}`);
+    logger.info(`User created: ${usuario} (${rol}) with sites: ${sitiosJson || 'all'} by ${req.session.usuario}`);
 
     res.json({
       success: true,
@@ -1267,7 +1309,7 @@ app.post('/api/users', requireAuth, requireRole('Administrador'), async (req, re
 app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { usuario, password, rol, activo } = req.body;
+    const { usuario, password, rol, activo, sitios_asignados } = req.body;
 
     // Validation
     if (!usuario || !rol) {
@@ -1315,10 +1357,15 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
       });
     }
 
+    // Convert sitios_asignados array to JSON string
+    const sitiosJson = sitios_asignados && Array.isArray(sitios_asignados) && sitios_asignados.length > 0
+      ? JSON.stringify(sitios_asignados)
+      : null;
+
     // Build update query
     let updateQuery = `
       UPDATE usersAlertado
-      SET usuario = @usuario, rol = @rol, activo = @activo, fecha_modificacion = @fecha_modificacion
+      SET usuario = @usuario, rol = @rol, activo = @activo, sitios_asignados = @sitios_asignados, fecha_modificacion = @fecha_modificacion
     `;
 
     const request = await executeQuery(async (pool) => {
@@ -1327,6 +1374,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
         .input('usuario', sql.NVarChar, usuario)
         .input('rol', sql.NVarChar, rol)
         .input('activo', sql.Bit, activo !== undefined ? activo : true)
+        .input('sitios_asignados', sql.NVarChar, sitiosJson)
         .input('fecha_modificacion', sql.DateTime, new Date());
 
       // If password is provided, update it
@@ -1343,7 +1391,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
       return await req.query(updateQuery);
     });
 
-    logger.info(`User updated: ${usuario} (${rol}) by ${req.session.usuario}`);
+    logger.info(`User updated: ${usuario} (${rol}) with sites: ${sitiosJson || 'all'} by ${req.session.usuario}`);
 
     res.json({
       success: true,

@@ -5,6 +5,7 @@ interface User {
   id: string;
   usuario: string;
   rol: string;
+  sitios_asignados: string[] | null;
   activo: boolean;
   fecha_creacion: string;
   fecha_modificacion: string;
@@ -12,6 +13,7 @@ interface User {
 
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
+  const [sites, setSites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -24,11 +26,13 @@ export default function UserManagement() {
     usuario: '',
     password: '',
     rol: 'Operador' as string,
+    sitios_asignados: [] as string[],
     activo: true
   });
 
   useEffect(() => {
     fetchUsers();
+    fetchSites();
   }, []);
 
   const fetchUsers = async () => {
@@ -51,11 +55,30 @@ export default function UserManagement() {
     }
   };
 
+  const fetchSites = async () => {
+    try {
+      const response = await fetch('/api/sites', {
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al obtener sitios');
+      }
+
+      const data = await response.json();
+      setSites(data.sites || []);
+    } catch (err) {
+      console.error('Error loading sites:', err);
+      setSites([]);
+    }
+  };
+
   const handleCreate = () => {
     setFormData({
       usuario: '',
       password: '',
       rol: 'Operador',
+      sitios_asignados: [],
       activo: true
     });
     setShowCreateModal(true);
@@ -67,6 +90,7 @@ export default function UserManagement() {
       usuario: user.usuario,
       password: '',
       rol: user.rol,
+      sitios_asignados: user.sitios_asignados || [],
       activo: user.activo
     });
     setShowEditModal(true);
@@ -112,7 +136,8 @@ export default function UserManagement() {
         body: JSON.stringify({
           usuario: formData.usuario,
           password: formData.password,
-          rol: formData.rol
+          rol: formData.rol,
+          sitios_asignados: formData.sitios_asignados
         })
       });
 
@@ -141,6 +166,7 @@ export default function UserManagement() {
       const payload: any = {
         usuario: formData.usuario,
         rol: formData.rol,
+        sitios_asignados: formData.sitios_asignados,
         activo: formData.activo
       };
 
@@ -245,6 +271,9 @@ export default function UserManagement() {
                   Rol
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Sitios Asignados
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Estado
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -265,6 +294,19 @@ export default function UserManagement() {
                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRolBadgeColor(user.rol)}`}>
                       {user.rol}
                     </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    {user.sitios_asignados && user.sitios_asignados.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {user.sitios_asignados.map((sitio, idx) => (
+                          <span key={idx} className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded">
+                            {sitio}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-500 italic">Todos los sitios</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -383,6 +425,65 @@ export default function UserManagement() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Sitios Asignados
+                </label>
+                <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                  {sites.length === 0 ? (
+                    <p className="text-sm text-gray-500">Cargando sitios...</p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center mb-2 pb-2 border-b border-gray-200">
+                        <input
+                          type="checkbox"
+                          id="select-all-sites-create"
+                          checked={formData.sitios_asignados.length === 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, sitios_asignados: [] });
+                            }
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor="select-all-sites-create" className="ml-2 block text-sm font-semibold text-gray-900">
+                          Todos los sitios
+                        </label>
+                      </div>
+                      {sites.map((site) => (
+                        <div key={site} className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id={`site-create-${site}`}
+                            checked={formData.sitios_asignados.includes(site)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({
+                                  ...formData,
+                                  sitios_asignados: [...formData.sitios_asignados, site]
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  sitios_asignados: formData.sitios_asignados.filter(s => s !== site)
+                                });
+                              }
+                            }}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <label htmlFor={`site-create-${site}`} className="ml-2 block text-sm text-gray-700">
+                            {site}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Dejar sin selección para dar acceso a todos los sitios
+                </p>
+              </div>
+
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
@@ -462,6 +563,65 @@ export default function UserManagement() {
                   <option value="Tecnico">Técnico</option>
                   <option value="Observador">Observador</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Sitios Asignados
+                </label>
+                <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                  {sites.length === 0 ? (
+                    <p className="text-sm text-gray-500">Cargando sitios...</p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center mb-2 pb-2 border-b border-gray-200">
+                        <input
+                          type="checkbox"
+                          id="select-all-sites-edit"
+                          checked={formData.sitios_asignados.length === 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, sitios_asignados: [] });
+                            }
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor="select-all-sites-edit" className="ml-2 block text-sm font-semibold text-gray-900">
+                          Todos los sitios
+                        </label>
+                      </div>
+                      {sites.map((site) => (
+                        <div key={site} className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id={`site-edit-${site}`}
+                            checked={formData.sitios_asignados.includes(site)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({
+                                  ...formData,
+                                  sitios_asignados: [...formData.sitios_asignados, site]
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  sitios_asignados: formData.sitios_asignados.filter(s => s !== site)
+                                });
+                              }
+                            }}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <label htmlFor={`site-edit-${site}`} className="ml-2 block text-sm text-gray-700">
+                            {site}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Dejar sin selección para dar acceso a todos los sitios
+                </p>
               </div>
 
               <div className="flex items-center">

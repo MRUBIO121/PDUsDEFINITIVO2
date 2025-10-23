@@ -41,6 +41,7 @@ PRINT '';
 --   - usuario           : Nombre de usuario único para login
 --   - password          : Contraseña en texto plano
 --   - rol               : Rol del usuario (Administrador, Operador, Tecnico, Observador)
+--   - sitios_asignados  : JSON array con los sitios asignados (ej: '["BCN","MAD"]')
 --   - activo            : Indica si el usuario está activo (soft delete)
 --   - fecha_creacion    : Fecha de creación del usuario
 --   - fecha_modificacion: Fecha de última modificación
@@ -68,7 +69,7 @@ BEGIN
         usuario NVARCHAR(100) UNIQUE NOT NULL,
         password NVARCHAR(255) NOT NULL,
         rol NVARCHAR(50) NOT NULL CHECK (rol IN ('Administrador', 'Operador', 'Tecnico', 'Observador')),
-        sitio_asignado NVARCHAR(100) NULL,
+        sitios_asignados NVARCHAR(MAX) NULL, -- JSON array of assigned sites
         activo BIT NOT NULL DEFAULT 1,
         fecha_creacion DATETIME DEFAULT GETDATE(),
         fecha_modificacion DATETIME DEFAULT GETDATE()
@@ -78,7 +79,6 @@ BEGIN
     CREATE INDEX IX_usersAlertado_usuario ON usersAlertado(usuario);
     CREATE INDEX IX_usersAlertado_rol ON usersAlertado(rol);
     CREATE INDEX IX_usersAlertado_activo ON usersAlertado(activo);
-    CREATE INDEX IX_usersAlertado_sitio_asignado ON usersAlertado(sitio_asignado);
 
     PRINT '✅ Tabla usersAlertado creada exitosamente con índices';
 END
@@ -89,13 +89,12 @@ BEGIN
     -- Agregar columna sitio_asignado si no existe
     IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('usersAlertado') AND name = 'sitio_asignado')
     BEGIN
-        ALTER TABLE usersAlertado ADD sitio_asignado NVARCHAR(100) NULL;
-        CREATE INDEX IX_usersAlertado_sitio_asignado ON usersAlertado(sitio_asignado);
-        PRINT '✅ Columna sitio_asignado añadida a tabla existente';
+        ALTER TABLE usersAlertado ADD sitios_asignados NVARCHAR(MAX) NULL;
+        PRINT '✅ Columna sitios_asignados añadida a tabla existente';
     END
     ELSE
     BEGIN
-        PRINT 'ℹ️  Columna sitio_asignado ya existe';
+        PRINT 'ℹ️  Columna sitios_asignados ya existe';
     END
 END
 GO
@@ -119,12 +118,12 @@ PRINT '-------------------------------------------------------------------------
 -- Verificar si ya existe un usuario administrador
 IF NOT EXISTS (SELECT * FROM usersAlertado WHERE usuario = 'admin')
 BEGIN
-    INSERT INTO usersAlertado (usuario, password, rol, sitio_asignado, activo, fecha_creacion, fecha_modificacion)
+    INSERT INTO usersAlertado (usuario, password, rol, sitios_asignados, activo, fecha_creacion, fecha_modificacion)
     VALUES (
         'admin',
         'Admin123!',
         'Administrador',
-        NULL,
+        NULL, -- Admin can see all sites
         1,
         GETDATE(),
         GETDATE()
