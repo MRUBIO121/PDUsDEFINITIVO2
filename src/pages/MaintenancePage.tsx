@@ -344,7 +344,14 @@ export default function MaintenancePage() {
                   key={entry.id}
                   className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden"
                 >
-                  <div className={`bg-gradient-to-r ${bgColor} border-b p-6`}>
+                  <div
+                    className={`bg-gradient-to-r ${bgColor} border-b p-6 cursor-pointer transition-colors ${
+                      isChainEntry
+                        ? 'hover:from-amber-100 hover:to-amber-150'
+                        : 'hover:from-blue-100 hover:to-blue-150'
+                    }`}
+                    onClick={() => toggleExpanded(entry.id)}
+                  >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-3">
@@ -359,21 +366,13 @@ export default function MaintenancePage() {
                           }`}>
                             {isChainEntry ? 'Chain Completa' : 'Rack Individual'}
                           </span>
-                          <button
-                            onClick={() => toggleExpanded(entry.id)}
-                            className={`ml-2 p-2 rounded-lg transition-colors ${
-                              isChainEntry
-                                ? 'hover:bg-amber-200 text-amber-700'
-                                : 'hover:bg-blue-200 text-blue-700'
-                            }`}
-                            title={isExpanded ? 'Ocultar racks' : 'Mostrar racks'}
-                          >
+                          <div className={`ml-2 p-2 rounded-lg ${iconColor}`}>
                             {isExpanded ? (
                               <ChevronUp className="w-5 h-5" />
                             ) : (
                               <ChevronDown className="w-5 h-5" />
                             )}
-                          </button>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -419,11 +418,14 @@ export default function MaintenancePage() {
                       </div>
 
                       <button
-                        onClick={() => handleRemoveEntry(
-                          entry.id,
-                          entry.entry_type,
-                          isChainEntry ? `${entry.chain} (DC ${entry.dc})` : entry.rack_id || ''
-                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveEntry(
+                            entry.id,
+                            entry.entry_type,
+                            isChainEntry ? `${entry.chain} (DC ${entry.dc})` : entry.rack_id || ''
+                          );
+                        }}
                         disabled={removingEntryId === entry.id}
                         className="ml-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
