@@ -2944,13 +2944,24 @@ app.delete('/api/maintenance/all', requireAuth, async (req, res) => {
       }
 
       // Get count before deletion
-      const countResult = await pool.request().query(`
-        SELECT
-          (SELECT COUNT(*) FROM maintenance_entries ${whereClause}) as entry_count,
-          (SELECT COUNT(*) FROM maintenance_rack_details mrd
-           JOIN maintenance_entries me ON mrd.maintenance_entry_id = me.id
-           ${whereClause}) as rack_count
-      `);
+      let countQuery = '';
+      if (whereClause) {
+        countQuery = `
+          SELECT
+            (SELECT COUNT(*) FROM maintenance_entries ${whereClause}) as entry_count,
+            (SELECT COUNT(*) FROM maintenance_rack_details mrd
+             JOIN maintenance_entries me ON mrd.maintenance_entry_id = me.id
+             WHERE me.site IN (${req.session.sitiosAsignados.map(site => `'${site.replace("'", "''")}'`).join(',')})) as rack_count
+        `;
+      } else {
+        countQuery = `
+          SELECT
+            (SELECT COUNT(*) FROM maintenance_entries) as entry_count,
+            (SELECT COUNT(*) FROM maintenance_rack_details) as rack_count
+        `;
+      }
+
+      const countResult = await pool.request().query(countQuery);
 
       const { entry_count, rack_count } = countResult.recordset[0];
 
