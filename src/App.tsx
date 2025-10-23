@@ -1368,9 +1368,9 @@ function App() {
                       getAmperageStatusColor={getAmperageStatusColorWrapper}
                       activeStatusFilter={activeStatusFilter}
                       onStatusFilterChange={setActiveStatusFilter}
-                      onConfigureThresholds={handleConfigureThresholds}
-                      onSendRackToMaintenance={handleSendRackToMaintenance}
-                      onSendChainToMaintenance={handleSendChainToMaintenance}
+                      onConfigureThresholds={(user?.rol === 'Administrador' || user?.rol === 'Operador') ? handleConfigureThresholds : undefined}
+                      onSendRackToMaintenance={(user?.rol !== 'Observador') ? handleSendRackToMaintenance : undefined}
+                      onSendChainToMaintenance={(user?.rol !== 'Observador') ? handleSendChainToMaintenance : undefined}
                       maintenanceRacks={maintenanceRacks}
                     />
                   ))}

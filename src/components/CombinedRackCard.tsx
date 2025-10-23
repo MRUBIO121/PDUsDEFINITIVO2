@@ -159,7 +159,7 @@ export default function CombinedRackCard({
           <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded">
             {racks.length} PDUs
           </span>
-          {(onConfigureThresholds || onSendToMaintenance) && (
+          {(onConfigureThresholds || onSendRackToMaintenance || onSendChainToMaintenance) && (
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowMenu(!showMenu)}
