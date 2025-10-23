@@ -68,7 +68,7 @@ BEGIN
         usuario NVARCHAR(100) UNIQUE NOT NULL,
         password NVARCHAR(255) NOT NULL,
         rol NVARCHAR(50) NOT NULL CHECK (rol IN ('Administrador', 'Operador', 'Tecnico', 'Observador')),
-        sitio_asignado NVARCHAR(500) NULL,
+        sitio_asignado NVARCHAR(100) NULL,
         activo BIT NOT NULL DEFAULT 1,
         fecha_creacion DATETIME DEFAULT GETDATE(),
         fecha_modificacion DATETIME DEFAULT GETDATE()
@@ -89,25 +89,13 @@ BEGIN
     -- Agregar columna sitio_asignado si no existe
     IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('usersAlertado') AND name = 'sitio_asignado')
     BEGIN
-        ALTER TABLE usersAlertado ADD sitio_asignado NVARCHAR(500) NULL;
+        ALTER TABLE usersAlertado ADD sitio_asignado NVARCHAR(100) NULL;
         CREATE INDEX IX_usersAlertado_sitio_asignado ON usersAlertado(sitio_asignado);
         PRINT '✅ Columna sitio_asignado añadida a tabla existente';
     END
     ELSE
     BEGIN
         PRINT 'ℹ️  Columna sitio_asignado ya existe';
-
-        -- Verificar si necesita ampliarse el tamaño de la columna
-        DECLARE @currentLength INT;
-        SELECT @currentLength = CHARACTER_MAXIMUM_LENGTH
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_NAME = 'usersAlertado' AND COLUMN_NAME = 'sitio_asignado';
-
-        IF @currentLength < 500
-        BEGIN
-            ALTER TABLE usersAlertado ALTER COLUMN sitio_asignado NVARCHAR(500) NULL;
-            PRINT '✅ Tamaño de columna sitio_asignado ampliado a 500 caracteres';
-        END
     END
 END
 GO

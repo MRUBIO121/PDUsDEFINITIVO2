@@ -65,15 +65,11 @@ function App() {
     refreshThresholds
   } = useThresholds();
 
-  // Initialize site filter based on user's assigned sites
+  // Initialize site filter based on user's assigned site
   React.useEffect(() => {
     if (user && !hasInitializedFilters && availableSites.length > 0) {
-      if (user.sitio_asignado) {
-        const sitiosAsignados = user.sitio_asignado.split(',').map(s => s.trim());
-        // If user has only one assigned site, auto-select it
-        if (sitiosAsignados.length === 1 && availableSites.includes(sitiosAsignados[0])) {
-          setActiveSiteFilter(sitiosAsignados[0]);
-        }
+      if (user.sitio_asignado && availableSites.includes(user.sitio_asignado)) {
+        setActiveSiteFilter(user.sitio_asignado);
       }
       setHasInitializedFilters(true);
     }
@@ -455,13 +451,12 @@ function App() {
   };
 
   const handleConfigureThresholds = (rackId: string, rackName: string) => {
-    // Check if user has permission based on role and assigned sites
+    // Check if user has permission based on role and assigned site
     if (user?.rol !== 'Administrador' && user?.sitio_asignado) {
-      const sitiosAsignados = user.sitio_asignado.split(',').map(s => s.trim());
       // Find rack data to check its site
       const rackData = racks.find(r => r.rackId === rackId);
-      if (rackData && !sitiosAsignados.includes(rackData.site)) {
-        alert(`No tienes permisos para configurar umbrales de racks fuera de tus sitios asignados (${user.sitio_asignado})`);
+      if (rackData && rackData.site !== user.sitio_asignado) {
+        alert(`No tienes permisos para configurar umbrales de racks fuera de tu sitio asignado (${user.sitio_asignado})`);
         return;
       }
     }
@@ -472,11 +467,10 @@ function App() {
   };
 
   const handleSendRackToMaintenance = async (rackId: string, chain: string, rackName: string, rackData?: any) => {
-    // Check if user has permission based on role and assigned sites
+    // Check if user has permission based on role and assigned site
     if (user?.rol !== 'Administrador' && user?.sitio_asignado) {
-      const sitiosAsignados = user.sitio_asignado.split(',').map(s => s.trim());
-      if (rackData && !sitiosAsignados.includes(rackData.site)) {
-        alert(`No tienes permisos para enviar a mantenimiento racks fuera de tus sitios asignados (${user.sitio_asignado})`);
+      if (rackData && rackData.site !== user.sitio_asignado) {
+        alert(`No tienes permisos para enviar a mantenimiento racks fuera de tu sitio asignado (${user.sitio_asignado})`);
         return;
       }
     }
@@ -521,11 +515,10 @@ function App() {
   };
 
   const handleSendChainToMaintenance = async (chain: string, site: string, dc: string, rackData?: any) => {
-    // Check if user has permission based on role and assigned sites
+    // Check if user has permission based on role and assigned site
     if (user?.rol !== 'Administrador' && user?.sitio_asignado) {
-      const sitiosAsignados = user.sitio_asignado.split(',').map(s => s.trim());
-      if (!sitiosAsignados.includes(site)) {
-        alert(`No tienes permisos para enviar a mantenimiento chains fuera de tus sitios asignados (${user.sitio_asignado})`);
+      if (site !== user.sitio_asignado) {
+        alert(`No tienes permisos para enviar a mantenimiento chains fuera de tu sitio asignado (${user.sitio_asignado})`);
         return;
       }
     }
@@ -1140,7 +1133,6 @@ function App() {
                 thresholds={thresholds}
                 onSaveSuccess={handleThresholdSaveSuccess}
                 onClose={() => setShowThresholds(false)}
-                availableSites={availableSites}
               />
             ) : (
               <>
