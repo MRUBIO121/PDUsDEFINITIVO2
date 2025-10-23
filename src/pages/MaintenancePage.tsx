@@ -94,11 +94,19 @@ export default function MaintenancePage() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleRemoveEntry = async (entryId: string, entryType: string, identifier: string) => {
+  const handleRemoveEntry = async (entryId: string, entryType: string, identifier: string, entrySite?: string) => {
     // Check if user has permission
     if (user?.rol === 'Observador') {
       alert('No tienes permisos para finalizar mantenimientos.');
       return;
+    }
+
+    // Check if user has site restrictions
+    if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
+      if (!entrySite || !user.sitios_asignados.includes(entrySite)) {
+        alert(`No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
+        return;
+      }
     }
 
     const confirmMessage = entryType === 'chain'
@@ -139,11 +147,19 @@ export default function MaintenancePage() {
     }
   };
 
-  const handleRemoveIndividualRack = async (rackId: string, entryType: string) => {
+  const handleRemoveIndividualRack = async (rackId: string, entryType: string, rackSite?: string) => {
     // Check if user has permission
     if (user?.rol === 'Observador') {
       alert('No tienes permisos para finalizar mantenimientos.');
       return;
+    }
+
+    // Check if user has site restrictions
+    if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
+      if (!rackSite || !user.sitios_asignados.includes(rackSite)) {
+        alert(`No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
+        return;
+      }
     }
 
     const confirmMessage = entryType === 'chain'
@@ -318,6 +334,27 @@ export default function MaintenancePage() {
           <p className="text-slate-600">
             Equipos actualmente en mantenimiento (no generan alertas)
           </p>
+
+          {/* Info banner for users with site restrictions */}
+          {user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0 && (
+            <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-blue-900">
+                  <p className="font-semibold mb-1">Permisos de Mantenimiento</p>
+                  <p>
+                    Puedes ver <strong>todos los equipos en mantenimiento</strong> del sistema, pero solo puedes{' '}
+                    <strong>finalizar mantenimientos</strong> de equipos pertenecientes a tus sitios asignados:{' '}
+                    <span className="font-semibold">{user.sitios_asignados.join(', ')}</span>.
+                  </p>
+                  <p className="mt-2 text-blue-700">
+                    Los equipos de otros sitios se mostrarán con opciones de finalización deshabilitadas.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {maintenanceEntries.length > 0 && (
             <div className="mt-4 flex gap-6 text-sm">
               <div className="bg-white px-4 py-2 rounded-lg border border-slate-200">
@@ -358,6 +395,12 @@ export default function MaintenancePage() {
               const iconColor = isChainEntry ? 'text-amber-700' : 'text-blue-700';
               const textColor = isChainEntry ? 'text-amber-900' : 'text-blue-900';
               const isExpanded = expandedEntries.has(entry.id);
+
+              // Check if user can finish this maintenance entry
+              const canFinishMaintenance = user?.rol === 'Administrador' ||
+                !user?.sitios_asignados ||
+                user.sitios_asignados.length === 0 ||
+                (entry.site && user.sitios_asignados.includes(entry.site));
 
               return (
                 <div
@@ -444,11 +487,17 @@ export default function MaintenancePage() {
                             handleRemoveEntry(
                               entry.id,
                               entry.entry_type,
-                              isChainEntry ? `${entry.chain} (DC ${entry.dc})` : entry.rack_id || ''
+                              isChainEntry ? `${entry.chain} (DC ${entry.dc})` : entry.rack_id || '',
+                              entry.site || undefined
                             );
                           }}
-                          disabled={removingEntryId === entry.id}
-                          className="ml-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          disabled={removingEntryId === entry.id || !canFinishMaintenance}
+                          className={`ml-4 px-4 py-2 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
+                            canFinishMaintenance
+                              ? 'bg-green-600 hover:bg-green-700 text-white'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                          title={!canFinishMaintenance ? `Solo puedes finalizar mantenimientos de tus sitios asignados (${user?.sitios_asignados?.join(', ')})` : ''}
                         >
                           {removingEntryId === entry.id ? (
                             <>
@@ -472,17 +521,30 @@ export default function MaintenancePage() {
                         {isChainEntry ? `Racks en esta chain (${entry.racks.length})` : 'Detalle del Rack'}
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {entry.racks.map(rack => (
+                        {entry.racks.map(rack => {
+                          // Check if user can finish this specific rack's maintenance
+                          const canFinishRackMaintenance = user?.rol === 'Administrador' ||
+                            !user?.sitios_asignados ||
+                            user.sitios_asignados.length === 0 ||
+                            (rack.site && user.sitios_asignados.includes(rack.site));
+
+                          return (
                         <div
                           key={rack.rack_id}
                           className="border border-slate-200 rounded-lg p-4 bg-slate-50 relative group"
                         >
                           {isChainEntry && user?.rol !== 'Observador' && (
                             <button
-                              onClick={() => handleRemoveIndividualRack(rack.rack_id, entry.entry_type)}
-                              disabled={removingRackId === rack.rack_id}
-                              className="absolute top-2 right-2 p-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
-                              title="Sacar solo este rack de mantenimiento"
+                              onClick={() => handleRemoveIndividualRack(rack.rack_id, entry.entry_type, rack.site)}
+                              disabled={removingRackId === rack.rack_id || !canFinishRackMaintenance}
+                              className={`absolute top-2 right-2 p-2 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50 ${
+                                canFinishRackMaintenance
+                                  ? 'bg-red-100 hover:bg-red-200 text-red-700'
+                                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                              }`}
+                              title={!canFinishRackMaintenance
+                                ? `Solo puedes finalizar mantenimientos de tus sitios asignados (${user?.sitios_asignados?.join(', ')})`
+                                : "Sacar solo este rack de mantenimiento"}
                             >
                               {removingRackId === rack.rack_id ? (
                                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-700 border-t-transparent"></div>
@@ -541,7 +603,8 @@ export default function MaintenancePage() {
                             )}
                           </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
