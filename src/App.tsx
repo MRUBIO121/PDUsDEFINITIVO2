@@ -454,8 +454,8 @@ function App() {
   };
 
   const handleConfigureThresholds = (rackId: string, rackName: string) => {
-    // Check if user has permission based on role and assigned sites
-    if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
+    // Check if user has permission based on assigned sites (applies to ALL users including Administrators)
+    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
       // Find rack data to check its site
       const rackData = racks.find(r => r.rackId === rackId);
       if (rackData && !user.sitios_asignados.includes(rackData.site)) {
@@ -470,8 +470,8 @@ function App() {
   };
 
   const handleSendRackToMaintenance = async (rackId: string, chain: string, rackName: string, rackData?: any) => {
-    // Check if user has permission based on role and assigned sites
-    if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
+    // Check if user has permission based on assigned sites (applies to ALL users including Administrators)
+    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
       if (rackData && !user.sitios_asignados.includes(rackData.site)) {
         alert(`No tienes permisos para enviar a mantenimiento racks fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
@@ -520,8 +520,8 @@ function App() {
   };
 
   const handleSendChainToMaintenance = async (chain: string, site: string, dc: string, rackData?: any) => {
-    // Check if user has permission based on role and assigned sites
-    if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
+    // Check if user has permission based on assigned sites (applies to ALL users including Administrators)
+    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
       if (!user.sitios_asignados.includes(site)) {
         alert(`No tienes permisos para enviar a mantenimiento chains fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
