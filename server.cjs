@@ -1161,16 +1161,42 @@ app.get('/api/auth/session', (req, res) => {
 // GET /api/sites - Get all available sites from rack data
 app.get('/api/sites', requireAuth, async (req, res) => {
   try {
-    const result = await executeQuery(async (pool) => {
-      return await pool.request().query(`
-        SELECT DISTINCT site
-        FROM dbo.pdus
-        WHERE site IS NOT NULL AND site != ''
-        ORDER BY site
-      `);
-    });
+    // First check if we have cache of rack data with sites
+    let sites = [];
 
-    const sites = result.recordset.map(row => row.site);
+    // Try to get sites from the cache first (faster)
+    if (racksCache.data && Array.isArray(racksCache.data)) {
+      const allRacks = racksCache.data.flat();
+      const siteSet = new Set();
+      allRacks.forEach(rack => {
+        if (rack.site && rack.site.trim() !== '') {
+          siteSet.add(rack.site.trim());
+        }
+      });
+      sites = Array.from(siteSet).sort();
+    }
+
+    // If no sites from cache, try database
+    if (sites.length === 0) {
+      try {
+        const result = await executeQuery(async (pool) => {
+          return await pool.request().query(`
+            SELECT DISTINCT site
+            FROM dbo.active_critical_alerts
+            WHERE site IS NOT NULL AND site != ''
+            ORDER BY site
+          `);
+        });
+        sites = result.recordset.map(row => row.site);
+      } catch (dbError) {
+        console.warn('Could not fetch sites from database:', dbError.message);
+      }
+    }
+
+    // If still no sites, provide default fallback or fetch from API
+    if (sites.length === 0) {
+      console.log('No sites found in cache or database, sites list will be empty');
+    }
 
     res.json({
       success: true,
