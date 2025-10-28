@@ -33,7 +33,6 @@ interface MaintenanceEntry {
 export default function MaintenancePage() {
   const { user } = useAuth();
   const [maintenanceEntries, setMaintenanceEntries] = useState<MaintenanceEntry[]>([]);
-  const [allAvailableSites, setAllAvailableSites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [removingEntryId, setRemovingEntryId] = useState<string | null>(null);
@@ -41,7 +40,6 @@ export default function MaintenancePage() {
   const [removingAll, setRemovingAll] = useState(false);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [siteFilter, setSiteFilter] = useState<string>('all');
 
   // Helper function to check if user has access to a site
   // Handles Cantabria Norte/Sur unification
@@ -121,58 +119,6 @@ export default function MaintenancePage() {
     const interval = setInterval(fetchMaintenanceEntries, 60000);
     return () => clearInterval(interval);
   }, []);
-
-  // Fetch all available sites from racks API
-  useEffect(() => {
-    const fetchAllSites = async () => {
-      try {
-        const timestamp = new Date().getTime();
-        const response = await fetch(`/api/racks/energy?t=${timestamp}`, {
-          cache: 'no-store',
-          credentials: 'include',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const sites = Array.from(new Set(data.map((rack: any) => rack.site || 'N/A'))).sort() as string[];
-          setAllAvailableSites(sites);
-        }
-      } catch (err) {
-        console.error('Error fetching sites:', err);
-      }
-    };
-
-    fetchAllSites();
-  }, []);
-
-  // Initialize site filter based on user's assigned sites
-  useEffect(() => {
-    if (user?.sitios_asignados && user.sitios_asignados.length > 0 && allAvailableSites.length > 0) {
-      // Only set filter if it hasn't been changed by user (still at default 'all')
-      if (siteFilter === 'all') {
-        // Check if user has any Cantabria site assigned
-        const hasCantabriaNorte = user.sitios_asignados.some(site =>
-          site.toLowerCase().includes('cantabria norte')
-        );
-        const hasCantabriaSur = user.sitios_asignados.some(site =>
-          site.toLowerCase().includes('cantabria sur')
-        );
-
-        // If user has any Cantabria site, set filter to unified "Cantabria"
-        if ((hasCantabriaNorte || hasCantabriaSur) && allAvailableSites.includes('Cantabria')) {
-          setSiteFilter('Cantabria');
-        }
-        // Otherwise, if user has at least 1 site, use the first one
-        else if (user.sitios_asignados.length >= 1 && allAvailableSites.includes(user.sitios_asignados[0])) {
-          setSiteFilter(user.sitios_asignados[0]);
-        }
-      }
-    }
-  }, [user, allAvailableSites, siteFilter]);
 
   const handleRemoveEntry = async (entryId: string, entryType: string, identifier: string, entrySite?: string) => {
     // Check if user has permission
@@ -363,15 +309,10 @@ export default function MaintenancePage() {
     );
   }
 
-  // Use all available sites from system, not just from maintenance entries
-  const availableSites = allAvailableSites;
+  // No filtering - show all maintenance entries
+  const filteredMaintenanceEntries = maintenanceEntries;
 
-  // Filter maintenance entries by selected site
-  const filteredMaintenanceEntries = siteFilter === 'all'
-    ? maintenanceEntries
-    : maintenanceEntries.filter(entry => entry.site === siteFilter);
-
-  // Count unique racks across filtered maintenance entries
+  // Count unique racks across all maintenance entries
   const uniqueRackIds = new Set<string>();
   filteredMaintenanceEntries.forEach(entry => {
     entry.racks.forEach(rack => {
@@ -442,40 +383,6 @@ export default function MaintenancePage() {
             </div>
           )}
 
-          {/* Site Filter */}
-          {availableSites.length > 0 && (
-            <div className="mt-4 bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Filtrar por Sitio:
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setSiteFilter('all')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    siteFilter === 'all'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Todos los sitios
-                </button>
-                {availableSites.map((site) => (
-                  <button
-                    key={site}
-                    onClick={() => setSiteFilter(site)}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      siteFilter === site
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {site}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {maintenanceEntries.length > 0 && (
             <div className="mt-4 flex gap-6 text-sm">
               <div className="bg-white px-4 py-2 rounded-lg border border-slate-200">
@@ -498,14 +405,10 @@ export default function MaintenancePage() {
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-12 text-center">
             <Wrench className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-700 mb-2">
-              {maintenanceEntries.length === 0
-                ? 'No hay equipos en mantenimiento'
-                : 'No hay equipos en mantenimiento para el sitio seleccionado'}
+              No hay equipos en mantenimiento
             </h3>
             <p className="text-slate-500">
-              {maintenanceEntries.length === 0
-                ? 'Todos los equipos están activos y generando alertas normalmente'
-                : 'Intenta seleccionar otro sitio o "Todos los sitios"'}
+              Todos los equipos están activos y generando alertas normalmente
             </p>
           </div>
         ) : (
@@ -603,7 +506,7 @@ export default function MaintenancePage() {
                         )}
                       </div>
 
-                      {user?.rol !== 'Observador' && (
+                      {user?.rol !== 'Observador' && canFinishMaintenance && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -614,13 +517,8 @@ export default function MaintenancePage() {
                               entry.site || undefined
                             );
                           }}
-                          disabled={removingEntryId === entry.id || !canFinishMaintenance}
-                          className={`ml-4 px-4 py-2 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
-                            canFinishMaintenance
-                              ? 'bg-green-600 hover:bg-green-700 text-white'
-                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                          }`}
-                          title={!canFinishMaintenance ? `Solo puedes finalizar mantenimientos de tus sitios asignados (${user?.sitios_asignados?.join(', ')})` : ''}
+                          disabled={removingEntryId === entry.id}
+                          className="ml-4 px-4 py-2 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
                         >
                           {removingEntryId === entry.id ? (
                             <>
@@ -654,18 +552,12 @@ export default function MaintenancePage() {
                           key={rack.rack_id}
                           className="border border-slate-200 rounded-lg p-4 bg-slate-50 relative group"
                         >
-                          {isChainEntry && user?.rol !== 'Observador' && (
+                          {isChainEntry && user?.rol !== 'Observador' && canFinishRackMaintenance && (
                             <button
                               onClick={() => handleRemoveIndividualRack(rack.rack_id, entry.entry_type, rack.site)}
-                              disabled={removingRackId === rack.rack_id || !canFinishRackMaintenance}
-                              className={`absolute top-2 right-2 p-2 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50 ${
-                                canFinishRackMaintenance
-                                  ? 'bg-red-100 hover:bg-red-200 text-red-700'
-                                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                              }`}
-                              title={!canFinishRackMaintenance
-                                ? `Solo puedes finalizar mantenimientos de tus sitios asignados (${user?.sitios_asignados?.join(', ')})`
-                                : "Sacar solo este rack de mantenimiento"}
+                              disabled={removingRackId === rack.rack_id}
+                              className="absolute top-2 right-2 p-2 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50 bg-red-100 hover:bg-red-200 text-red-700"
+                              title="Sacar solo este rack de mantenimiento"
                             >
                               {removingRackId === rack.rack_id ? (
                                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-700 border-t-transparent"></div>
