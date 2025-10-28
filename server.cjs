@@ -97,28 +97,28 @@ async function getPool() {
   // Create new connection
   isConnecting = true;
   try {
-    console.log('🔄 Establishing database connection...');
+    logger.info('Establishing database connection');
     globalPool = await sql.connect(sqlConfig);
 
     // Set up connection event handlers
     globalPool.on('error', (err) => {
-      console.error('❌ Database pool error:', err.message);
+      // Database pool error logged by winston
       logger.error('Database pool error', { error: err.message });
       globalPool = null;
     });
 
-    console.log('✅ Database connection established');
+    logger.info('Database connection established');
     reconnectAttempts = 0;
     isConnecting = false;
     return globalPool;
   } catch (error) {
     isConnecting = false;
     reconnectAttempts++;
-    console.error(`❌ Failed to connect to database (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}):`, error.message);
+    // Database connection failed logged by winston
     logger.error('Database connection failed', { error: error.message, attempt: reconnectAttempts });
 
     if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-      console.log(`⏳ Retrying in ${reconnectAttempts * 2} seconds...`);
+      logger.info(`Retrying connection in ${reconnectAttempts * 2}s`);
       await new Promise(resolve => setTimeout(resolve, reconnectAttempts * 2000));
       return getPool();
     }
@@ -154,7 +154,7 @@ async function executeQuery(queryFn, retries = 2) {
         globalPool = null;
 
         if (attempt < retries) {
-          console.log(`🔄 Retrying query after connection reset...`);
+          logger.info('Retrying query after connection reset');
           await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
           continue;
         }
@@ -172,9 +172,9 @@ async function executeQuery(queryFn, retries = 2) {
 async function initializeDatabaseConnection() {
   try {
     await getPool();
-    console.log('✅ Database initialization complete');
+    logger.info('Database initialization complete');
   } catch (error) {
-    console.error('❌ Database initialization failed:', error.message);
+    // Database initialization failed logged by winston
     logger.error('Database initialization failed', { error: error.message });
   }
 }
@@ -198,7 +198,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Serve static files from 'dist' folder in production
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
-  console.log('📁 Serving static files from dist folder');
+  logger.info('Serving static files from dist folder');
   app.use(express.static(distPath));
 }
 
@@ -331,12 +331,9 @@ async function fetchThresholdsFromDatabase() {
     // Check for voltage thresholds
     const voltageThresholds = thresholds.filter(t => t.key && t.key.includes('voltage'));
     if (voltageThresholds.length > 0) {
-      console.log('✅ Umbrales de voltaje encontrados en BD:');
-      voltageThresholds.forEach(t => {
-        console.log(`   ${t.key}: ${t.value}${t.unit || ''}`);
-      });
+      logger.info('Voltage thresholds loaded from database', { count: voltageThresholds.length });
     } else {
-      console.error('❌ No se encontraron umbrales de voltaje en la base de datos');
+      logger.error('No voltage thresholds found in database');
     }
 
     // Update cache
@@ -586,15 +583,7 @@ async function processRackData(racks, thresholds) {
       const voltageWarningLow = getThresholdValue(effectiveThresholds, 'warning_voltage_low');
       const voltageWarningHigh = getThresholdValue(effectiveThresholds, 'warning_voltage_high');
 
-      // Debug log for first 3 racks with voltage
-      if (voltageDebugCount < 3) {
-        console.log(`\n🔌 [Voltage Debug #${voltageDebugCount + 1}] Rack: ${rack.name} (ID: ${rack.id})`);
-        console.log(`   Current Voltage: ${voltage}V`);
-        console.log(`   Thresholds:`);
-        console.log(`     Critical: ${voltageCriticalLow}V - ${voltageCriticalHigh}V`);
-        console.log(`     Warning:  ${voltageWarningLow}V - ${voltageWarningHigh}V`);
-        voltageDebugCount++;
-      }
+      // Voltage evaluation (debug logging disabled)
 
       // Only evaluate if all thresholds are defined
       // Note: Low thresholds can be 0 (to detect no power condition)
@@ -609,10 +598,8 @@ async function processRackData(racks, thresholds) {
         if (voltage <= voltageCriticalLow || voltage >= voltageCriticalHigh) {
           if (voltage <= voltageCriticalLow) {
             reasons.push('critical_voltage_low');
-            if (voltageDebugCount <= 3) console.log(`   ❌ CRITICAL: Voltage ${voltage}V <= ${voltageCriticalLow}V`);
           } else {
             reasons.push('critical_voltage_high');
-            if (voltageDebugCount <= 3) console.log(`   ❌ CRITICAL: Voltage ${voltage}V >= ${voltageCriticalHigh}V`);
           }
           status = 'critical';
         }
@@ -622,20 +609,10 @@ async function processRackData(racks, thresholds) {
         else if (voltage <= voltageWarningLow || voltage >= voltageWarningHigh) {
           if (voltage <= voltageWarningLow) {
             reasons.push('warning_voltage_low');
-            if (voltageDebugCount <= 3) console.log(`   ⚠️ WARNING: Voltage ${voltage}V <= ${voltageWarningLow}V`);
           } else {
             reasons.push('warning_voltage_high');
-            if (voltageDebugCount <= 3) console.log(`   ⚠️ WARNING: Voltage ${voltage}V >= ${voltageWarningHigh}V`);
           }
           if (status !== 'critical') status = 'warning';
-        } else {
-          if (voltageDebugCount <= 3) console.log(`   ✅ OK: Voltage ${voltage}V within normal range (${voltageWarningLow}V - ${voltageWarningHigh}V)`);
-        }
-      } else {
-        if (voltageDebugCount <= 3) {
-          console.log(`   ⚠️ Voltage thresholds not configured properly!`);
-          console.log(`      CritLow=${voltageCriticalLow}, CritHigh=${voltageCriticalHigh}`);
-          console.log(`      WarnLow=${voltageWarningLow}, WarnHigh=${voltageWarningHigh}`);
         }
       }
       }
@@ -681,24 +658,18 @@ async function processRackData(racks, thresholds) {
   const voltageWarningLowValue = getThresholdValue(thresholds, 'warning_voltage_low') || 'N/A';
   const voltageWarningHighValue = getThresholdValue(thresholds, 'warning_voltage_high') || 'N/A';
 
-  console.log(`\n═══════════════════════════════════════════════════════`);
-  console.log(`🔌 RESUMEN DE EVALUACIÓN DE VOLTAJE`);
-  console.log(`═══════════════════════════════════════════════════════`);
-  console.log(`📊 Umbrales desde Base de Datos:`);
-  console.log(`   - Critical Low:  ${voltageCriticalLowValue}V`);
-  console.log(`   - Warning Low:   ${voltageWarningLowValue}V`);
-  console.log(`   - Warning High:  ${voltageWarningHighValue}V`);
-  console.log(`   - Critical High: ${voltageCriticalHighValue}V`);
-  console.log(`\n📊 Total PDUs: ${voltageStats.total}`);
-  console.log(`📊 PDUs con voltaje: ${voltageStats.withVoltage}`);
-  if (voltageStats.withVoltage > 0) {
-    console.log(`✅ Voltaje normal: ${voltageStats.normal}`);
-    if (voltageStats.criticalLow > 0) console.log(`❌ Crítico bajo (<=${voltageCriticalLowValue}V): ${voltageStats.criticalLow}`);
-    if (voltageStats.criticalHigh > 0) console.log(`❌ Crítico alto (>=${voltageCriticalHighValue}V): ${voltageStats.criticalHigh}`);
-    if (voltageStats.warningLow > 0) console.log(`⚠️  Advertencia bajo (<=${voltageWarningLowValue}V): ${voltageStats.warningLow}`);
-    if (voltageStats.warningHigh > 0) console.log(`⚠️  Advertencia alto (>=${voltageWarningHighValue}V): ${voltageStats.warningHigh}`);
+  // Log voltage evaluation summary only if there are alerts
+  if (voltageStats.criticalLow > 0 || voltageStats.criticalHigh > 0 || voltageStats.warningLow > 0 || voltageStats.warningHigh > 0) {
+    logger.info('Voltage alerts detected', {
+      total: voltageStats.total,
+      withVoltage: voltageStats.withVoltage,
+      normal: voltageStats.normal,
+      criticalLow: voltageStats.criticalLow,
+      criticalHigh: voltageStats.criticalHigh,
+      warningLow: voltageStats.warningLow,
+      warningHigh: voltageStats.warningHigh
+    });
   }
-  console.log(`═══════════════════════════════════════════════════════\n`);
 
   return processedRacks;
 }
@@ -803,7 +774,7 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
       }
     }
 
-    console.log(`✅ Processed ${processedCount} alerts (${errorCount} errors)`);
+    logger.info('Alerts processed', { count: processedCount, errors: errorCount });
 
     // Clean up resolved alerts
     try {
@@ -826,7 +797,7 @@ async function processCriticalAlert(pdu, reason, thresholds) {
     const metricInfo = extractMetricInfo(reason, pdu, thresholds);
 
     if (!metricInfo) {
-      console.log(`⚠️ Could not extract metric info from reason: ${reason}`);
+      logger.warn('Could not extract metric from reason', { reason });
       return;
     }
 
@@ -1198,7 +1169,7 @@ app.get('/api/sites', requireAuth, async (req, res) => {
 
     // If still no sites, provide default fallback or fetch from API
     if (sites.length === 0) {
-      console.log('No sites found in cache or database, sites list will be empty');
+      logger.warn('No sites found in cache or database');
     }
 
     res.json({
@@ -1597,7 +1568,7 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
         console.warn(`[${requestId}] ⚠️ Sensors API failed (continuing without sensor data):`, sensorError.message);
       }
     } else {
-      console.log(`[${requestId}] ⚠️ NENG_SENSORS_API_URL not configured, skipping sensor data`);
+      logger.info('NENG_SENSORS_API_URL not configured', { requestId });
     }
 
     // Map and combine power and sensor data, filtering out items without valid rackName
@@ -1658,11 +1629,11 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
 
     // Simplified log
     if (itemsWithoutRackName.length > 0) {
-      console.log(`⚠️ ${itemsWithoutRackName.length} PDUs omitidos (sin rackName)`);
+      logger.info('PDUs without rack name filtered', { count: itemsWithoutRackName.length });
     }
     
     if (combinedData.length === 0) {
-      console.log(`[${requestId}] ⚠️ No data received from NENG API`);
+      logger.warn('No data received from API', { requestId });
       return res.json({
         success: true,
         data: [],
@@ -1683,7 +1654,7 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
     // DO NOT filter out maintenance racks - send them to frontend for visual indication
     const filteredData = processedData;
     const uniqueRacks = new Set(filteredData.map(pdu => pdu.rackId)).size;
-    console.log(`✅ Procesados: ${filteredData.length} PDUs (${uniqueRacks} racks únicos, ${maintenanceRackIds.size} en mantenimiento)`);
+    logger.info('Data processed', { pdus: filteredData.length, racks: uniqueRacks, maintenance: maintenanceRackIds.size });
 
     // Manage active critical alerts in database (excluding maintenance racks from alerts)
     const nonMaintenanceData = processedData.filter(pdu => {
