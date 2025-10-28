@@ -2079,9 +2079,10 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
       `;
 
       if (whereClause) {
+        const qualifiedWhereClause = whereClause.replace('WHERE site IN', 'WHERE me.site IN');
         detailsQuery += `
         JOIN maintenance_entries me ON mrd.maintenance_entry_id = me.id
-        ${whereClause}
+        ${qualifiedWhereClause}
         `;
       }
 
