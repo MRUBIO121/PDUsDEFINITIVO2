@@ -41,16 +41,12 @@ export default function MaintenancePage() {
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  // Helper function to check if user has access to a site
-  // Handles Cantabria Norte/Sur unification
-  const userHasAccessToSite = (siteName: string | null | undefined): boolean => {
+  // Check if user can finish maintenance for a specific site
+  const canUserFinishMaintenance = (siteName: string | null | undefined): boolean => {
     if (!siteName) return false;
     if (!user?.sitios_asignados || user.sitios_asignados.length === 0) {
       return true; // No restrictions
     }
-
-    // Normalize site name for Cantabria check
-    const normalizedSite = siteName.toLowerCase().includes('cantabria') ? 'Cantabria' : siteName;
 
     // Check if user has direct access
     if (user.sitios_asignados.includes(siteName)) {
@@ -58,6 +54,7 @@ export default function MaintenancePage() {
     }
 
     // Check if this is a Cantabria site and user has any Cantabria access
+    const normalizedSite = siteName.toLowerCase().includes('cantabria') ? 'Cantabria' : siteName;
     if (normalizedSite === 'Cantabria') {
       return user.sitios_asignados.some(assignedSite =>
         assignedSite.toLowerCase().includes('cantabria')
@@ -129,7 +126,7 @@ export default function MaintenancePage() {
 
     // Check if user has site restrictions (applies to ALL users including Administrators)
     if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
-      if (!userHasAccessToSite(entrySite)) {
+      if (!canUserFinishMaintenance(entrySite)) {
         alert(`No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
       }
@@ -182,7 +179,7 @@ export default function MaintenancePage() {
 
     // Check if user has site restrictions (applies to ALL users including Administrators)
     if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
-      if (!userHasAccessToSite(rackSite)) {
+      if (!canUserFinishMaintenance(rackSite)) {
         alert(`No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
       }
@@ -425,8 +422,7 @@ export default function MaintenancePage() {
               const isExpanded = expandedEntries.has(entry.id);
 
               // Check if user can finish this maintenance entry
-              // ALL users (including Administrators) are restricted by their assigned sites
-              const canFinishMaintenance = userHasAccessToSite(entry.site);
+              const canFinishMaintenance = canUserFinishMaintenance(entry.site);
 
               return (
                 <div
@@ -544,8 +540,7 @@ export default function MaintenancePage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {entry.racks.map(rack => {
                           // Check if user can finish this specific rack's maintenance
-                          // ALL users (including Administrators) are restricted by their assigned sites
-                          const canFinishRackMaintenance = userHasAccessToSite(rack.site);
+                          const canFinishRackMaintenance = canUserFinishMaintenance(rack.site);
 
                           return (
                         <div
