@@ -318,6 +318,57 @@ pm2 monit
 - Verificar que el rol es el apropiado
 - Los Administradores con sitios asignados están restringidos a esos sitios
 
+### Problemas con Nginx
+
+#### Error: CreateDirectory() "D:\nginx/temp/client_body_temp" failed
+
+**Causa**: Los directorios temporales de nginx no existen.
+
+**Solución Rápida**:
+```powershell
+# PowerShell (Ejecutar como Administrador)
+.\setup-nginx.ps1
+```
+
+O manualmente:
+```powershell
+# Crear directorios temporales
+New-Item -ItemType Directory -Force -Path "D:\nginx\temp\client_body_temp"
+New-Item -ItemType Directory -Force -Path "D:\nginx\temp\proxy_temp"
+New-Item -ItemType Directory -Force -Path "D:\nginx\temp\fastcgi_temp"
+New-Item -ItemType Directory -Force -Path "D:\nginx\temp\uwsgi_temp"
+New-Item -ItemType Directory -Force -Path "D:\nginx\temp\scgi_temp"
+
+# Crear directorio para la aplicación
+New-Item -ItemType Directory -Force -Path "D:\nginx\pdus\dist"
+```
+
+**Batch/CMD**:
+```batch
+REM Ejecutar como Administrador
+setup-nginx.bat
+```
+
+**Verificar configuración**:
+```bash
+cd D:\nginx
+nginx.exe -t
+```
+
+**Iniciar nginx**:
+```bash
+cd D:\nginx
+nginx.exe
+```
+
+**Detener nginx**:
+```bash
+cd D:\nginx
+nginx.exe -s stop
+```
+
+Para instrucciones detalladas, consultar: `NGINX_SETUP.txt`
+
 ---
 
 **Energy Monitoring System** © 2025
