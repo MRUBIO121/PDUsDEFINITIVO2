@@ -41,29 +41,6 @@ export default function MaintenancePage() {
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  // Check if user can finish maintenance for a specific site
-  const canUserFinishMaintenance = (siteName: string | null | undefined): boolean => {
-    if (!siteName) return false;
-    if (!user?.sitios_asignados || user.sitios_asignados.length === 0) {
-      return true; // No restrictions
-    }
-
-    // Check if user has direct access
-    if (user.sitios_asignados.includes(siteName)) {
-      return true;
-    }
-
-    // Check if this is a Cantabria site and user has any Cantabria access
-    const normalizedSite = siteName.toLowerCase().includes('cantabria') ? 'Cantabria' : siteName;
-    if (normalizedSite === 'Cantabria') {
-      return user.sitios_asignados.some(assignedSite =>
-        assignedSite.toLowerCase().includes('cantabria')
-      );
-    }
-
-    return false;
-  };
-
   const toggleExpanded = (entryId: string) => {
     setExpandedEntries(prev => {
       const newSet = new Set(prev);
@@ -124,14 +101,6 @@ export default function MaintenancePage() {
       return;
     }
 
-    // Check if user has site restrictions (applies to ALL users including Administrators)
-    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
-      if (!canUserFinishMaintenance(entrySite)) {
-        alert(`No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
-        return;
-      }
-    }
-
     const confirmMessage = entryType === 'chain'
       ? `¿Seguro que quieres sacar toda la chain "${identifier}" de mantenimiento?`
       : `¿Seguro que quieres sacar el rack "${identifier}" de mantenimiento?`;
@@ -175,14 +144,6 @@ export default function MaintenancePage() {
     if (user?.rol === 'Observador') {
       alert('No tienes permisos para finalizar mantenimientos.');
       return;
-    }
-
-    // Check if user has site restrictions (applies to ALL users including Administrators)
-    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
-      if (!canUserFinishMaintenance(rackSite)) {
-        alert(`No tienes permisos para finalizar mantenimientos fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
-        return;
-      }
     }
 
     const confirmMessage = entryType === 'chain'
@@ -421,9 +382,6 @@ export default function MaintenancePage() {
               const textColor = isChainEntry ? 'text-amber-900' : 'text-blue-900';
               const isExpanded = expandedEntries.has(entry.id);
 
-              // Check if user can finish this maintenance entry
-              const canFinishMaintenance = canUserFinishMaintenance(entry.site);
-
               return (
                 <div
                   key={entry.id}
@@ -502,7 +460,7 @@ export default function MaintenancePage() {
                         )}
                       </div>
 
-                      {user?.rol !== 'Observador' && canFinishMaintenance && (
+                      {user?.rol !== 'Observador' && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -539,15 +497,12 @@ export default function MaintenancePage() {
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {entry.racks.map(rack => {
-                          // Check if user can finish this specific rack's maintenance
-                          const canFinishRackMaintenance = canUserFinishMaintenance(rack.site);
-
                           return (
                         <div
                           key={rack.rack_id}
                           className="border border-slate-200 rounded-lg p-4 bg-slate-50 relative group"
                         >
-                          {isChainEntry && user?.rol !== 'Observador' && canFinishRackMaintenance && (
+                          {isChainEntry && user?.rol !== 'Observador' && (
                             <button
                               onClick={() => handleRemoveIndividualRack(rack.rack_id, entry.entry_type, rack.site)}
                               disabled={removingRackId === rack.rack_id}

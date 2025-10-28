@@ -2036,14 +2036,7 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
 
   try {
     const results = await executeQuery(async (pool) => {
-      // Build WHERE clause for site filtering
-      let whereClause = '';
-      if (req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
-        const sitesCondition = req.session.sitiosAsignados.map(site => `'${site.replace("'", "''")}'`).join(',');
-        whereClause = `WHERE site IN (${sitesCondition})`;
-      }
-
-      // Get maintenance entries (filtered by site if user has assigned sites)
+      // Get all maintenance entries - NO FILTERING
       const entriesResult = await pool.request().query(`
         SELECT
           id,
@@ -2057,12 +2050,11 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           started_by,
           created_at
         FROM maintenance_entries
-        ${whereClause}
         ORDER BY started_at DESC
       `);
 
-      // Get rack details (filtered by site if user has assigned sites)
-      let detailsQuery = `
+      // Get all rack details - NO FILTERING
+      const detailsResult = await pool.request().query(`
         SELECT
           mrd.maintenance_entry_id,
           mrd.rack_id,
@@ -2076,17 +2068,7 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           mrd.node,
           mrd.serial
         FROM maintenance_rack_details mrd
-      `;
-
-      if (whereClause) {
-        const qualifiedWhereClause = whereClause.replace('WHERE site IN', 'WHERE me.site IN');
-        detailsQuery += `
-        JOIN maintenance_entries me ON mrd.maintenance_entry_id = me.id
-        ${qualifiedWhereClause}
-        `;
-      }
-
-      const detailsResult = await pool.request().query(detailsQuery);
+      `);
 
       return {
         entries: entriesResult.recordset || [],
