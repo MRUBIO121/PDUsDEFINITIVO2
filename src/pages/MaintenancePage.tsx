@@ -33,6 +33,7 @@ interface MaintenanceEntry {
 export default function MaintenancePage() {
   const { user } = useAuth();
   const [maintenanceEntries, setMaintenanceEntries] = useState<MaintenanceEntry[]>([]);
+  const [allAvailableSites, setAllAvailableSites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [removingEntryId, setRemovingEntryId] = useState<string | null>(null);
@@ -121,9 +122,36 @@ export default function MaintenancePage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch all available sites from racks API
+  useEffect(() => {
+    const fetchAllSites = async () => {
+      try {
+        const timestamp = new Date().getTime();
+        const response = await fetch(`/api/racks/energy?t=${timestamp}`, {
+          cache: 'no-store',
+          credentials: 'include',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const sites = Array.from(new Set(data.map((rack: any) => rack.site || 'N/A'))).sort() as string[];
+          setAllAvailableSites(sites);
+        }
+      } catch (err) {
+        console.error('Error fetching sites:', err);
+      }
+    };
+
+    fetchAllSites();
+  }, []);
+
   // Initialize site filter based on user's assigned sites
   useEffect(() => {
-    if (user?.sitios_asignados && user.sitios_asignados.length > 0 && maintenanceEntries.length > 0) {
+    if (user?.sitios_asignados && user.sitios_asignados.length > 0 && allAvailableSites.length > 0) {
       // Only set filter if it hasn't been changed by user (still at default 'all')
       if (siteFilter === 'all') {
         // Check if user has any Cantabria site assigned
@@ -135,16 +163,16 @@ export default function MaintenancePage() {
         );
 
         // If user has any Cantabria site, set filter to unified "Cantabria"
-        if (hasCantabriaNorte || hasCantabriaSur) {
+        if ((hasCantabriaNorte || hasCantabriaSur) && allAvailableSites.includes('Cantabria')) {
           setSiteFilter('Cantabria');
         }
         // Otherwise, if user has at least 1 site, use the first one
-        else if (user.sitios_asignados.length >= 1) {
+        else if (user.sitios_asignados.length >= 1 && allAvailableSites.includes(user.sitios_asignados[0])) {
           setSiteFilter(user.sitios_asignados[0]);
         }
       }
     }
-  }, [user, maintenanceEntries, siteFilter]);
+  }, [user, allAvailableSites, siteFilter]);
 
   const handleRemoveEntry = async (entryId: string, entryType: string, identifier: string, entrySite?: string) => {
     // Check if user has permission
@@ -335,14 +363,8 @@ export default function MaintenancePage() {
     );
   }
 
-  // Get unique sites from all maintenance entries
-  const availableSites = Array.from(
-    new Set(
-      maintenanceEntries
-        .map(entry => entry.site)
-        .filter((site): site is string => site !== null && site !== undefined && site !== '')
-    )
-  ).sort();
+  // Use all available sites from system, not just from maintenance entries
+  const availableSites = allAvailableSites;
 
   // Filter maintenance entries by selected site
   const filteredMaintenanceEntries = siteFilter === 'all'
