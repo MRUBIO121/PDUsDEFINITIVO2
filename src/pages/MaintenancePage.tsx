@@ -124,24 +124,27 @@ export default function MaintenancePage() {
   // Initialize site filter based on user's assigned sites
   useEffect(() => {
     if (user?.sitios_asignados && user.sitios_asignados.length > 0 && maintenanceEntries.length > 0) {
-      // Check if user has any Cantabria site assigned
-      const hasCantabriaNorte = user.sitios_asignados.some(site =>
-        site.toLowerCase().includes('cantabria norte')
-      );
-      const hasCantabriaSur = user.sitios_asignados.some(site =>
-        site.toLowerCase().includes('cantabria sur')
-      );
+      // Only set filter if it hasn't been changed by user (still at default 'all')
+      if (siteFilter === 'all') {
+        // Check if user has any Cantabria site assigned
+        const hasCantabriaNorte = user.sitios_asignados.some(site =>
+          site.toLowerCase().includes('cantabria norte')
+        );
+        const hasCantabriaSur = user.sitios_asignados.some(site =>
+          site.toLowerCase().includes('cantabria sur')
+        );
 
-      // If user has any Cantabria site, set filter to unified "Cantabria"
-      if (hasCantabriaNorte || hasCantabriaSur) {
-        setSiteFilter('Cantabria');
-      }
-      // Otherwise, if user has exactly 1 site, use that site
-      else if (user.sitios_asignados.length === 1) {
-        setSiteFilter(user.sitios_asignados[0]);
+        // If user has any Cantabria site, set filter to unified "Cantabria"
+        if (hasCantabriaNorte || hasCantabriaSur) {
+          setSiteFilter('Cantabria');
+        }
+        // Otherwise, if user has at least 1 site, use the first one
+        else if (user.sitios_asignados.length >= 1) {
+          setSiteFilter(user.sitios_asignados[0]);
+        }
       }
     }
-  }, [user, maintenanceEntries]);
+  }, [user, maintenanceEntries, siteFilter]);
 
   const handleRemoveEntry = async (entryId: string, entryType: string, identifier: string, entrySite?: string) => {
     // Check if user has permission
