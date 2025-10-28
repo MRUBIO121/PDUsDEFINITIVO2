@@ -98,11 +98,12 @@ Nginx (Reverse Proxy)
 ```
 
 ### Stack Tecnológico
-- **Frontend**: React 18 + TypeScript + Tailwind CSS + Vite
+- **Frontend**: React 18 + TypeScript + Tailwind CSS + Vite 7
 - **Backend**: Node.js + Express + Winston logging
 - **Proxy**: Nginx con compresión gzip
 - **Base de datos**: SQL Server (configuración y usuarios)
 - **Monitoreo**: PM2 para gestión de procesos
+- **Seguridad**: Sin vulnerabilidades conocidas (actualizado constantemente)
 
 ## Instalación
 
