@@ -418,7 +418,7 @@ export default function MaintenancePage() {
           )}
 
           {/* Site Filter */}
-          {availableSites.length > 1 && (
+          {availableSites.length > 0 && (
             <div className="mt-4 bg-white rounded-lg shadow-sm border border-slate-200 p-4">
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Filtrar por Sitio:
