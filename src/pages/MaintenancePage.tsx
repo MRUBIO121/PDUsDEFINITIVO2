@@ -123,7 +123,7 @@ export default function MaintenancePage() {
 
   // Initialize site filter based on user's assigned sites
   useEffect(() => {
-    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
+    if (user?.sitios_asignados && user.sitios_asignados.length > 0 && maintenanceEntries.length > 0) {
       // Check if user has any Cantabria site assigned
       const hasCantabriaNorte = user.sitios_asignados.some(site =>
         site.toLowerCase().includes('cantabria norte')
@@ -141,7 +141,7 @@ export default function MaintenancePage() {
         setSiteFilter(user.sitios_asignados[0]);
       }
     }
-  }, [user]);
+  }, [user, maintenanceEntries]);
 
   const handleRemoveEntry = async (entryId: string, entryType: string, identifier: string, entrySite?: string) => {
     // Check if user has permission
@@ -406,12 +406,11 @@ export default function MaintenancePage() {
                 <div className="text-sm text-blue-900">
                   <p className="font-semibold mb-1">Permisos de Mantenimiento</p>
                   <p>
-                    Puedes ver <strong>todos los equipos en mantenimiento</strong> del sistema, pero solo puedes{' '}
-                    <strong>finalizar mantenimientos</strong> de equipos pertenecientes a tus sitios asignados:{' '}
-                    <span className="font-semibold">{user.sitios_asignados.join(', ')}</span>.
+                    Puedes ver <strong>todos los equipos en mantenimiento</strong> del sistema. El filtro se inicia en tus sitios asignados:{' '}
+                    <span className="font-semibold">{user.sitios_asignados.join(', ')}</span>, pero puedes cambiar los filtros para ver otros sitios.
                   </p>
                   <p className="mt-2 text-blue-700">
-                    Los equipos de otros sitios se mostrarán con opciones de finalización deshabilitadas.
+                    Solo puedes <strong>finalizar mantenimientos</strong> de equipos pertenecientes a tus sitios asignados.
                   </p>
                 </div>
               </div>
