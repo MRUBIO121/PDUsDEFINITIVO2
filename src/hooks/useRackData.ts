@@ -184,14 +184,8 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       fetchAllData();
     }, 100);
 
-    // Set up polling every 30 seconds
-    const interval = setInterval(() => {
-      fetchAllData();
-    }, 30000);
-
     return () => {
       clearTimeout(initTimer);
-      clearInterval(interval);
     };
   }, []);
 
