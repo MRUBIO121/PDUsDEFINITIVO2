@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Activity, AlertTriangle, Settings, BarChart3, Zap, Download, RefreshCw, Wrench, LogOut, User, ChevronDown, ChevronUp } from 'lucide-react';
 import CountryGroup from './components/CountryGroup';
@@ -24,6 +24,8 @@ function App() {
   const [activeView, setActiveView] = useState<'principal' | 'alertas' | 'mantenimiento'>('principal');
   const [isGeoFiltersExpanded, setIsGeoFiltersExpanded] = useState(false);
   const [hasInitializedFilters, setHasInitializedFilters] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   // Helper function to check if user has access to a site
   // Handles Cantabria Norte/Sur unification
@@ -639,10 +641,24 @@ function App() {
     refreshData();
   };
 
-  const handleExportAlerts = async () => {
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleExportAlerts = async (filterBySite: boolean = false) => {
     setIsExporting(true);
     setExportMessage(null);
     setExportError(null);
+    setShowExportMenu(false);
 
     try {
       const response = await fetch('/api/export/alerts', {
@@ -651,6 +667,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ filterBySite }),
       });
 
       if (!response.ok) {
@@ -1069,21 +1086,56 @@ function App() {
                     Refrescar
                   </button>
 
-                  {/* Export Button - Visible to all except Observador */}
+                  {/* Export Button with Dropdown - Visible to all except Observador */}
                   {user?.rol !== 'Observador' && (
-                    <button
-                      onClick={handleExportAlerts}
-                      disabled={isExporting || racksLoading || thresholdsLoading}
-                      className={`inline-flex items-center px-4 py-2.5 border text-sm font-medium rounded-lg transition-all ${
-                        isExporting
-                          ? 'bg-blue-100 text-blue-700 border-blue-200 cursor-not-allowed'
-                          : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300 hover:shadow-sm'
-                      }`}
-                      title={isExporting ? "Exportando alertas..." : "Exportar todas las alertas a archivo Excel"}
-                    >
-                      <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
-                      Exportar
-                    </button>
+                    <div className="relative" ref={exportMenuRef}>
+                      <button
+                        onClick={() => setShowExportMenu(!showExportMenu)}
+                        disabled={isExporting || racksLoading || thresholdsLoading}
+                        className={`inline-flex items-center px-4 py-2.5 border text-sm font-medium rounded-lg transition-all ${
+                          isExporting
+                            ? 'bg-blue-100 text-blue-700 border-blue-200 cursor-not-allowed'
+                            : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300 hover:shadow-sm'
+                        }`}
+                        title={isExporting ? "Exportando alertas..." : "Exportar alertas a archivo Excel"}
+                      >
+                        <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
+                        Exportar
+                        <ChevronDown className="h-4 w-4 ml-1" />
+                      </button>
+
+                      {showExportMenu && !isExporting && (
+                        <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                          <div className="py-1">
+                            <button
+                              onClick={() => handleExportAlerts(false)}
+                              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-start"
+                            >
+                              <Download className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <div className="font-medium">Exportar Todas las Alertas</div>
+                                <div className="text-xs text-gray-500 mt-0.5">Exporta todas las alertas del sistema</div>
+                              </div>
+                            </button>
+                            <div className="border-t border-gray-100"></div>
+                            <button
+                              onClick={() => handleExportAlerts(true)}
+                              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-start"
+                            >
+                              <Download className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <div className="font-medium">Exportar Alertas del Sitio Asignado</div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {user?.sitios_asignados && user.sitios_asignados.length > 0
+                                    ? `Solo alertas de: ${user.sitios_asignados.join(', ')}`
+                                    : 'Exporta alertas según tus permisos'}
+                                </div>
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {/* Settings Button - Hidden for Tecnico and Observador */}
