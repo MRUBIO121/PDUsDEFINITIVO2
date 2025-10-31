@@ -3273,6 +3273,9 @@ app.get('/api/health', (req, res) => {
 // Endpoint para exportar alertas a Excel
 app.post('/api/export/alerts', requireAuth, async (req, res) => {
   try {
+    const { filterBySite } = req.body;
+    const userSites = req.session.sitiosAsignados || [];
+
     // Use cached racks data if available and valid, otherwise return error
     if (!isCacheValid(racksCache)) {
       console.error('❌ EXPORT ALERTS: Cache is invalid or expired');
@@ -3334,7 +3337,31 @@ app.post('/api/export/alerts', requireAuth, async (req, res) => {
       }
     });
 
-    // Filter PDUs with alerts (critical OR warning) and exclude maintenance racks
+    // Helper function to check if user has access to a site (handles Cantabria unification)
+    const userHasAccessToSite = (siteName) => {
+      if (!filterBySite || userSites.length === 0) {
+        return true; // No filtering or no restrictions
+      }
+
+      // Normalize site name for Cantabria check
+      const normalizedSite = siteName && siteName.toLowerCase().includes('cantabria') ? 'Cantabria' : siteName;
+
+      // Check if user has direct access
+      if (userSites.includes(siteName)) {
+        return true;
+      }
+
+      // Check if this is a Cantabria site and user has any Cantabria access
+      if (normalizedSite === 'Cantabria') {
+        return userSites.some(assignedSite =>
+          assignedSite.toLowerCase().includes('cantabria')
+        );
+      }
+
+      return false;
+    };
+
+    // Filter PDUs with alerts (critical OR warning), exclude maintenance racks, and apply site filter
     const pdusWithAlerts = allPdus.filter(pdu => {
       // Check if rack is in maintenance
       const rackId = String(pdu.rackId || pdu.id || '').trim();
@@ -3342,11 +3369,19 @@ app.post('/api/export/alerts', requireAuth, async (req, res) => {
         return false; // Exclude racks in maintenance
       }
 
+      // Check site access if filtering is enabled
+      if (!userHasAccessToSite(pdu.site)) {
+        return false; // Exclude PDUs from sites user doesn't have access to
+      }
+
       // Include PDUs with critical or warning status
       return pdu.status === 'critical' || pdu.status === 'warning';
     });
 
-    console.log(`📊 EXPORT ALERTS: ${allPdus.length} total PDUs, ${pdusWithAlerts.length} PDUs with alerts (excluding maintenance)`);
+    const filterInfo = filterBySite && userSites.length > 0
+      ? ` (filtered by sites: ${userSites.join(', ')})`
+      : '';
+    console.log(`📊 EXPORT ALERTS: ${allPdus.length} total PDUs, ${pdusWithAlerts.length} PDUs with alerts (excluding maintenance)${filterInfo}`);
 
     if (pdusWithAlerts.length === 0) {
       return res.json({
