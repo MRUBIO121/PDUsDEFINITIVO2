@@ -1086,9 +1086,8 @@ function App() {
                     Refrescar
                   </button>
 
-                  {/* Export Button with Dropdown - Visible to all except Observador */}
-                  {user?.rol !== 'Observador' && (
-                    <div className="relative" ref={exportMenuRef}>
+                  {/* Export Button with Dropdown - Visible to all users */}
+                  <div className="relative" ref={exportMenuRef}>
                       <button
                         onClick={() => setShowExportMenu(!showExportMenu)}
                         disabled={isExporting || racksLoading || thresholdsLoading}
@@ -1135,8 +1134,7 @@ function App() {
                           </div>
                         </div>
                       )}
-                    </div>
-                  )}
+                  </div>
 
                   {/* Settings Button - Hidden for Tecnico and Observador */}
                   {(user?.rol === 'Administrador' || user?.rol === 'Operador') && (
