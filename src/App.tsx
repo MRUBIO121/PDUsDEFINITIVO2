@@ -325,13 +325,18 @@ function App() {
       }
     };
 
-    // Count individual PDUs with alerts (for header display) - EXCLUDE maintenance racks
+    // Count individual PDUs with alerts (for header display) - EXCLUDE maintenance racks and filter by site
     racks.forEach(pdu => {
       const rackId = String(pdu.rackId || '').trim();
       const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
       // Skip PDUs that are in maintenance
       if (isInMaintenance) {
+        return;
+      }
+
+      // Skip PDUs from sites the user doesn't have access to
+      if (!userHasAccessToSite(pdu.site)) {
         return;
       }
 
@@ -417,6 +422,11 @@ function App() {
         return;
       }
 
+      // Skip racks from sites the user doesn't have access to
+      if (!userHasAccessToSite(rackGroup[0].site)) {
+        return;
+      }
+
       // Check what types of alerts this rack group has
       const hasCriticalPDU = rackGroup.some(r => r.status === 'critical');
       const hasWarningPDU = rackGroup.some(r => r.status === 'warning');
@@ -482,13 +492,28 @@ function App() {
     rackSummary.warning.humidity = warningRacksByMetric.humidity.size;
     rackSummary.warning.voltage = warningRacksByMetric.voltage.size;
 
+    // Calculate total racks accessible by user (excluding maintenance)
+    const totalUserRacks = originalRackGroups.filter(rackGroup => {
+      const rackId = String(rackGroup[0].rackId || '').trim();
+      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+
+      // Exclude maintenance racks
+      if (isInMaintenance) {
+        return false;
+      }
+
+      // Include only racks from sites the user has access to
+      return userHasAccessToSite(rackGroup[0].site);
+    }).length;
+
     return {
       rackSummary,
       pduSummary,
       totalAlertingPdus: pduSummary.critical.total + pduSummary.warning.total,
-      totalAlertingRacks: allAlertingRacks.size // Total unique racks with any type of alert
+      totalAlertingRacks: allAlertingRacks.size, // Total unique racks with any type of alert
+      totalUserRacks // Total racks accessible by user
     };
-  }, [originalRackGroups, racks, maintenanceRacks]);
+  }, [originalRackGroups, racks, maintenanceRacks, user]);
 
   const handleThresholdSaveSuccess = () => {
     refreshThresholds();
@@ -976,10 +1001,10 @@ function App() {
                   </h1>
                   <div className="flex items-center mt-1">
                     <span className="text-sm text-gray-600">
-                      {globalAlertSummary.totalAlertingRacks} Racks con alertas de {originalRackGroups.length} Racks totales
-                      {originalRackGroups.length > 0 && (
+                      {globalAlertSummary.totalAlertingRacks} Racks con alertas de {globalAlertSummary.totalUserRacks} Racks totales
+                      {globalAlertSummary.totalUserRacks > 0 && (
                         <span className="ml-1 text-xs font-semibold text-blue-700">
-                          ({((globalAlertSummary.totalAlertingRacks / originalRackGroups.length) * 100).toFixed(1)}%)
+                          ({((globalAlertSummary.totalAlertingRacks / globalAlertSummary.totalUserRacks) * 100).toFixed(1)}%)
                         </span>
                       )}
                     </span>
