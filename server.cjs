@@ -1399,7 +1399,7 @@ app.put('/api/users/:id', requireAuth, requireRole('Administrador'), async (req,
   }
 });
 
-// DELETE /api/users/:id - Delete user (soft delete)
+// DELETE /api/users/:id - Delete user (hard delete)
 app.delete('/api/users/:id', requireAuth, requireRole('Administrador'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -1426,15 +1426,14 @@ app.delete('/api/users/:id', requireAuth, requireRole('Administrador'), async (r
       });
     }
 
-    // Soft delete: set activo to false
+    // Hard delete: permanently remove user from database
     await executeQuery(async (pool) => {
       return await pool.request()
         .input('id', sql.UniqueIdentifier, id)
-        .input('fecha_modificacion', sql.DateTime, new Date())
-        .query('UPDATE usersAlertado SET activo = 0, fecha_modificacion = @fecha_modificacion WHERE id = @id');
+        .query('DELETE FROM usersAlertado WHERE id = @id');
     });
 
-    logger.info(`User deleted: ${existingUser.recordset[0].usuario} by ${req.session.usuario}`);
+    logger.info(`User permanently deleted: ${existingUser.recordset[0].usuario} by ${req.session.usuario}`);
 
     res.json({
       success: true,
