@@ -3273,9 +3273,6 @@ app.get('/api/health', (req, res) => {
 // Endpoint para exportar alertas a Excel
 app.post('/api/export/alerts', requireAuth, async (req, res) => {
   try {
-    // Get filter parameter from request body
-    const { filterBySite = false } = req.body;
-
     // Use cached racks data if available and valid, otherwise return error
     if (!isCacheValid(racksCache)) {
       console.error('❌ EXPORT ALERTS: Cache is invalid or expired');
@@ -3324,35 +3321,6 @@ app.post('/api/export/alerts', requireAuth, async (req, res) => {
     );
 
     console.log(`\n📊 EXPORT ALERTS: ${maintenanceRackIds.size} racks in maintenance (excluded from export)`);
-    console.log(`📊 EXPORT ALERTS: Filter by site = ${filterBySite}`);
-
-    // Get user's assigned sites from session (only if filterBySite is true)
-    const userSites = filterBySite ? (req.session.sitiosAsignados || []) : [];
-    const userRole = req.session.rol;
-
-    console.log(`📊 EXPORT ALERTS: User role=${userRole}, assigned sites=${userSites.join(', ') || 'all'}`);
-
-    // Helper function to check if user has access to a site
-    const userHasAccessToSite = (pduSite) => {
-      if (!filterBySite || userSites.length === 0) {
-        return true; // No filter or no restrictions
-      }
-
-      if (!pduSite) return false;
-
-      // Check direct match
-      if (userSites.includes(pduSite)) {
-        return true;
-      }
-
-      // Check Cantabria unification
-      const normalizedSite = pduSite.toLowerCase().includes('cantabria') ? 'Cantabria' : pduSite;
-      if (normalizedSite === 'Cantabria') {
-        return userSites.some(assignedSite => assignedSite.toLowerCase().includes('cantabria'));
-      }
-
-      return false;
-    };
 
     // Flatten the nested array structure (racks come as array of arrays)
     const allPdus = [];
@@ -3366,17 +3334,12 @@ app.post('/api/export/alerts', requireAuth, async (req, res) => {
       }
     });
 
-    // Filter PDUs with alerts (critical OR warning), exclude maintenance racks, and apply site filter if requested
+    // Filter PDUs with alerts (critical OR warning) and exclude maintenance racks
     const pdusWithAlerts = allPdus.filter(pdu => {
       // Check if rack is in maintenance
       const rackId = String(pdu.rackId || pdu.id || '').trim();
       if (rackId && maintenanceRackIds.has(rackId)) {
         return false; // Exclude racks in maintenance
-      }
-
-      // Check if user has access to this site (only if filterBySite is true)
-      if (!userHasAccessToSite(pdu.site)) {
-        return false; // Exclude PDUs from sites user doesn't have access to
       }
 
       // Include PDUs with critical or warning status
