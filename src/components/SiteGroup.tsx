@@ -130,14 +130,18 @@ export default function SiteGroup({
                 if (status === 'maintenance') {
                   if (activeView === 'alertas') return null;
                   count = Object.values(dcGroups)
-                    .flatMap(gatewayGroups => Object.values(gatewayGroups).flat())
+                    .filter(gatewayGroups => gatewayGroups && typeof gatewayGroups === 'object')
+                    .flatMap(gatewayGroups => Object.values(gatewayGroups || {}).flat())
+                    .filter(rackGroup => Array.isArray(rackGroup) && rackGroup.length > 0)
                     .filter(rackGroup => {
                       const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
                       return maintenanceRacks.has(rackId);
                     }).length;
                 } else {
                   count = Object.values(dcGroups)
-                    .flatMap(gatewayGroups => Object.values(gatewayGroups).flat())
+                    .filter(gatewayGroups => gatewayGroups && typeof gatewayGroups === 'object')
+                    .flatMap(gatewayGroups => Object.values(gatewayGroups || {}).flat())
+                    .filter(rackGroup => Array.isArray(rackGroup) && rackGroup.length > 0)
                     .filter(rackGroup => {
                       const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
                       if (maintenanceRacks.has(rackId)) return false;

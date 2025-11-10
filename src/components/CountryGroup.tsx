@@ -141,8 +141,10 @@ export default function CountryGroup({
                 if (status === 'maintenance') {
                   if (activeView === 'alertas') return null;
                   count = Object.values(siteGroups).reduce((total, dcGroups) =>
-                    total + Object.values(dcGroups)
-                      .flatMap(gatewayGroups => Object.values(gatewayGroups).flat())
+                    total + Object.values(dcGroups || {})
+                      .filter(gatewayGroups => gatewayGroups && typeof gatewayGroups === 'object')
+                      .flatMap(gatewayGroups => Object.values(gatewayGroups || {}).flat())
+                      .filter(rackGroup => Array.isArray(rackGroup) && rackGroup.length > 0)
                       .filter(rackGroup => {
                         const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
                         return maintenanceRacks.has(rackId);
@@ -150,8 +152,10 @@ export default function CountryGroup({
                   );
                 } else {
                   count = Object.values(siteGroups).reduce((total, dcGroups) =>
-                    total + Object.values(dcGroups)
-                      .flatMap(gatewayGroups => Object.values(gatewayGroups).flat())
+                    total + Object.values(dcGroups || {})
+                      .filter(gatewayGroups => gatewayGroups && typeof gatewayGroups === 'object')
+                      .flatMap(gatewayGroups => Object.values(gatewayGroups || {}).flat())
+                      .filter(rackGroup => Array.isArray(rackGroup) && rackGroup.length > 0)
                       .filter(rackGroup => {
                         const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
                         if (maintenanceRacks.has(rackId)) return false;
