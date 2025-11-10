@@ -1603,6 +1603,8 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
           current: parseFloat(powerItem.totalAmps) || 0,
           voltage: parseFloat(powerItem.totalVolts) || 0,
           temperature: parseFloat(powerItem.avgVolts) || 0,
+          gwName: powerItem.gwName || 'N/A',
+          gwIp: powerItem.gwIp || 'N/A',
           lastUpdated: powerItem.lastUpdate || new Date().toISOString()
         };
 

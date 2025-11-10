@@ -152,7 +152,7 @@ export default function RackCard({
             </span>
           </div>
 
-          {/* PDU Chain, Node, Serial Info */}
+          {/* PDU Chain, Node, Serial, Gateway Info */}
           <div className="mb-3 space-y-1">
             {rack.chain && rack.chain !== 'N/A' && (
               <div className="text-xs text-gray-600">
@@ -167,6 +167,16 @@ export default function RackCard({
             {rack.serial && rack.serial !== 'N/A' && (
               <div className="text-xs text-gray-600">
                 N° Serie {rack.serial}
+              </div>
+            )}
+            {rack.gwName && rack.gwName !== 'N/A' && (
+              <div className="text-xs text-gray-600">
+                Gateway: {rack.gwName}
+              </div>
+            )}
+            {rack.gwIp && rack.gwIp !== 'N/A' && (
+              <div className="text-xs text-gray-600">
+                IP Gateway: {rack.gwIp}
               </div>
             )}
           </div>

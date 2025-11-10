@@ -17,6 +17,9 @@ export interface RackData {
   // Sensor data from sensors endpoint - optional fields
   sensorTemperature?: number;
   sensorHumidity?: number;
+  // Gateway information
+  gwName?: string;
+  gwIp?: string;
   // Alert reasons
   reasons?: string[];
 }
