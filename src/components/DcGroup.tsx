@@ -30,17 +30,17 @@ interface DcGroupProps {
   maintenanceRacks: Set<string>;
 }
 
-export default function DcGroup({ 
-  dc, 
-  rackGroups, 
+export default function DcGroup({
+  dc,
+  rackGroups,
   originalRackGroups,
   activeView,
   country,
   site,
   isExpanded,
   onToggleExpand,
-  getThresholdValue, 
-  getMetricStatusColor, 
+  getThresholdValue,
+  getMetricStatusColor,
   getAmperageStatusColor,
   activeStatusFilter,
   onStatusFilterChange,
@@ -49,6 +49,19 @@ export default function DcGroup({
   onSendChainToMaintenance,
   maintenanceRacks
 }: DcGroupProps) {
+  const [expandedRackIds, setExpandedRackIds] = useState<Set<string>>(new Set());
+
+  const toggleRackExpansion = (rackId: string) => {
+    setExpandedRackIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(rackId)) {
+        newSet.delete(rackId);
+      } else {
+        newSet.add(rackId);
+      }
+      return newSet;
+    });
+  };
 
   // Calculate total racks for this DC from original data (unfiltered)
   const totalRacksForDc = (originalRackGroups || []).filter(rackGroup => {
@@ -213,11 +226,16 @@ export default function DcGroup({
               ? 'warning'
               : 'normal';
 
+            const rackId = rackGroup[0].rackId || rackGroup[0].id;
+            const isRackExpanded = expandedRackIds.has(rackId);
+
             return (
               <CombinedRackCard
-                key={`${dc}-${rackGroup[0].site}-${rackGroup[0].rackId || rackGroup[0].id}-${index}`}
+                key={`${dc}-${rackGroup[0].site}-${rackId}-${index}`}
                 racks={rackGroup}
                 overallStatus={overallStatus}
+                isExpanded={isRackExpanded}
+                onToggleExpand={() => toggleRackExpansion(rackId)}
                 getThresholdValue={getThresholdValue}
                 getMetricStatusColor={getMetricStatusColor}
                 getAmperageStatusColor={getAmperageStatusColor}

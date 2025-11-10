@@ -5,6 +5,8 @@ import { RackData } from '../types';
 interface CombinedRackCardProps {
   racks: RackData[];
   overallStatus: 'normal' | 'warning' | 'critical';
+  isExpanded: boolean;
+  onToggleExpand: () => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
     value: number,
@@ -23,6 +25,8 @@ interface CombinedRackCardProps {
 export default function CombinedRackCard({
   racks,
   overallStatus,
+  isExpanded,
+  onToggleExpand,
   getThresholdValue,
   getMetricStatusColor,
   getAmperageStatusColor,
@@ -32,17 +36,7 @@ export default function CombinedRackCard({
   maintenanceRacks
 }: CombinedRackCardProps) {
   const [showMenu, setShowMenu] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const rackIdRef = useRef(racks[0]?.rackId || racks[0]?.id);
-
-  useEffect(() => {
-    const currentRackId = racks[0]?.rackId || racks[0]?.id;
-    if (currentRackId !== rackIdRef.current) {
-      setIsExpanded(false);
-      rackIdRef.current = currentRackId;
-    }
-  }, [racks]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -149,7 +143,7 @@ export default function CombinedRackCard({
           className="flex items-center justify-between cursor-pointer"
           onClick={(e) => {
             if (!(e.target as HTMLElement).closest('.menu-button')) {
-              setIsExpanded(!isExpanded);
+              onToggleExpand();
             }
           }}
         >
