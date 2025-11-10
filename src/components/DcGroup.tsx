@@ -210,12 +210,30 @@ export default function DcGroup({
       {isExpanded && (
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 px-3 pb-6">
           {rackGroups.map((rackGroup, index) => {
-            // Always use CombinedRackCard to show all PDUs consistently
             const overallStatus = rackGroup.some(r => r.status === 'critical')
               ? 'critical'
               : rackGroup.some(r => r.status === 'warning')
               ? 'warning'
               : 'normal';
+
+            const handleToggleRow = () => {
+              const rowIndex = Math.floor(index / 4);
+              const startIndex = rowIndex * 4;
+              const endIndex = Math.min(startIndex + 4, rackGroups.length);
+
+              const racksInRow = rackGroups.slice(startIndex, endIndex);
+              const allExpanded = racksInRow.every(rg => expandedRackNames.has(rg[0].name));
+
+              racksInRow.forEach(rg => {
+                if (allExpanded) {
+                  onToggleRackExpansion(rg[0].name);
+                } else {
+                  if (!expandedRackNames.has(rg[0].name)) {
+                    onToggleRackExpansion(rg[0].name);
+                  }
+                }
+              });
+            };
 
             return (
               <CombinedRackCard
@@ -230,7 +248,7 @@ export default function DcGroup({
                 onSendChainToMaintenance={onSendChainToMaintenance}
                 maintenanceRacks={maintenanceRacks}
                 isExpanded={expandedRackNames.has(rackGroup[0].name)}
-                onToggleExpansion={() => onToggleRackExpansion(rackGroup[0].name)}
+                onToggleExpansion={handleToggleRow}
               />
             );
           })}
