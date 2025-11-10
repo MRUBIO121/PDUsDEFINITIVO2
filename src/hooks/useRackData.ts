@@ -8,7 +8,7 @@ interface UseRackDataOptions {
 
 interface UseRackDataReturn {
   racks: RackData[];
-  groupedRacks: { [country: string]: { [site: string]: { [dc: string]: RackData[][] } } };
+  groupedRacks: { [country: string]: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } };
   originalRackGroups: RackData[][];
   maintenanceRacks: Set<string>;
   loading: boolean;
@@ -16,21 +16,26 @@ interface UseRackDataReturn {
   expandedCountryIds: Set<string>;
   expandedSiteIds: Set<string>;
   expandedDcIds: Set<string>;
+  expandedGatewayIds: Set<string>;
   activeStatusFilter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance';
   activeCountryFilter: string;
   activeSiteFilter: string;
   activeDcFilter: string;
+  activeGatewayFilter: string;
   availableCountries: string[];
   availableSites: string[];
   availableDcs: string[];
+  availableGateways: string[];
   activeMetricFilter: string;
   toggleCountryExpansion: (country: string) => void;
   toggleSiteExpansion: (site: string) => void;
   toggleDcExpansion: (dc: string) => void;
+  toggleGatewayExpansion: (gateway: string) => void;
   setActiveStatusFilter: (filter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance') => void;
   setActiveCountryFilter: (country: string) => void;
   setActiveSiteFilter: (site: string) => void;
   setActiveDcFilter: (dc: string) => void;
+  setActiveGatewayFilter: (gateway: string) => void;
   setActiveMetricFilter: (metric: string) => void;
   refreshData: () => void;
   searchQuery: string;
@@ -50,10 +55,12 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   const [expandedCountryIds, setExpandedCountryIds] = useState<Set<string>>(new Set());
   const [expandedSiteIds, setExpandedSiteIds] = useState<Set<string>>(new Set());
   const [expandedDcIds, setExpandedDcIds] = useState<Set<string>>(new Set());
+  const [expandedGatewayIds, setExpandedGatewayIds] = useState<Set<string>>(new Set());
   const [activeStatusFilter, setActiveStatusFilter] = useState<'all' | 'critical' | 'warning' | 'normal' | 'maintenance'>('all');
   const [activeCountryFilter, setActiveCountryFilter] = useState<string>('all');
   const [activeSiteFilter, setActiveSiteFilter] = useState<string>('all');
   const [activeDcFilter, setActiveDcFilter] = useState<string>('all');
+  const [activeGatewayFilter, setActiveGatewayFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchField, setSearchField] = useState<string>('all');
   const [activeMetricFilter, setActiveMetricFilter] = useState<string>('all');
@@ -225,6 +232,18 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     });
   };
 
+  const toggleGatewayExpansion = (gateway: string) => {
+    setExpandedGatewayIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(gateway)) {
+        newSet.delete(gateway);
+      } else {
+        newSet.add(gateway);
+      }
+      return newSet;
+    });
+  };
+
   const handleStatusFilterChange = (filter: 'all' | 'critical' | 'warning') => {
     if (activeStatusFilter === filter) {
       setActiveStatusFilter('all'); // Toggle off if already active
@@ -238,16 +257,24 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     // Reset lower-level filters when country changes
     setActiveSiteFilter('all');
     setActiveDcFilter('all');
+    setActiveGatewayFilter('all');
   };
 
   const handleSiteFilterChange = (site: string) => {
     setActiveSiteFilter(site);
-    // Reset DC filter when site changes
+    // Reset lower-level filters when site changes
     setActiveDcFilter('all');
+    setActiveGatewayFilter('all');
   };
 
   const handleDcFilterChange = (dc: string) => {
     setActiveDcFilter(dc);
+    // Reset gateway filter when DC changes
+    setActiveGatewayFilter('all');
+  };
+
+  const handleGatewayFilterChange = (gateway: string) => {
+    setActiveGatewayFilter(gateway);
   };
 
   // Derive available filter options dynamically
@@ -261,11 +288,25 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   
   const availableDcs = Array.from(new Set(
     racks
-      .filter(rack => 
+      .filter(rack =>
         (activeCountryFilter === 'all' || rack.country === activeCountryFilter) &&
         (activeSiteFilter === 'all' || rack.site === activeSiteFilter)
       )
       .map(rack => rack.dc || 'N/A')
+  )).sort();
+
+  const availableGateways = Array.from(new Set(
+    racks
+      .filter(rack =>
+        (activeCountryFilter === 'all' || rack.country === activeCountryFilter) &&
+        (activeSiteFilter === 'all' || rack.site === activeSiteFilter) &&
+        (activeDcFilter === 'all' || rack.dc === activeDcFilter)
+      )
+      .map(rack => {
+        const gwName = rack.gwName || 'N/A';
+        const gwIp = rack.gwIp || 'N/A';
+        return `${gwName}|||${gwIp}`;
+      })
   )).sort();
 
   // Filter and group the racks
@@ -275,6 +316,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     activeCountryFilter,
     activeSiteFilter,
     activeDcFilter,
+    activeGatewayFilter,
     searchQuery,
     searchField,
     activeMetricFilter,
@@ -293,20 +335,25 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     expandedCountryIds,
     expandedSiteIds,
     expandedDcIds,
+    expandedGatewayIds,
     activeStatusFilter,
     activeCountryFilter,
     activeSiteFilter,
     activeDcFilter,
+    activeGatewayFilter,
     availableCountries,
     availableSites,
     availableDcs,
+    availableGateways,
     toggleCountryExpansion,
     toggleSiteExpansion,
     toggleDcExpansion,
+    toggleGatewayExpansion,
     setActiveStatusFilter: handleStatusFilterChange,
     setActiveCountryFilter: handleCountryFilterChange,
     setActiveSiteFilter: handleSiteFilterChange,
     setActiveDcFilter: handleDcFilterChange,
+    setActiveGatewayFilter: handleGatewayFilterChange,
     activeMetricFilter,
     setActiveMetricFilter,
     searchQuery,

@@ -5,7 +5,7 @@ import { RackData } from '../types';
 
 interface SiteGroupProps {
   site: string;
-  dcGroups: { [dc: string]: RackData[][] };
+  dcGroups: { [dc: string]: { [gateway: string]: RackData[][] } };
   originalRackGroups: RackData[][];
   activeView: 'principal' | 'alertas' | 'mantenimiento';
   country: string;
@@ -13,6 +13,8 @@ interface SiteGroupProps {
   onToggleExpand: (site: string) => void;
   expandedDcIds: Set<string>;
   toggleDcExpansion: (dc: string) => void;
+  expandedGatewayIds: Set<string>;
+  toggleGatewayExpansion: (gateway: string) => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
     value: number,
@@ -42,6 +44,8 @@ export default function SiteGroup({
   onToggleExpand,
   expandedDcIds,
   toggleDcExpansion,
+  expandedGatewayIds,
+  toggleGatewayExpansion,
   getThresholdValue,
   getMetricStatusColor,
   getAmperageStatusColor,
@@ -226,17 +230,19 @@ export default function SiteGroup({
       {/* DC Groups within this Site */}
       {isExpanded && (
         <div className="space-y-4 px-3 pb-6">
-          {Object.entries(dcGroups).sort(([a], [b]) => a.localeCompare(b)).map(([dc, logicalRackGroups]) => (
+          {Object.entries(dcGroups).sort(([a], [b]) => a.localeCompare(b)).map(([dc, gatewayGroups]) => (
             <DcGroup
               key={dc}
               dc={dc}
-              rackGroups={logicalRackGroups}
+              gatewayGroups={gatewayGroups}
               originalRackGroups={originalRackGroups}
               activeView={activeView}
               country={country}
               site={site}
               isExpanded={expandedDcIds.has(dc)}
               onToggleExpand={toggleDcExpansion}
+              expandedGatewayIds={expandedGatewayIds}
+              toggleGatewayExpansion={toggleGatewayExpansion}
               getThresholdValue={getThresholdValue}
               getMetricStatusColor={getMetricStatusColor}
               getAmperageStatusColor={getAmperageStatusColor}

@@ -5,7 +5,7 @@ import { RackData } from '../types';
 
 interface CountryGroupProps {
   country: string;
-  siteGroups: { [site: string]: { [dc: string]: RackData[][] } };
+  siteGroups: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } };
   originalRackGroups: RackData[][];
   activeView: 'principal' | 'alertas' | 'mantenimiento';
   isExpanded: boolean;
@@ -14,6 +14,8 @@ interface CountryGroupProps {
   toggleSiteExpansion: (site: string) => void;
   expandedDcIds: Set<string>;
   toggleDcExpansion: (dc: string) => void;
+  expandedGatewayIds: Set<string>;
+  toggleGatewayExpansion: (gateway: string) => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
     value: number,
@@ -44,6 +46,8 @@ export default function CountryGroup({
   toggleSiteExpansion,
   expandedDcIds,
   toggleDcExpansion,
+  expandedGatewayIds,
+  toggleGatewayExpansion,
   getThresholdValue,
   getMetricStatusColor,
   getAmperageStatusColor,
@@ -247,6 +251,8 @@ export default function CountryGroup({
               onToggleExpand={toggleSiteExpansion}
               expandedDcIds={expandedDcIds}
               toggleDcExpansion={toggleDcExpansion}
+              expandedGatewayIds={expandedGatewayIds}
+              toggleGatewayExpansion={toggleGatewayExpansion}
               getThresholdValue={getThresholdValue}
               getMetricStatusColor={getMetricStatusColor}
               getAmperageStatusColor={getAmperageStatusColor}

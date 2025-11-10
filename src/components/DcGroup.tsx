@@ -1,18 +1,19 @@
 import React from 'react';
 import { Building, ChevronUp, ChevronDown } from 'lucide-react';
-import RackCard from './RackCard';
-import CombinedRackCard from './CombinedRackCard';
+import GatewayGroup from './GatewayGroup';
 import { RackData } from '../types';
 
 interface DcGroupProps {
   dc: string;
-  rackGroups: RackData[][];
+  gatewayGroups: { [gateway: string]: RackData[][] };
   originalRackGroups: RackData[][];
   activeView: 'principal' | 'alertas' | 'mantenimiento';
   country: string;
   site: string;
   isExpanded: boolean;
   onToggleExpand: (dc: string) => void;
+  expandedGatewayIds: Set<string>;
+  toggleGatewayExpansion: (gateway: string) => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
     value: number,
@@ -34,13 +35,15 @@ interface DcGroupProps {
 
 export default function DcGroup({
   dc,
-  rackGroups,
+  gatewayGroups,
   originalRackGroups,
   activeView,
   country,
   site,
   isExpanded,
   onToggleExpand,
+  expandedGatewayIds,
+  toggleGatewayExpansion,
   getThresholdValue,
   getMetricStatusColor,
   getAmperageStatusColor,
@@ -54,13 +57,15 @@ export default function DcGroup({
   onToggleRackExpansion
 }: DcGroupProps) {
 
-  // Calculate total racks for this DC from original data (unfiltered)
+  // Calculate total racks and gateways for this DC from original data (unfiltered)
   const totalRacksForDc = (originalRackGroups || []).filter(rackGroup => {
     const firstRack = rackGroup[0];
-    return (firstRack.country || 'N/A') === country && 
-           (firstRack.site || 'N/A') === site && 
+    return (firstRack.country || 'N/A') === country &&
+           (firstRack.site || 'N/A') === site &&
            (firstRack.dc || 'N/A') === dc;
   }).length;
+
+  const totalGatewaysForDc = gatewayGroups ? Object.keys(gatewayGroups).length : 0;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -101,7 +106,7 @@ export default function DcGroup({
             </h2>
             <div className="flex items-center mt-1">
               <span className="text-gray-600 mr-2 text-sm">
-                {totalRacksForDc} rack{totalRacksForDc !== 1 ? 's' : ''}
+                {totalRacksForDc} rack{totalRacksForDc !== 1 ? 's' : ''} • {totalGatewaysForDc} gateway{totalGatewaysForDc !== 1 ? 's' : ''}
               </span>
             </div>
           </div>
