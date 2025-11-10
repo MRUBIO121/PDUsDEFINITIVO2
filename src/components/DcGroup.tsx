@@ -119,20 +119,23 @@ export default function DcGroup({
             let count = 0;
 
             if (status === 'maintenance') {
-              // Count maintenance racks (only show in main view)
               if (activeView === 'alertas') return null;
-              count = rackGroups.filter(rackGroup => {
-                const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                return maintenanceRacks.has(rackId);
-              }).length;
+              count = Object.values(gatewayGroups || {})
+                .flat()
+                .filter(rackGroup => Array.isArray(rackGroup) && rackGroup.length > 0)
+                .filter(rackGroup => {
+                  const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
+                  return maintenanceRacks.has(rackId);
+                }).length;
             } else {
-              // Count other statuses, excluding maintenance racks
-              count = rackGroups.filter(rackGroup => {
-                const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                // Don't count if rack is in maintenance
-                if (maintenanceRacks.has(rackId)) return false;
-                return rackGroup.some(rack => rack.status === status);
-              }).length;
+              count = Object.values(gatewayGroups || {})
+                .flat()
+                .filter(rackGroup => Array.isArray(rackGroup) && rackGroup.length > 0)
+                .filter(rackGroup => {
+                  const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
+                  if (maintenanceRacks.has(rackId)) return false;
+                  return rackGroup.some(rack => rack.status === status);
+                }).length;
             }
 
             if (count === 0 || (activeView === 'alertas' && status === 'normal')) return null;
