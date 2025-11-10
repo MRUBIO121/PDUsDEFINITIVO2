@@ -231,7 +231,7 @@ export default function SiteGroup({
       
       {isExpanded && (
         <div className="space-y-4 px-3 pb-6">
-          {Object.entries(dcGroups).sort(([a], [b]) => a.localeCompare(b)).map(([dc, gatewayGroups]) => (
+          {dcGroups && typeof dcGroups === 'object' && Object.entries(dcGroups).sort(([a], [b]) => a.localeCompare(b)).map(([dc, gatewayGroups]) => (
             <DcGroup
               key={dc}
               dc={dc}

@@ -224,7 +224,7 @@ export default function DcGroup({
 
       {isExpanded && (
         <div className="space-y-4 px-3 pb-6">
-          {Object.entries(gatewayGroups).sort(([a], [b]) => a.localeCompare(b)).map(([gatewayKey, rackGroups]) => {
+          {gatewayGroups && typeof gatewayGroups === 'object' && Object.entries(gatewayGroups).sort(([a], [b]) => a.localeCompare(b)).map(([gatewayKey, rackGroups]) => {
             const parts = gatewayKey.split('|||');
             const gwName = parts[0] || 'N/A';
             const gwIp = parts[1] || 'N/A';
