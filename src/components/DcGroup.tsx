@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Building, ChevronUp, ChevronDown } from 'lucide-react';
 import RackCard from './RackCard';
 import CombinedRackCard from './CombinedRackCard';
@@ -28,26 +28,30 @@ interface DcGroupProps {
   onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
   onSendChainToMaintenance?: (chain: string, site: string, dc: string, rackData?: any) => void;
   maintenanceRacks: Set<string>;
+  expandedRackNames: Set<string>;
+  onToggleRackExpansion: (rackName: string) => void;
 }
 
-export default function DcGroup({ 
-  dc, 
-  rackGroups, 
+export default function DcGroup({
+  dc,
+  rackGroups,
   originalRackGroups,
   activeView,
   country,
   site,
   isExpanded,
   onToggleExpand,
-  getThresholdValue, 
-  getMetricStatusColor, 
+  getThresholdValue,
+  getMetricStatusColor,
   getAmperageStatusColor,
   activeStatusFilter,
   onStatusFilterChange,
   onConfigureThresholds,
   onSendRackToMaintenance,
   onSendChainToMaintenance,
-  maintenanceRacks
+  maintenanceRacks,
+  expandedRackNames,
+  onToggleRackExpansion
 }: DcGroupProps) {
 
   // Calculate total racks for this DC from original data (unfiltered)
@@ -225,6 +229,8 @@ export default function DcGroup({
                 onSendRackToMaintenance={onSendRackToMaintenance}
                 onSendChainToMaintenance={onSendChainToMaintenance}
                 maintenanceRacks={maintenanceRacks}
+                isExpanded={expandedRackNames.has(rackGroup[0].name)}
+                onToggleExpansion={() => onToggleRackExpansion(rackGroup[0].name)}
               />
             );
           })}

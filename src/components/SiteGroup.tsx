@@ -28,11 +28,13 @@ interface SiteGroupProps {
   onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
   onSendChainToMaintenance?: (chain: string, site: string, dc: string, rackData?: any) => void;
   maintenanceRacks: Set<string>;
+  expandedRackNames: Set<string>;
+  onToggleRackExpansion: (rackName: string) => void;
 }
 
-export default function SiteGroup({ 
-  site, 
-  dcGroups, 
+export default function SiteGroup({
+  site,
+  dcGroups,
   originalRackGroups,
   activeView,
   country,
@@ -40,15 +42,17 @@ export default function SiteGroup({
   onToggleExpand,
   expandedDcIds,
   toggleDcExpansion,
-  getThresholdValue, 
-  getMetricStatusColor, 
+  getThresholdValue,
+  getMetricStatusColor,
   getAmperageStatusColor,
   activeStatusFilter,
   onStatusFilterChange,
   onConfigureThresholds,
   onSendRackToMaintenance,
   onSendChainToMaintenance,
-  maintenanceRacks
+  maintenanceRacks,
+  expandedRackNames,
+  onToggleRackExpansion
 }: SiteGroupProps) {
 
   // Calculate total racks for this site from original data (unfiltered)
@@ -242,6 +246,8 @@ export default function SiteGroup({
               onSendRackToMaintenance={onSendRackToMaintenance}
               onSendChainToMaintenance={onSendChainToMaintenance}
               maintenanceRacks={maintenanceRacks}
+              expandedRackNames={expandedRackNames}
+              onToggleRackExpansion={onToggleRackExpansion}
             />
           ))}
         </div>

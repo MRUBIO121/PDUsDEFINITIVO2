@@ -26,6 +26,7 @@ function App() {
   const [hasInitializedFilters, setHasInitializedFilters] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const [expandedRackNames, setExpandedRackNames] = useState<Set<string>>(new Set());
 
   // Helper function to check if user has access to a site
   // Handles Cantabria Norte/Sur unification
@@ -534,6 +535,18 @@ function App() {
     setSelectedRackId(rackId);
     setSelectedRackName(rackName);
     setShowRackThresholdsModal(true);
+  };
+
+  const handleToggleRackExpansion = (rackName: string) => {
+    setExpandedRackNames(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(rackName)) {
+        newSet.delete(rackName);
+      } else {
+        newSet.add(rackName);
+      }
+      return newSet;
+    });
   };
 
   const handleSendRackToMaintenance = async (rackId: string, chain: string, rackName: string, rackData?: any) => {
@@ -1532,6 +1545,8 @@ function App() {
                       onSendRackToMaintenance={(user?.rol !== 'Observador') ? handleSendRackToMaintenance : undefined}
                       onSendChainToMaintenance={(user?.rol !== 'Observador') ? handleSendChainToMaintenance : undefined}
                       maintenanceRacks={maintenanceRacks}
+                      expandedRackNames={expandedRackNames}
+                      onToggleRackExpansion={handleToggleRackExpansion}
                     />
                   ))}
                   </div>

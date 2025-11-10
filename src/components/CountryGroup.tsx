@@ -29,6 +29,8 @@ interface CountryGroupProps {
   onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
   onSendChainToMaintenance?: (chain: string, site: string, dc: string, rackData?: any) => void;
   maintenanceRacks: Set<string>;
+  expandedRackNames: Set<string>;
+  onToggleRackExpansion: (rackName: string) => void;
 }
 
 export default function CountryGroup({
@@ -50,7 +52,9 @@ export default function CountryGroup({
   onConfigureThresholds,
   onSendRackToMaintenance,
   onSendChainToMaintenance,
-  maintenanceRacks
+  maintenanceRacks,
+  expandedRackNames,
+  onToggleRackExpansion
 }: CountryGroupProps) {
 
   // Calculate total racks for this country from original data (unfiltered)
@@ -252,6 +256,8 @@ export default function CountryGroup({
               onSendRackToMaintenance={onSendRackToMaintenance}
               onSendChainToMaintenance={onSendChainToMaintenance}
               maintenanceRacks={maintenanceRacks}
+              expandedRackNames={expandedRackNames}
+              onToggleRackExpansion={onToggleRackExpansion}
             />
           ))}
         </div>

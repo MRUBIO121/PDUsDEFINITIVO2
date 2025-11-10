@@ -18,6 +18,8 @@ interface CombinedRackCardProps {
   onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
   onSendChainToMaintenance?: (chain: string, site: string, dc: string, rackData?: any) => void;
   maintenanceRacks: Set<string>;
+  isExpanded: boolean;
+  onToggleExpansion: () => void;
 }
 
 export default function CombinedRackCard({
@@ -29,10 +31,11 @@ export default function CombinedRackCard({
   onConfigureThresholds,
   onSendRackToMaintenance,
   onSendChainToMaintenance,
-  maintenanceRacks
+  maintenanceRacks,
+  isExpanded,
+  onToggleExpansion
 }: CombinedRackCardProps) {
   const [showMenu, setShowMenu] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -140,7 +143,7 @@ export default function CombinedRackCard({
           className="flex items-center justify-between cursor-pointer"
           onClick={(e) => {
             if (!(e.target as HTMLElement).closest('.menu-button')) {
-              setIsExpanded(!isExpanded);
+              onToggleExpansion();
             }
           }}
         >
