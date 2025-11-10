@@ -129,22 +129,23 @@ export default function SiteGroup({
                 let count = 0;
 
                 if (status === 'maintenance') {
-                  // Count maintenance racks (only show in main view)
                   if (activeView === 'alertas') return null;
-                  count = Object.values(dcGroups).flat()
-                    .filter(rackGroup => {
-                      const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                      return maintenanceRacks.has(rackId);
-                    }).length;
+                  count = Object.values(dcGroups).reduce((total, gatewayGroups) => {
+                    return total + Object.values(gatewayGroups).flat()
+                      .filter(rackGroup => {
+                        const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
+                        return maintenanceRacks.has(rackId);
+                      }).length;
+                  }, 0);
                 } else {
-                  // Count other statuses, excluding maintenance racks
-                  count = Object.values(dcGroups).flat()
-                    .filter(rackGroup => {
-                      const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                      // Don't count if rack is in maintenance
-                      if (maintenanceRacks.has(rackId)) return false;
-                      return rackGroup.some(rack => rack.status === status);
-                    }).length;
+                  count = Object.values(dcGroups).reduce((total, gatewayGroups) => {
+                    return total + Object.values(gatewayGroups).flat()
+                      .filter(rackGroup => {
+                        const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
+                        if (maintenanceRacks.has(rackId)) return false;
+                        return rackGroup.some(rack => rack.status === status);
+                      }).length;
+                  }, 0);
                 }
 
                 if (count === 0 || (activeView === 'alertas' && status === 'normal')) return null;
