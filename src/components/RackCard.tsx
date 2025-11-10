@@ -110,7 +110,6 @@ export default function RackCard({
             <div className={`w-3 h-3 rounded-full ${getStatusColor(rack.status)} ${
               rack.status !== 'normal' ? 'animate-pulse' : ''
             }`}></div>
-            <Server className="text-gray-600 h-5 w-5" />
             <h3 className="font-semibold text-gray-900 text-base">
               {rack.name}
             </h3>

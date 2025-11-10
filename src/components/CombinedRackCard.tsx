@@ -151,7 +151,6 @@ export default function CombinedRackCard({
             <div className={`w-3 h-3 rounded-full ${isInMaintenance ? 'bg-blue-500' : getStatusColor(overallStatus)} ${
               !isInMaintenance && overallStatus !== 'normal' ? 'animate-pulse' : ''
             }`}></div>
-            <Server className="text-gray-600 h-5 w-5" />
             <h3 className="font-semibold text-gray-900 text-base">
               {commonInfo.name}
             </h3>
