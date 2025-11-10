@@ -108,8 +108,18 @@ export function groupRacksByDc(racks: RackData[]): { [dc: string]: RackData[][] 
       rackMap.get(rackId)!.push(rack);
     });
 
-    // Convert Map to array of arrays and sort alphabetically by rack name
+    // Convert Map to array of arrays and sort by chain first, then alphabetically by rack name
     dcGroups[dc] = Array.from(rackMap.values()).sort((a, b) => {
+      const chainA = a[0]?.chain || '';
+      const chainB = b[0]?.chain || '';
+
+      // First compare by chain
+      const chainComparison = chainA.localeCompare(chainB, undefined, { numeric: true });
+      if (chainComparison !== 0) {
+        return chainComparison;
+      }
+
+      // If chains are equal, sort alphabetically by name
       const nameA = (a[0]?.name || '').toLowerCase();
       const nameB = (b[0]?.name || '').toLowerCase();
       return nameA.localeCompare(nameB);
