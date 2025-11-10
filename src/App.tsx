@@ -53,6 +53,8 @@ function App() {
     return false;
   };
   
+  console.log('🎨 App.tsx - RENDER');
+
   const {
     racks,
     originalRackGroups,
@@ -128,24 +130,59 @@ function App() {
   const getAmperageStatusColorWrapper = (rack: any) => getAmperageStatusColor(rack, thresholds);
 
   const filteredRackGroups = React.useMemo(() => {
+    console.log('🔄 filteredRackGroups useMemo - START');
+    console.log('🔄 groupedRacks type:', typeof groupedRacks, 'Keys:', Object.keys(groupedRacks || {}));
+
     const rackGroups: RackData[][] = [];
     let maintenanceCount = 0;
 
-    Object.values(groupedRacks).forEach(siteGroups => {
-      Object.values(siteGroups).forEach(dcGroups => {
-        Object.values(dcGroups).forEach(logicalGroups => {
-          logicalGroups.forEach(group => {
-            const rackId = String(group[0]?.rackId || '').trim();
-            const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+    try {
+      if (!groupedRacks || typeof groupedRacks !== 'object') {
+        console.error('❌ groupedRacks is invalid!', groupedRacks);
+        return rackGroups;
+      }
 
-            if (isInMaintenance) {
-              maintenanceCount++;
+      Object.values(groupedRacks).forEach((siteGroups, idx) => {
+        console.log(`🔄 Processing siteGroups ${idx}:`, typeof siteGroups, Array.isArray(siteGroups));
+
+        if (!siteGroups || typeof siteGroups !== 'object') {
+          console.error(`❌ siteGroups ${idx} is invalid!`, siteGroups);
+          return;
+        }
+
+        Object.values(siteGroups).forEach((dcGroups, dcIdx) => {
+          console.log(`🔄 Processing dcGroups ${idx}-${dcIdx}:`, typeof dcGroups, Array.isArray(dcGroups));
+
+          if (!dcGroups || typeof dcGroups !== 'object') {
+            console.error(`❌ dcGroups ${idx}-${dcIdx} is invalid!`, dcGroups);
+            return;
+          }
+
+          Object.values(dcGroups).forEach((logicalGroups, lgIdx) => {
+            console.log(`🔄 Processing logicalGroups ${idx}-${dcIdx}-${lgIdx}:`, typeof logicalGroups, Array.isArray(logicalGroups));
+
+            if (!Array.isArray(logicalGroups)) {
+              console.error(`❌ logicalGroups ${idx}-${dcIdx}-${lgIdx} NOT an array!`, logicalGroups);
+              return;
             }
+
+            logicalGroups.forEach(group => {
+              const rackId = String(group[0]?.rackId || '').trim();
+              const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+
+              if (isInMaintenance) {
+                maintenanceCount++;
+              }
+            });
+            rackGroups.push(...logicalGroups);
           });
-          rackGroups.push(...logicalGroups);
         });
       });
-    });
+
+      console.log('✅ filteredRackGroups useMemo - COMPLETE. Total groups:', rackGroups.length);
+    } catch (err) {
+      console.error('❌ Error in filteredRackGroups useMemo:', err);
+    }
 
     return rackGroups;
   }, [groupedRacks, activeView, maintenanceRacks]);
@@ -1525,11 +1562,16 @@ function App() {
               <>
                 {!showRackThresholdsModal && (
                   <div className="space-y-6">
-                  {Object.entries(groupedRacks).map(([country, siteGroups]) => (
-                    <CountryGroup
-                      key={country}
-                      country={country}
-                      siteGroups={siteGroups}
+                  {(() => {
+                    console.log('🎨 Rendering CountryGroups. groupedRacks:', typeof groupedRacks, Object.keys(groupedRacks || {}));
+                    try {
+                      return Object.entries(groupedRacks).map(([country, siteGroups]) => {
+                        console.log(`🎨 Rendering country: ${country}`);
+                        return (
+                          <CountryGroup
+                            key={country}
+                            country={country}
+                            siteGroups={siteGroups}
                       originalRackGroups={originalRackGroups}
                       activeView={activeView}
                       isExpanded={expandedCountryIds.has(country)}
@@ -1552,7 +1594,13 @@ function App() {
                       expandedRackNames={expandedRackNames}
                       onToggleRackExpansion={handleToggleRackExpansion}
                     />
-                  ))}
+                        );
+                      });
+                    } catch (err) {
+                      console.error('❌ Error rendering CountryGroups:', err);
+                      return <div className="text-red-500 p-4">Error rendering data: {String(err)}</div>;
+                    }
+                  })()}
                   </div>
                 )}
 

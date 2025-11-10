@@ -62,12 +62,14 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   const [activeMetricFilter, setActiveMetricFilter] = useState<string>('all');
 
   const fetchRacks = async () => {
+    console.log('🚀 fetchRacks - START');
     try {
       setLoading(true);
       setError(null);
 
       // Add timestamp to prevent caching
       const timestamp = new Date().getTime();
+      console.log('📡 Fetching from API...');
       const response = await fetch(`/api/racks/energy?t=${timestamp}`, {
         cache: 'no-store',
         credentials: 'include',
@@ -77,8 +79,11 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         }
       });
 
+      console.log('📡 Response status:', response.status);
+
       // If unauthorized, silently fail (user not logged in yet)
       if (response.status === 401) {
+        console.log('🔒 Unauthorized - user not logged in');
         setLoading(false);
         return;
       }
@@ -86,22 +91,29 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
+      console.log('📦 API Response:', data.success, 'Data length:', data.data?.length);
       if (!data.success) {
         throw new Error(data.message || 'Failed to fetch rack data');
       }
       
       // Store original rack groups as they come from the API
       const rackGroups = Array.isArray(data.data) ? data.data : [];
+      console.log('📊 Rack Groups:', rackGroups.length, 'IsArray:', Array.isArray(rackGroups));
+      console.log('📊 First group sample:', rackGroups[0]);
+
       setOriginalRackGroups(rackGroups);
-      
+
       // Transform the nested array structure into a flat array
       const flatRacks: RackData[] = [];
       if (Array.isArray(rackGroups)) {
-        rackGroups.forEach((rackGroup: RackData[]) => {
+        rackGroups.forEach((rackGroup: RackData[], idx: number) => {
           if (Array.isArray(rackGroup)) {
+            console.log(`📊 Group ${idx}: ${rackGroup.length} racks`);
             flatRacks.push(...rackGroup);
+          } else {
+            console.error(`❌ Group ${idx} NOT an array!`, typeof rackGroup);
           }
         });
       }
@@ -118,11 +130,14 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         }
       });
 
+      console.log('✅ Setting racks:', flatRacks.length);
       setRacks(flatRacks);
+      console.log('✅ fetchRacks - COMPLETE');
     } catch (err) {
-      console.error('Error fetching racks:', err);
+      console.error('❌ Error fetching racks:', err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
     } finally {
+      console.log('🏁 fetchRacks - FINALLY (loading = false)');
       setLoading(false);
     }
   };
