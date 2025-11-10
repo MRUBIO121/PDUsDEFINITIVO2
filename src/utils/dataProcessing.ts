@@ -97,19 +97,23 @@ export function groupRacksByDc(racks: RackData[]): { [dc: string]: RackData[][] 
   // Then, for each DC, group racks by rack ID using Map for accuracy
   Object.entries(racksByDc).forEach(([dc, dcRacks]) => {
     const rackMap = new Map<string, RackData[]>();
-    
+
     dcRacks.forEach(rack => {
       const rackId = rack.rackId || rack.id;
-      
+
       if (!rackMap.has(rackId)) {
         rackMap.set(rackId, []);
       }
-      
+
       rackMap.get(rackId)!.push(rack);
     });
-    
-    // Convert Map to array of arrays
-    dcGroups[dc] = Array.from(rackMap.values());
+
+    // Convert Map to array of arrays and sort alphabetically by rack name
+    dcGroups[dc] = Array.from(rackMap.values()).sort((a, b) => {
+      const nameA = (a[0]?.name || '').toLowerCase();
+      const nameB = (b[0]?.name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
   });
   
   return dcGroups;
