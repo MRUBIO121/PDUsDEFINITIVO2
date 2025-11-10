@@ -5,8 +5,6 @@ import { RackData } from '../types';
 interface CombinedRackCardProps {
   racks: RackData[];
   overallStatus: 'normal' | 'warning' | 'critical';
-  isExpanded: boolean;
-  onToggleExpand: () => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
     value: number,
@@ -25,8 +23,6 @@ interface CombinedRackCardProps {
 export default function CombinedRackCard({
   racks,
   overallStatus,
-  isExpanded,
-  onToggleExpand,
   getThresholdValue,
   getMetricStatusColor,
   getAmperageStatusColor,
@@ -36,6 +32,7 @@ export default function CombinedRackCard({
   maintenanceRacks
 }: CombinedRackCardProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -143,7 +140,7 @@ export default function CombinedRackCard({
           className="flex items-center justify-between cursor-pointer"
           onClick={(e) => {
             if (!(e.target as HTMLElement).closest('.menu-button')) {
-              onToggleExpand();
+              setIsExpanded(!isExpanded);
             }
           }}
         >
