@@ -6,6 +6,10 @@ import { RackData } from '../types';
 export function groupRacksByCountry(racks: RackData[]): { [country: string]: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } } {
   const countryGroups: { [country: string]: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } } = {};
 
+  if (!Array.isArray(racks)) {
+    return countryGroups;
+  }
+
   const racksByCountry: { [country: string]: RackData[] } = {};
   racks.forEach(rack => {
     const country = rack.country || 'N/A';
@@ -45,6 +49,10 @@ export function groupRacksByCountry(racks: RackData[]): { [country: string]: { [
 export function groupRacksBySite(racks: RackData[]): { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } {
   const siteGroups: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } = {};
 
+  if (!Array.isArray(racks)) {
+    return siteGroups;
+  }
+
   const racksBySite: { [site: string]: RackData[] } = {};
   racks.forEach(rack => {
     const site = rack.site || 'N/A';
@@ -78,6 +86,10 @@ export function groupRacksBySite(racks: RackData[]): { [site: string]: { [dc: st
 export function groupRacksByDc(racks: RackData[]): { [dc: string]: { [gateway: string]: RackData[][] } } {
   const dcGroups: { [dc: string]: { [gateway: string]: RackData[][] } } = {};
 
+  if (!Array.isArray(racks)) {
+    return dcGroups;
+  }
+
   const racksByDc: { [dc: string]: RackData[] } = {};
   racks.forEach(rack => {
     const dc = rack.dc || 'N/A';
@@ -110,6 +122,10 @@ export function groupRacksByDc(racks: RackData[]): { [dc: string]: { [gateway: s
  */
 export function groupRacksByGateway(racks: RackData[]): { [gateway: string]: RackData[][] } {
   const gatewayGroups: { [gateway: string]: RackData[][] } = {};
+
+  if (!Array.isArray(racks)) {
+    return gatewayGroups;
+  }
 
   const racksByGateway: { [gateway: string]: RackData[] } = {};
   racks.forEach(rack => {

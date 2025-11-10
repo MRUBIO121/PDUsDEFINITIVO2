@@ -296,7 +296,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     forceShowAllRacks,
     maintenanceRacks
   );
-  const groupedRacks = groupRacksByCountry(filteredRacks);
+  const groupedRacks = Array.isArray(filteredRacks) ? groupRacksByCountry(filteredRacks) : {};
 
   return {
     racks,
