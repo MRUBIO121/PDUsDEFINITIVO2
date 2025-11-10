@@ -1,19 +1,19 @@
 import React from 'react';
-import { Building, ChevronUp, ChevronDown } from 'lucide-react';
-import GatewayGroup from './GatewayGroup';
+import { Network, ChevronUp, ChevronDown } from 'lucide-react';
+import CombinedRackCard from './CombinedRackCard';
 import { RackData } from '../types';
 
-interface DcGroupProps {
-  dc: string;
-  gatewayGroups: { [gateway: string]: RackData[][] };
+interface GatewayGroupProps {
+  gwName: string;
+  gwIp: string;
+  rackGroups: RackData[][];
   originalRackGroups: RackData[][];
   activeView: 'principal' | 'alertas' | 'mantenimiento';
   country: string;
   site: string;
+  dc: string;
   isExpanded: boolean;
-  onToggleExpand: (dc: string) => void;
-  expandedGatewayIds: Set<string>;
-  toggleGatewayExpansion: (gateway: string) => void;
+  onToggleExpand: (gatewayKey: string) => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
     value: number,
@@ -33,17 +33,17 @@ interface DcGroupProps {
   onToggleRackExpansion: (rackName: string) => void;
 }
 
-export default function DcGroup({
-  dc,
-  gatewayGroups,
+export default function GatewayGroup({
+  gwName,
+  gwIp,
+  rackGroups,
   originalRackGroups,
   activeView,
   country,
   site,
+  dc,
   isExpanded,
   onToggleExpand,
-  expandedGatewayIds,
-  toggleGatewayExpansion,
   getThresholdValue,
   getMetricStatusColor,
   getAmperageStatusColor,
@@ -55,25 +55,15 @@ export default function DcGroup({
   maintenanceRacks,
   expandedRackNames,
   onToggleRackExpansion
-}: DcGroupProps) {
+}: GatewayGroupProps) {
 
-  const totalRacksForDc = (originalRackGroups || []).filter(rackGroup => {
+  const totalRacksForGateway = (originalRackGroups || []).filter(rackGroup => {
     const firstRack = rackGroup[0];
     return (firstRack.country || 'N/A') === country &&
            (firstRack.site || 'N/A') === site &&
-           (firstRack.dc || 'N/A') === dc;
+           (firstRack.dc || 'N/A') === dc &&
+           (firstRack.gwName || 'N/A') === gwName;
   }).length;
-
-  const totalGatewaysForDc = new Set(
-    (originalRackGroups || [])
-      .filter(rackGroup => {
-        const firstRack = rackGroup[0];
-        return (firstRack.country || 'N/A') === country &&
-               (firstRack.site || 'N/A') === site &&
-               (firstRack.dc || 'N/A') === dc;
-      })
-      .map(rackGroup => `${rackGroup[0].gwName || 'N/A'}-${rackGroup[0].gwIp || 'N/A'}`)
-  ).size;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -95,32 +85,35 @@ export default function DcGroup({
     }
   };
 
+  const gatewayKey = `${gwName}-${gwIp}`;
+
   return (
-    <div className="bg-white rounded-lg shadow space-y-4 border-2 border-blue-600 mb-4">
-      {/* DC Header */}
-      <div className="flex items-center justify-between cursor-pointer p-6" onClick={() => onToggleExpand(dc)}>
+    <div className="bg-white rounded-lg shadow space-y-4 border-2 border-green-600 mb-4">
+      <div className="flex items-center justify-between cursor-pointer p-5" onClick={() => onToggleExpand(gatewayKey)}>
         <div className="flex items-center">
-          <div className="bg-blue-600 rounded-full mr-3 p-2">
-            <Building className="text-white h-5 w-5" />
+          <div className="bg-green-600 rounded-full mr-3 p-2">
+            <Network className="text-white h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center mb-1">
-              <span className="font-semibold text-blue-600 uppercase tracking-wider text-xs">
-                DATA CENTER
+              <span className="font-semibold text-green-600 uppercase tracking-wider text-xs">
+                GATEWAY
               </span>
             </div>
-            <h2 className="font-bold text-gray-900 text-lg">
-              {dc === 'N/A' ? 'Sin DC Definido' : `${dc}`}
-            </h2>
+            <h3 className="font-bold text-gray-900 text-base">
+              {gwName === 'N/A' ? 'Sin Gateway Definido' : gwName}
+            </h3>
             <div className="flex items-center mt-1">
-              <span className="text-gray-600 mr-2 text-sm">
-                {totalRacksForDc} rack{totalRacksForDc !== 1 ? 's' : ''} • {totalGatewaysForDc} gateway{totalGatewaysForDc !== 1 ? 's' : ''}
+              <span className="text-gray-600 text-xs mr-3">
+                IP: {gwIp === 'N/A' ? 'Sin IP' : gwIp}
+              </span>
+              <span className="text-gray-600 text-xs">
+                {totalRacksForGateway} rack{totalRacksForGateway !== 1 ? 's' : ''}
               </span>
             </div>
           </div>
         </div>
-        
-        {/* DC Status Summary */}
+
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-2">
           {['critical', 'warning', 'normal', 'maintenance'].map(status => {
@@ -128,12 +121,12 @@ export default function DcGroup({
 
             if (status === 'maintenance') {
               if (activeView === 'alertas') return null;
-              count = Object.values(gatewayGroups).flat().filter(rackGroup => {
+              count = rackGroups.filter(rackGroup => {
                 const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
                 return maintenanceRacks.has(rackId);
               }).length;
             } else {
-              count = Object.values(gatewayGroups).flat().filter(rackGroup => {
+              count = rackGroups.filter(rackGroup => {
                 const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
                 if (maintenanceRacks.has(rackId)) return false;
                 return rackGroup.some(rack => rack.status === status);
@@ -142,10 +135,8 @@ export default function DcGroup({
 
             if (count === 0 || (activeView === 'alertas' && status === 'normal')) return null;
 
-            // All status counts are now clickable buttons
             const isActive = activeStatusFilter === status;
 
-            // Define colors based on status
             let bgActiveClass = 'bg-gray-100';
             let borderActiveClass = 'border-gray-500';
             let textActiveClass = 'text-gray-800';
@@ -204,8 +195,7 @@ export default function DcGroup({
             );
           })}
           </div>
-          
-          {/* Toggle Button */}
+
           <div className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
             {isExpanded ? (
               <ChevronUp className="h-5 w-5" />
@@ -217,36 +207,47 @@ export default function DcGroup({
       </div>
 
       {isExpanded && (
-        <div className="space-y-4 px-3 pb-6">
-          {Object.entries(gatewayGroups).sort(([a], [b]) => a.localeCompare(b)).map(([gatewayKey, rackGroups]) => {
-            const parts = gatewayKey.split('|||');
-            const gwName = parts[0] || 'N/A';
-            const gwIp = parts[1] || 'N/A';
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 px-3 pb-6">
+          {rackGroups.map((rackGroup, index) => {
+            const overallStatus = rackGroup.some(r => r.status === 'critical')
+              ? 'critical'
+              : rackGroup.some(r => r.status === 'warning')
+              ? 'warning'
+              : 'normal';
+
+            const handleToggleRow = () => {
+              const rowIndex = Math.floor(index / 4);
+              const startIndex = rowIndex * 4;
+              const endIndex = Math.min(startIndex + 4, rackGroups.length);
+
+              const racksInRow = rackGroups.slice(startIndex, endIndex);
+              const allExpanded = racksInRow.every(rg => expandedRackNames.has(rg[0].name));
+
+              racksInRow.forEach(rg => {
+                if (allExpanded) {
+                  onToggleRackExpansion(rg[0].name);
+                } else {
+                  if (!expandedRackNames.has(rg[0].name)) {
+                    onToggleRackExpansion(rg[0].name);
+                  }
+                }
+              });
+            };
 
             return (
-              <GatewayGroup
-                key={gatewayKey}
-                gwName={gwName}
-                gwIp={gwIp}
-                rackGroups={rackGroups}
-                originalRackGroups={originalRackGroups}
-                activeView={activeView}
-                country={country}
-                site={site}
-                dc={dc}
-                isExpanded={expandedGatewayIds.has(gatewayKey)}
-                onToggleExpand={toggleGatewayExpansion}
+              <CombinedRackCard
+                key={`combined-${rackGroup[0].rackId || rackGroup[0].id}-${index}`}
+                racks={rackGroup}
+                overallStatus={overallStatus}
                 getThresholdValue={getThresholdValue}
                 getMetricStatusColor={getMetricStatusColor}
                 getAmperageStatusColor={getAmperageStatusColor}
-                activeStatusFilter={activeStatusFilter}
-                onStatusFilterChange={onStatusFilterChange}
                 onConfigureThresholds={onConfigureThresholds}
                 onSendRackToMaintenance={onSendRackToMaintenance}
                 onSendChainToMaintenance={onSendChainToMaintenance}
                 maintenanceRacks={maintenanceRacks}
-                expandedRackNames={expandedRackNames}
-                onToggleRackExpansion={onToggleRackExpansion}
+                isExpanded={expandedRackNames.has(rackGroup[0].name)}
+                onToggleExpansion={handleToggleRow}
               />
             );
           })}

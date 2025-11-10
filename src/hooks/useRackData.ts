@@ -8,7 +8,7 @@ interface UseRackDataOptions {
 
 interface UseRackDataReturn {
   racks: RackData[];
-  groupedRacks: { [country: string]: { [site: string]: { [dc: string]: RackData[][] } } };
+  groupedRacks: { [country: string]: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } };
   originalRackGroups: RackData[][];
   maintenanceRacks: Set<string>;
   loading: boolean;
@@ -16,6 +16,7 @@ interface UseRackDataReturn {
   expandedCountryIds: Set<string>;
   expandedSiteIds: Set<string>;
   expandedDcIds: Set<string>;
+  expandedGatewayIds: Set<string>;
   activeStatusFilter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance';
   activeCountryFilter: string;
   activeSiteFilter: string;
@@ -27,6 +28,7 @@ interface UseRackDataReturn {
   toggleCountryExpansion: (country: string) => void;
   toggleSiteExpansion: (site: string) => void;
   toggleDcExpansion: (dc: string) => void;
+  toggleGatewayExpansion: (gateway: string) => void;
   setActiveStatusFilter: (filter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance') => void;
   setActiveCountryFilter: (country: string) => void;
   setActiveSiteFilter: (site: string) => void;
@@ -50,6 +52,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   const [expandedCountryIds, setExpandedCountryIds] = useState<Set<string>>(new Set());
   const [expandedSiteIds, setExpandedSiteIds] = useState<Set<string>>(new Set());
   const [expandedDcIds, setExpandedDcIds] = useState<Set<string>>(new Set());
+  const [expandedGatewayIds, setExpandedGatewayIds] = useState<Set<string>>(new Set());
   const [activeStatusFilter, setActiveStatusFilter] = useState<'all' | 'critical' | 'warning' | 'normal' | 'maintenance'>('all');
   const [activeCountryFilter, setActiveCountryFilter] = useState<string>('all');
   const [activeSiteFilter, setActiveSiteFilter] = useState<string>('all');
@@ -225,6 +228,18 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     });
   };
 
+  const toggleGatewayExpansion = (gateway: string) => {
+    setExpandedGatewayIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(gateway)) {
+        newSet.delete(gateway);
+      } else {
+        newSet.add(gateway);
+      }
+      return newSet;
+    });
+  };
+
   const handleStatusFilterChange = (filter: 'all' | 'critical' | 'warning') => {
     if (activeStatusFilter === filter) {
       setActiveStatusFilter('all'); // Toggle off if already active
@@ -293,6 +308,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     expandedCountryIds,
     expandedSiteIds,
     expandedDcIds,
+    expandedGatewayIds,
     activeStatusFilter,
     activeCountryFilter,
     activeSiteFilter,
@@ -303,6 +319,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     toggleCountryExpansion,
     toggleSiteExpansion,
     toggleDcExpansion,
+    toggleGatewayExpansion,
     setActiveStatusFilter: handleStatusFilterChange,
     setActiveCountryFilter: handleCountryFilterChange,
     setActiveSiteFilter: handleSiteFilterChange,
