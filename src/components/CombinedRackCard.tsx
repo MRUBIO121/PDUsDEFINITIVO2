@@ -161,9 +161,6 @@ export default function CombinedRackCard({
                 Mantenimiento
               </span>
             )}
-            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              {racks.length} PDU{racks.length !== 1 ? 's' : ''}
-            </span>
           </div>
           <div className="flex items-center gap-2">
             {(onConfigureThresholds || onSendRackToMaintenance || onSendChainToMaintenance) && (
