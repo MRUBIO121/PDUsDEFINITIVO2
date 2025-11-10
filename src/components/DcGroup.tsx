@@ -215,7 +215,7 @@ export default function DcGroup({
 
             return (
               <CombinedRackCard
-                key={`combined-${rackGroup[0].rackId || rackGroup[0].id}-${index}`}
+                key={`${dc}-${rackGroup[0].site}-${rackGroup[0].rackId || rackGroup[0].id}-${index}`}
                 racks={rackGroup}
                 overallStatus={overallStatus}
                 getThresholdValue={getThresholdValue}

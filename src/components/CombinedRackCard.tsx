@@ -34,6 +34,15 @@ export default function CombinedRackCard({
   const [showMenu, setShowMenu] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const rackIdRef = useRef(racks[0]?.rackId || racks[0]?.id);
+
+  useEffect(() => {
+    const currentRackId = racks[0]?.rackId || racks[0]?.id;
+    if (currentRackId !== rackIdRef.current) {
+      setIsExpanded(false);
+      rackIdRef.current = currentRackId;
+    }
+  }, [racks]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
