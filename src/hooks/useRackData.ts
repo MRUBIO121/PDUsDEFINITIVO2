@@ -8,7 +8,7 @@ interface UseRackDataOptions {
 
 interface UseRackDataReturn {
   racks: RackData[];
-  groupedRacks: { [country: string]: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } };
+  groupedRacks: { [country: string]: { [site: string]: { [dc: string]: RackData[][] } } };
   originalRackGroups: RackData[][];
   maintenanceRacks: Set<string>;
   loading: boolean;
@@ -16,7 +16,6 @@ interface UseRackDataReturn {
   expandedCountryIds: Set<string>;
   expandedSiteIds: Set<string>;
   expandedDcIds: Set<string>;
-  expandedGatewayIds: Set<string>;
   activeStatusFilter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance';
   activeCountryFilter: string;
   activeSiteFilter: string;
@@ -28,7 +27,6 @@ interface UseRackDataReturn {
   toggleCountryExpansion: (country: string) => void;
   toggleSiteExpansion: (site: string) => void;
   toggleDcExpansion: (dc: string) => void;
-  toggleGatewayExpansion: (gateway: string) => void;
   setActiveStatusFilter: (filter: 'all' | 'critical' | 'warning' | 'normal' | 'maintenance') => void;
   setActiveCountryFilter: (country: string) => void;
   setActiveSiteFilter: (site: string) => void;
@@ -52,7 +50,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   const [expandedCountryIds, setExpandedCountryIds] = useState<Set<string>>(new Set());
   const [expandedSiteIds, setExpandedSiteIds] = useState<Set<string>>(new Set());
   const [expandedDcIds, setExpandedDcIds] = useState<Set<string>>(new Set());
-  const [expandedGatewayIds, setExpandedGatewayIds] = useState<Set<string>>(new Set());
   const [activeStatusFilter, setActiveStatusFilter] = useState<'all' | 'critical' | 'warning' | 'normal' | 'maintenance'>('all');
   const [activeCountryFilter, setActiveCountryFilter] = useState<string>('all');
   const [activeSiteFilter, setActiveSiteFilter] = useState<string>('all');
@@ -62,14 +59,12 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   const [activeMetricFilter, setActiveMetricFilter] = useState<string>('all');
 
   const fetchRacks = async () => {
-    console.log('🚀 fetchRacks - START');
     try {
       setLoading(true);
       setError(null);
 
       // Add timestamp to prevent caching
       const timestamp = new Date().getTime();
-      console.log('📡 Fetching from API...');
       const response = await fetch(`/api/racks/energy?t=${timestamp}`, {
         cache: 'no-store',
         credentials: 'include',
@@ -79,11 +74,8 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         }
       });
 
-      console.log('📡 Response status:', response.status);
-
       // If unauthorized, silently fail (user not logged in yet)
       if (response.status === 401) {
-        console.log('🔒 Unauthorized - user not logged in');
         setLoading(false);
         return;
       }
@@ -91,29 +83,22 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-
+      
       const data = await response.json();
-      console.log('📦 API Response:', data.success, 'Data length:', data.data?.length);
       if (!data.success) {
         throw new Error(data.message || 'Failed to fetch rack data');
       }
       
       // Store original rack groups as they come from the API
       const rackGroups = Array.isArray(data.data) ? data.data : [];
-      console.log('📊 Rack Groups:', rackGroups.length, 'IsArray:', Array.isArray(rackGroups));
-      console.log('📊 First group sample:', rackGroups[0]);
-
       setOriginalRackGroups(rackGroups);
-
+      
       // Transform the nested array structure into a flat array
       const flatRacks: RackData[] = [];
       if (Array.isArray(rackGroups)) {
-        rackGroups.forEach((rackGroup: RackData[], idx: number) => {
+        rackGroups.forEach((rackGroup: RackData[]) => {
           if (Array.isArray(rackGroup)) {
-            console.log(`📊 Group ${idx}: ${rackGroup.length} racks`);
             flatRacks.push(...rackGroup);
-          } else {
-            console.error(`❌ Group ${idx} NOT an array!`, typeof rackGroup);
           }
         });
       }
@@ -130,14 +115,11 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         }
       });
 
-      console.log('✅ Setting racks:', flatRacks.length);
       setRacks(flatRacks);
-      console.log('✅ fetchRacks - COMPLETE');
     } catch (err) {
-      console.error('❌ Error fetching racks:', err);
+      console.error('Error fetching racks:', err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
     } finally {
-      console.log('🏁 fetchRacks - FINALLY (loading = false)');
       setLoading(false);
     }
   };
@@ -243,18 +225,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     });
   };
 
-  const toggleGatewayExpansion = (gateway: string) => {
-    setExpandedGatewayIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(gateway)) {
-        newSet.delete(gateway);
-      } else {
-        newSet.add(gateway);
-      }
-      return newSet;
-    });
-  };
-
   const handleStatusFilterChange = (filter: 'all' | 'critical' | 'warning') => {
     if (activeStatusFilter === filter) {
       setActiveStatusFilter('all'); // Toggle off if already active
@@ -311,12 +281,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     forceShowAllRacks,
     maintenanceRacks
   );
-
-  console.log('🔍 useRackData - filteredRacks:', Array.isArray(filteredRacks), 'Length:', filteredRacks?.length, 'Type:', typeof filteredRacks);
-  console.log('🔍 useRackData - First 3 items:', filteredRacks?.slice(0, 3));
-
-  const groupedRacks = Array.isArray(filteredRacks) ? groupRacksByCountry(filteredRacks) : {};
-  console.log('🔍 useRackData - groupedRacks keys:', Object.keys(groupedRacks));
+  const groupedRacks = groupRacksByCountry(filteredRacks);
 
   return {
     racks,
@@ -328,7 +293,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     expandedCountryIds,
     expandedSiteIds,
     expandedDcIds,
-    expandedGatewayIds,
     activeStatusFilter,
     activeCountryFilter,
     activeSiteFilter,
@@ -339,7 +303,6 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     toggleCountryExpansion,
     toggleSiteExpansion,
     toggleDcExpansion,
-    toggleGatewayExpansion,
     setActiveStatusFilter: handleStatusFilterChange,
     setActiveCountryFilter: handleCountryFilterChange,
     setActiveSiteFilter: handleSiteFilterChange,

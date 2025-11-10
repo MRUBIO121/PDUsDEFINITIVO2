@@ -27,7 +27,6 @@ function App() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [expandedRackNames, setExpandedRackNames] = useState<Set<string>>(new Set());
-  const [hasAutoRefreshed, setHasAutoRefreshed] = useState(false);
 
   // Helper function to check if user has access to a site
   // Handles Cantabria Norte/Sur unification
@@ -54,8 +53,6 @@ function App() {
     return false;
   };
   
-  console.log('🎨 App.tsx - RENDER');
-
   const {
     racks,
     originalRackGroups,
@@ -66,7 +63,6 @@ function App() {
     expandedCountryIds,
     expandedSiteIds,
     expandedDcIds,
-    expandedGatewayIds,
     activeStatusFilter,
     activeCountryFilter,
     activeSiteFilter,
@@ -77,7 +73,6 @@ function App() {
     toggleCountryExpansion,
     toggleSiteExpansion,
     toggleDcExpansion,
-    toggleGatewayExpansion,
     setActiveStatusFilter,
     setActiveCountryFilter,
     setActiveSiteFilter,
@@ -97,18 +92,6 @@ function App() {
     error: thresholdsError,
     refreshThresholds
   } = useThresholds();
-
-  // Auto-refresh once when data first loads
-  React.useEffect(() => {
-    if (!hasAutoRefreshed && !racksLoading && racks.length > 0) {
-      console.log('🔄 Auto-refresh triggered on initial data load');
-      setHasAutoRefreshed(true);
-      // Wait a brief moment to ensure data is stable, then refresh
-      setTimeout(() => {
-        refreshData();
-      }, 1000);
-    }
-  }, [hasAutoRefreshed, racksLoading, racks.length, refreshData]);
 
   // Initialize site filter based on user's assigned sites
   React.useEffect(() => {
@@ -143,59 +126,24 @@ function App() {
   const getAmperageStatusColorWrapper = (rack: any) => getAmperageStatusColor(rack, thresholds);
 
   const filteredRackGroups = React.useMemo(() => {
-    console.log('🔄 filteredRackGroups useMemo - START');
-    console.log('🔄 groupedRacks type:', typeof groupedRacks, 'Keys:', Object.keys(groupedRacks || {}));
-
     const rackGroups: RackData[][] = [];
     let maintenanceCount = 0;
 
-    try {
-      if (!groupedRacks || typeof groupedRacks !== 'object') {
-        console.error('❌ groupedRacks is invalid!', groupedRacks);
-        return rackGroups;
-      }
+    Object.values(groupedRacks).forEach(siteGroups => {
+      Object.values(siteGroups).forEach(dcGroups => {
+        Object.values(dcGroups).forEach(logicalGroups => {
+          logicalGroups.forEach(group => {
+            const rackId = String(group[0]?.rackId || '').trim();
+            const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
-      Object.values(groupedRacks).forEach((siteGroups, idx) => {
-        console.log(`🔄 Processing siteGroups ${idx}:`, typeof siteGroups, Array.isArray(siteGroups));
-
-        if (!siteGroups || typeof siteGroups !== 'object') {
-          console.error(`❌ siteGroups ${idx} is invalid!`, siteGroups);
-          return;
-        }
-
-        Object.values(siteGroups).forEach((dcGroups, dcIdx) => {
-          console.log(`🔄 Processing dcGroups ${idx}-${dcIdx}:`, typeof dcGroups, Array.isArray(dcGroups));
-
-          if (!dcGroups || typeof dcGroups !== 'object') {
-            console.error(`❌ dcGroups ${idx}-${dcIdx} is invalid!`, dcGroups);
-            return;
-          }
-
-          Object.values(dcGroups).forEach((logicalGroups, lgIdx) => {
-            console.log(`🔄 Processing logicalGroups ${idx}-${dcIdx}-${lgIdx}:`, typeof logicalGroups, Array.isArray(logicalGroups));
-
-            if (!Array.isArray(logicalGroups)) {
-              console.error(`❌ logicalGroups ${idx}-${dcIdx}-${lgIdx} NOT an array!`, logicalGroups);
-              return;
+            if (isInMaintenance) {
+              maintenanceCount++;
             }
-
-            logicalGroups.forEach(group => {
-              const rackId = String(group[0]?.rackId || '').trim();
-              const isInMaintenance = rackId && maintenanceRacks.has(rackId);
-
-              if (isInMaintenance) {
-                maintenanceCount++;
-              }
-            });
-            rackGroups.push(...logicalGroups);
           });
+          rackGroups.push(...logicalGroups);
         });
       });
-
-      console.log('✅ filteredRackGroups useMemo - COMPLETE. Total groups:', rackGroups.length);
-    } catch (err) {
-      console.error('❌ Error in filteredRackGroups useMemo:', err);
-    }
+    });
 
     return rackGroups;
   }, [groupedRacks, activeView, maintenanceRacks]);
@@ -1575,16 +1523,11 @@ function App() {
               <>
                 {!showRackThresholdsModal && (
                   <div className="space-y-6">
-                  {(() => {
-                    console.log('🎨 Rendering CountryGroups. groupedRacks:', typeof groupedRacks, Object.keys(groupedRacks || {}));
-                    try {
-                      return Object.entries(groupedRacks).map(([country, siteGroups]) => {
-                        console.log(`🎨 Rendering country: ${country}`);
-                        return (
-                          <CountryGroup
-                            key={country}
-                            country={country}
-                            siteGroups={siteGroups}
+                  {Object.entries(groupedRacks).map(([country, siteGroups]) => (
+                    <CountryGroup
+                      key={country}
+                      country={country}
+                      siteGroups={siteGroups}
                       originalRackGroups={originalRackGroups}
                       activeView={activeView}
                       isExpanded={expandedCountryIds.has(country)}
@@ -1593,8 +1536,6 @@ function App() {
                       toggleSiteExpansion={toggleSiteExpansion}
                       expandedDcIds={expandedDcIds}
                       toggleDcExpansion={toggleDcExpansion}
-                      expandedGatewayIds={expandedGatewayIds}
-                      toggleGatewayExpansion={toggleGatewayExpansion}
                       getThresholdValue={getThresholdValueWrapper}
                       getMetricStatusColor={getMetricStatusColor}
                       getAmperageStatusColor={getAmperageStatusColorWrapper}
@@ -1607,13 +1548,7 @@ function App() {
                       expandedRackNames={expandedRackNames}
                       onToggleRackExpansion={handleToggleRackExpansion}
                     />
-                        );
-                      });
-                    } catch (err) {
-                      console.error('❌ Error rendering CountryGroups:', err);
-                      return <div className="text-red-500 p-4">Error rendering data: {String(err)}</div>;
-                    }
-                  })()}
+                  ))}
                   </div>
                 )}
 

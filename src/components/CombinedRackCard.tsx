@@ -135,8 +135,7 @@ export default function CombinedRackCard({
     <div className={`rounded-lg shadow hover:shadow-md transition-all bg-white ${
       isInMaintenance ? 'border-l-4 border-blue-500' :
       overallStatus === 'critical' ? 'border-l-4 border-red-700' :
-      overallStatus === 'warning' ? 'border-l-4 border-yellow-500' :
-      overallStatus === 'normal' ? 'border-l-4 border-green-500' : ''
+      overallStatus === 'warning' ? 'border-l-4 border-yellow-500' : ''
     }`}>
       <div className="p-4">
         {/* Collapsed Header - Clickable */}

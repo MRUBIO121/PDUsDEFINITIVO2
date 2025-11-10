@@ -1,18 +1,12 @@
 import { RackData } from '../types';
 
 /**
- * Groups racks by country, site, DC, and gateway
+ * Groups racks by country, site, DC, and logical rack ID
  */
-export function groupRacksByCountry(racks: RackData[]): { [country: string]: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } } {
-  const countryGroups: { [country: string]: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } } = {};
-
-  console.log('🌍 groupRacksByCountry - Input:', Array.isArray(racks), 'Length:', racks?.length);
-
-  if (!Array.isArray(racks)) {
-    console.error('❌ groupRacksByCountry - Not an array!', typeof racks);
-    return countryGroups;
-  }
-
+export function groupRacksByCountry(racks: RackData[]): { [country: string]: { [site: string]: { [dc: string]: RackData[][] } } } {
+  const countryGroups: { [country: string]: { [site: string]: { [dc: string]: RackData[][] } } } = {};
+  
+  // First, group all racks by country
   const racksByCountry: { [country: string]: RackData[] } = {};
   racks.forEach(rack => {
     const country = rack.country || 'N/A';
@@ -21,66 +15,40 @@ export function groupRacksByCountry(racks: RackData[]): { [country: string]: { [
     }
     racksByCountry[country].push(rack);
   });
-
+  
+  // Then, for each country, group all its racks by site
   Object.entries(racksByCountry).forEach(([country, countryRacks]) => {
-    console.log(`🌍 Country: ${country}, racks:`, countryRacks.length);
-
     if (!countryGroups[country]) {
       countryGroups[country] = {};
     }
-
+    
     const siteGroups = groupRacksBySite(countryRacks);
-    console.log(`🌍 ${country} - siteGroups type:`, typeof siteGroups, Array.isArray(siteGroups));
-
-    if (!siteGroups || typeof siteGroups !== 'object') {
-      console.error(`❌ ${country} - Invalid siteGroups!`, siteGroups);
-      return;
-    }
-
     Object.entries(siteGroups).forEach(([site, dcGroups]) => {
-      console.log(`🌍 ${country}/${site} - dcGroups type:`, typeof dcGroups, Array.isArray(dcGroups));
       if (!countryGroups[country][site]) {
         countryGroups[country][site] = {};
       }
-
-      if (!dcGroups || typeof dcGroups !== 'object') {
-        console.error(`❌ ${country}/${site} - Invalid dcGroups!`, dcGroups);
-        return;
-      }
-
-      Object.entries(dcGroups).forEach(([dc, gatewayGroups]) => {
-        console.log(`🌍 ${country}/${site}/${dc} - gatewayGroups type:`, typeof gatewayGroups, Array.isArray(gatewayGroups));
-
+      
+      Object.entries(dcGroups).forEach(([dc, logicalRackGroups]) => {
         if (!countryGroups[country][site][dc]) {
-          countryGroups[country][site][dc] = {};
+          countryGroups[country][site][dc] = [];
         }
-
-        if (!gatewayGroups || typeof gatewayGroups !== 'object') {
-          console.error(`❌ ${country}/${site}/${dc} - Invalid gatewayGroups!`, gatewayGroups);
-          return;
-        }
-
-        countryGroups[country][site][dc] = gatewayGroups;
+        
+        // Add all logical rack groups from this site/dc to the country structure
+        countryGroups[country][site][dc] = logicalRackGroups;
       });
     });
   });
-
+  
   return countryGroups;
 }
 
 /**
- * Groups racks by site, DC, and gateway
+ * Groups racks by site, DC, and logical rack ID
  */
-export function groupRacksBySite(racks: RackData[]): { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } {
-  const siteGroups: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } } = {};
-
-  console.log('🏗️ groupRacksBySite - Input:', Array.isArray(racks), 'Length:', racks?.length);
-
-  if (!Array.isArray(racks)) {
-    console.error('❌ groupRacksBySite - Not an array!', typeof racks);
-    return siteGroups;
-  }
-
+export function groupRacksBySite(racks: RackData[]): { [site: string]: { [dc: string]: RackData[][] } } {
+  const siteGroups: { [site: string]: { [dc: string]: RackData[][] } } = {};
+  
+  // First, group all racks by site
   const racksBySite: { [site: string]: RackData[] } = {};
   racks.forEach(rack => {
     const site = rack.site || 'N/A';
@@ -89,41 +57,34 @@ export function groupRacksBySite(racks: RackData[]): { [site: string]: { [dc: st
     }
     racksBySite[site].push(rack);
   });
-
+  
+  // Then, for each site, group all its racks by DC
   Object.entries(racksBySite).forEach(([site, siteRacks]) => {
-    console.log(`🏗️ Site: ${site}, racks:`, siteRacks.length);
-
     if (!siteGroups[site]) {
       siteGroups[site] = {};
     }
-
+    
     const dcGroups = groupRacksByDc(siteRacks);
-    console.log(`🏗️ ${site} - dcGroups type:`, typeof dcGroups, Array.isArray(dcGroups));
-    Object.entries(dcGroups).forEach(([dc, gatewayGroups]) => {
+    Object.entries(dcGroups).forEach(([dc, logicalRackGroups]) => {
       if (!siteGroups[site][dc]) {
-        siteGroups[site][dc] = {};
+        siteGroups[site][dc] = [];
       }
-
-      siteGroups[site][dc] = gatewayGroups;
+      
+      // Add all logical rack groups from this DC to the site structure
+      siteGroups[site][dc] = logicalRackGroups;
     });
   });
-
+  
   return siteGroups;
 }
 
 /**
- * Groups racks by DC, then by gateway
+ * Groups racks by DC and rack ID
  */
-export function groupRacksByDc(racks: RackData[]): { [dc: string]: { [gateway: string]: RackData[][] } } {
-  const dcGroups: { [dc: string]: { [gateway: string]: RackData[][] } } = {};
-
-  console.log('💻 groupRacksByDc - Input:', Array.isArray(racks), 'Length:', racks?.length);
-
-  if (!Array.isArray(racks)) {
-    console.error('❌ groupRacksByDc - Not an array!', typeof racks);
-    return dcGroups;
-  }
-
+export function groupRacksByDc(racks: RackData[]): { [dc: string]: RackData[][] } {
+  const dcGroups: { [dc: string]: RackData[][] } = {};
+  
+  // First, group racks by DC
   const racksByDc: { [dc: string]: RackData[] } = {};
   racks.forEach(rack => {
     const dc = rack.dc || 'N/A';
@@ -132,72 +93,12 @@ export function groupRacksByDc(racks: RackData[]): { [dc: string]: { [gateway: s
     }
     racksByDc[dc].push(rack);
   });
-
+  
+  // Then, for each DC, group racks by rack ID using Map for accuracy
   Object.entries(racksByDc).forEach(([dc, dcRacks]) => {
-    console.log(`💻 DC: ${dc}, racks:`, dcRacks.length);
-
-    if (!dcGroups[dc]) {
-      dcGroups[dc] = {};
-    }
-
-    const gatewayGroups = groupRacksByGateway(dcRacks);
-    console.log(`💻 ${dc} - gatewayGroups type:`, typeof gatewayGroups, Array.isArray(gatewayGroups), Object.keys(gatewayGroups || {}).length);
-    if (!gatewayGroups || typeof gatewayGroups !== 'object') {
-      console.error(`❌ ${dc} - Invalid gatewayGroups!`, gatewayGroups);
-      return;
-    }
-
-    Object.entries(gatewayGroups).forEach(([gateway, logicalRackGroups]) => {
-      console.log(`💻 ${dc}/${gateway} - logicalRackGroups type:`, typeof logicalRackGroups, Array.isArray(logicalRackGroups));
-
-      if (!dcGroups[dc][gateway]) {
-        dcGroups[dc][gateway] = [];
-      }
-
-      if (!Array.isArray(logicalRackGroups)) {
-        console.error(`❌ ${dc}/${gateway} - logicalRackGroups not an array!`, logicalRackGroups);
-        return;
-      }
-
-      dcGroups[dc][gateway] = logicalRackGroups;
-    });
-  });
-
-  return dcGroups;
-}
-
-/**
- * Groups racks by gateway and rack ID
- */
-export function groupRacksByGateway(racks: RackData[]): { [gateway: string]: RackData[][] } {
-  const gatewayGroups: { [gateway: string]: RackData[][] } = {};
-
-  console.log('🌐 groupRacksByGateway - Input:', Array.isArray(racks), 'Length:', racks?.length);
-
-  if (!Array.isArray(racks)) {
-    console.error('❌ groupRacksByGateway - Not an array!', typeof racks);
-    return gatewayGroups;
-  }
-
-  const racksByGateway: { [gateway: string]: RackData[] } = {};
-  racks.forEach(rack => {
-    const gwName = rack.gwName || 'N/A';
-    const gwIp = rack.gwIp || 'N/A';
-    const gatewayKey = `${gwName}|||${gwIp}`;
-
-    if (!racksByGateway[gatewayKey]) {
-      racksByGateway[gatewayKey] = [];
-    }
-    racksByGateway[gatewayKey].push(rack);
-  });
-
-  console.log('🌐 Gateways found:', Object.keys(racksByGateway));
-
-  Object.entries(racksByGateway).forEach(([gatewayKey, gatewayRacks]) => {
-    console.log(`🌐 Gateway: ${gatewayKey}, racks:`, gatewayRacks.length);
     const rackMap = new Map<string, RackData[]>();
 
-    gatewayRacks.forEach(rack => {
+    dcRacks.forEach(rack => {
       const rackId = rack.rackId || rack.id;
 
       if (!rackMap.has(rackId)) {
@@ -207,22 +108,25 @@ export function groupRacksByGateway(racks: RackData[]): { [gateway: string]: Rac
       rackMap.get(rackId)!.push(rack);
     });
 
-    gatewayGroups[gatewayKey] = Array.from(rackMap.values()).sort((a, b) => {
+    // Convert Map to array of arrays and sort by chain first, then alphabetically by rack name
+    dcGroups[dc] = Array.from(rackMap.values()).sort((a, b) => {
       const chainA = a[0]?.chain || '';
       const chainB = b[0]?.chain || '';
 
+      // First compare by chain
       const chainComparison = chainA.localeCompare(chainB, undefined, { numeric: true });
       if (chainComparison !== 0) {
         return chainComparison;
       }
 
+      // If chains are equal, sort alphabetically by name
       const nameA = (a[0]?.name || '').toLowerCase();
       const nameB = (b[0]?.name || '').toLowerCase();
       return nameA.localeCompare(nameB);
     });
   });
-
-  return gatewayGroups;
+  
+  return dcGroups;
 }
 
 /**
