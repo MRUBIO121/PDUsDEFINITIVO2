@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Server, Activity, Wrench, Zap } from 'lucide-react';
 import { RackData } from '../types';
 
@@ -15,12 +15,13 @@ interface RackCardProps {
   getAmperageStatusColor: (rack: RackData) => string;
 }
 
-export default function RackCard({ 
-  rack, 
-  getThresholdValue, 
-  getMetricStatusColor, 
+export default function RackCard({
+  rack,
+  getThresholdValue,
+  getMetricStatusColor,
   getAmperageStatusColor
 }: RackCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   // Helper function to determine metric background color based on alerts
   const getMetricBgColor = (rack: RackData, metricType: 'amperage' | 'temperature' | 'humidity' | 'voltage'): string => {
     // Check for critical alerts first (higher priority)
@@ -95,50 +96,43 @@ export default function RackCard({
   };
 
   return (
-    <div className={`rounded-lg shadow hover:shadow-md transition-shadow bg-white ${
-      rack.status === 'critical' ? 'border-l-4 border-red-700' : 
+    <div className={`rounded-lg shadow hover:shadow-md transition-all bg-white ${
+      rack.status === 'critical' ? 'border-l-4 border-red-700' :
       rack.status === 'warning' ? 'border-l-4 border-yellow-500' : ''
     }`}>
-      <div className="p-6">
-        {/* Rack Status - Moved to Top */}
-        <div className="flex items-center justify-end mb-3">
-          <div className={`w-3 h-3 rounded-full ${getStatusColor(rack.status)} mr-2 ${
-            rack.status !== 'normal' ? 'animate-pulse' : ''
-          }`}></div>
-          {rack.isInMaintenance ? (
-            <>
-              <Wrench className="w-3.5 h-3.5 text-slate-600 mr-1.5" />
-              <span className="font-medium text-slate-700 text-xs">
+      <div className="p-4">
+        {/* Collapsed Header - Clickable */}
+        <div
+          className="flex items-center justify-between cursor-pointer"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <div className="flex items-center gap-3 flex-1">
+            <div className={`w-3 h-3 rounded-full ${getStatusColor(rack.status)} ${
+              rack.status !== 'normal' ? 'animate-pulse' : ''
+            }`}></div>
+            <Server className="text-gray-600 h-5 w-5" />
+            <h3 className="font-semibold text-gray-900 text-base">
+              {rack.name}
+            </h3>
+            {rack.isInMaintenance && (
+              <span className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded flex items-center gap-1">
+                <Wrench className="w-3 h-3" />
                 Mantenimiento
               </span>
-            </>
-          ) : (
-            <>
-              <Zap className="w-3.5 h-3.5 text-emerald-600 mr-1.5" />
-              <span className="font-medium text-gray-700 text-xs">
-                Conectado
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* Rack Header */}
-        <div className="flex items-center mb-4">
-          <div className="flex items-center">
-            <Server className="text-gray-600 mr-2 h-6 w-6" />
-            <div>
-              <h3 className="font-semibold text-gray-900 text-lg">
-                {rack.name} (ID PDU: {rack.id})
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                {formatPhaseText(rack.phase)}
-              </p>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* PDU Container */}
-        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+        {/* Expanded Content */}
+        {isExpanded && (
+          <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
+            {/* Phase Info */}
+            <div className="text-sm text-gray-600">
+              {formatPhaseText(rack.phase)}
+            </div>
+
+            {/* PDU Container */}
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
           {/* PDU Header */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center">
@@ -222,8 +216,9 @@ export default function RackCard({
                 {rack.sensorHumidity != null && !isNaN(rack.sensorHumidity) ? `${rack.sensorHumidity}%` : 'N/A'}
               </p>
             </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

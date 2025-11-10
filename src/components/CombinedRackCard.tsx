@@ -32,6 +32,7 @@ export default function CombinedRackCard({
   maintenanceRacks
 }: CombinedRackCardProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -128,66 +129,74 @@ export default function CombinedRackCard({
   const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
   return (
-    <div className={`rounded-lg shadow hover:shadow-md transition-shadow bg-white ${
+    <div className={`rounded-lg shadow hover:shadow-md transition-all bg-white ${
       isInMaintenance ? 'border-l-4 border-blue-500' :
       overallStatus === 'critical' ? 'border-l-4 border-red-700' :
       overallStatus === 'warning' ? 'border-l-4 border-yellow-500' : ''
     }`}>
-      <div className="p-6">
-        {/* Overall Status - Moved to Top */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center">
-            <div className={`w-3 h-3 rounded-full ${isInMaintenance ? 'bg-blue-500' : getStatusColor(overallStatus)} mr-2 ${
+      <div className="p-4">
+        {/* Collapsed Header - Clickable */}
+        <div
+          className="flex items-center justify-between cursor-pointer"
+          onClick={(e) => {
+            if (!(e.target as HTMLElement).closest('.menu-button')) {
+              setIsExpanded(!isExpanded);
+            }
+          }}
+        >
+          <div className="flex items-center gap-3 flex-1">
+            <div className={`w-3 h-3 rounded-full ${isInMaintenance ? 'bg-blue-500' : getStatusColor(overallStatus)} ${
               !isInMaintenance && overallStatus !== 'normal' ? 'animate-pulse' : ''
             }`}></div>
-            {isInMaintenance ? (
-              <>
-                <Wrench className="w-3.5 h-3.5 text-slate-600 mr-1.5" />
-                <span className="font-medium text-slate-700 text-xs">
-                  Mantenimiento
-                </span>
-              </>
-            ) : (
-              <>
-                <Zap className="w-3.5 h-3.5 text-emerald-600 mr-1.5" />
-                <span className="font-medium text-gray-700 text-xs">
-                  Conectado
-                </span>
-              </>
+            <Server className="text-gray-600 h-5 w-5" />
+            <h3 className="font-semibold text-gray-900 text-base">
+              {commonInfo.name}
+            </h3>
+            {isInMaintenance && (
+              <span className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded flex items-center gap-1">
+                <Wrench className="w-3 h-3" />
+                Mantenimiento
+              </span>
             )}
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+              {racks.length} PDU{racks.length !== 1 ? 's' : ''}
+            </span>
           </div>
-          <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded">
-            {racks.length} PDUs
-          </span>
-          {(onConfigureThresholds || onSendRackToMaintenance || onSendChainToMaintenance) && (
-            <div className="relative" ref={menuRef}>
-              <button
-                onClick={() => setShowMenu(!showMenu)}
-                className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                title="Opciones"
-              >
-                <MoreVertical className="h-4 w-4" />
-              </button>
+          <div className="flex items-center gap-2">
+            {(onConfigureThresholds || onSendRackToMaintenance || onSendChainToMaintenance) && (
+              <div className="relative menu-button" ref={menuRef}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMenu(!showMenu);
+                  }}
+                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                  title="Opciones"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
 
-              {showMenu && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                  {onConfigureThresholds && (
-                    <button
-                      onClick={() => {
-                        setShowMenu(false);
-                        onConfigureThresholds(commonInfo.rackId || commonInfo.id, commonInfo.name);
-                      }}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-blue-50 transition-colors first:rounded-t-lg"
-                    >
-                      <Settings className="h-4 w-4 text-blue-600" />
-                      <span>Configurar Umbrales</span>
-                    </button>
-                  )}
-                  {onSendRackToMaintenance && (
-                    <button
-                      onClick={() => {
-                        setShowMenu(false);
-                        onSendRackToMaintenance(
+                {showMenu && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    {onConfigureThresholds && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowMenu(false);
+                          onConfigureThresholds(commonInfo.rackId || commonInfo.id, commonInfo.name);
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-blue-50 transition-colors first:rounded-t-lg"
+                      >
+                        <Settings className="h-4 w-4 text-blue-600" />
+                        <span>Configurar Umbrales</span>
+                      </button>
+                    )}
+                    {onSendRackToMaintenance && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowMenu(false);
+                          onSendRackToMaintenance(
                           commonInfo.rackId || commonInfo.id,
                           commonInfo.chain || 'Unknown',
                           commonInfo.name,
@@ -204,18 +213,19 @@ export default function CombinedRackCard({
                             serial: commonInfo.serial
                           }
                         );
-                      }}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-amber-50 transition-colors border-t border-gray-100"
-                    >
-                      <Wrench className="h-4 w-4 text-amber-600" />
-                      <span>Enviar Rack a Mantenimiento</span>
-                    </button>
-                  )}
-                  {onSendChainToMaintenance && (
-                    <button
-                      onClick={() => {
-                        setShowMenu(false);
-                        onSendChainToMaintenance(
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-amber-50 transition-colors border-t border-gray-100"
+                      >
+                        <Wrench className="h-4 w-4 text-amber-600" />
+                        <span>Enviar Rack a Mantenimiento</span>
+                      </button>
+                    )}
+                    {onSendChainToMaintenance && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowMenu(false);
+                          onSendChainToMaintenance(
                           commonInfo.chain || 'Unknown',
                           commonInfo.site || 'Unknown',
                           commonInfo.dc || 'Unknown',
@@ -232,36 +242,30 @@ export default function CombinedRackCard({
                             serial: commonInfo.serial
                           }
                         );
-                      }}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-amber-50 transition-colors last:rounded-b-lg border-t border-gray-100"
-                    >
-                      <Wrench className="h-4 w-4 text-amber-600" />
-                      <span>Enviar Chain a Mantenimiento</span>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Rack Header */}
-        <div className="flex items-center mb-4">
-          <div className="flex items-center">
-            <Server className="text-gray-600 mr-2 h-6 w-6" />
-            <div>
-              <h3 className="font-semibold text-gray-900 text-lg">
-                {commonInfo.name}
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                {formatPhaseText(commonInfo.phase)}
-              </p>
-            </div>
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-amber-50 transition-colors last:rounded-b-lg border-t border-gray-100"
+                      >
+                        <Wrench className="h-4 w-4 text-amber-600" />
+                        <span>Enviar Chain a Mantenimiento</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* PDUs Grid */}
-        <div className="grid grid-cols-1 gap-4">
+        {/* Expanded Content */}
+        {isExpanded && (
+          <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
+            {/* Phase Info */}
+            <div className="text-sm text-gray-600">
+              {formatPhaseText(commonInfo.phase)}
+            </div>
+
+            {/* PDUs Grid */}
+            <div className="grid grid-cols-1 gap-4">
           {racks.map((rack, index) => (
             <div key={rack.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
               {/* PDU Name/ID */}
@@ -338,8 +342,10 @@ export default function CombinedRackCard({
               </div>
 
             </div>
-          ))}
-        </div>
+            ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
