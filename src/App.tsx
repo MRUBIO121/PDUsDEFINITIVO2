@@ -27,6 +27,7 @@ function App() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [expandedRackNames, setExpandedRackNames] = useState<Set<string>>(new Set());
+  const [hasAutoRefreshed, setHasAutoRefreshed] = useState(false);
 
   // Helper function to check if user has access to a site
   // Handles Cantabria Norte/Sur unification
@@ -96,6 +97,18 @@ function App() {
     error: thresholdsError,
     refreshThresholds
   } = useThresholds();
+
+  // Auto-refresh once when data first loads
+  React.useEffect(() => {
+    if (!hasAutoRefreshed && !racksLoading && racks.length > 0) {
+      console.log('🔄 Auto-refresh triggered on initial data load');
+      setHasAutoRefreshed(true);
+      // Wait a brief moment to ensure data is stable, then refresh
+      setTimeout(() => {
+        refreshData();
+      }, 1000);
+    }
+  }, [hasAutoRefreshed, racksLoading, racks.length, refreshData]);
 
   // Initialize site filter based on user's assigned sites
   React.useEffect(() => {
