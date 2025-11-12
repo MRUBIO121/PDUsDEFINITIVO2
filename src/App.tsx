@@ -68,9 +68,11 @@ function App() {
     activeCountryFilter,
     activeSiteFilter,
     activeDcFilter,
+    activeGwFilter,
     availableCountries,
     availableSites,
     availableDcs,
+    availableGateways,
     toggleCountryExpansion,
     toggleSiteExpansion,
     toggleDcExpansion,
@@ -79,6 +81,7 @@ function App() {
     setActiveCountryFilter,
     setActiveSiteFilter,
     setActiveDcFilter,
+    setActiveGwFilter,
     activeMetricFilter,
     setActiveMetricFilter,
     searchQuery,
@@ -1383,12 +1386,13 @@ function App() {
                 >
                   <h3 className="text-lg font-medium text-gray-900 flex items-center">
                     Filtros Geográficos
-                    {(activeCountryFilter !== 'all' || activeSiteFilter !== 'all' || activeDcFilter !== 'all') && (
+                    {(activeCountryFilter !== 'all' || activeSiteFilter !== 'all' || activeDcFilter !== 'all' || activeGwFilter !== 'all') && (
                       <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                         {[
                           activeCountryFilter !== 'all' && 'País',
                           activeSiteFilter !== 'all' && 'Sitio',
-                          activeDcFilter !== 'all' && 'DC'
+                          activeDcFilter !== 'all' && 'DC',
+                          activeGwFilter !== 'all' && 'Gateway'
                         ].filter(Boolean).join(', ')}
                       </span>
                     )}
@@ -1504,6 +1508,42 @@ function App() {
                               {showAllDcs ? 'Mostrar menos' : 'Mostrar más'}
                             </button>
                           )}
+                        </div>
+                      </div>
+
+                      {/* Gateway Filter */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                          Gateway:
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setActiveGwFilter('all')}
+                            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                              activeGwFilter === 'all'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            Todos
+                          </button>
+                          {availableGateways.map((gwKey) => {
+                            const [gwName, gwIp] = gwKey.split('-');
+                            return (
+                              <button
+                                key={gwKey}
+                                onClick={() => setActiveGwFilter(gwKey)}
+                                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                  activeGwFilter === gwKey
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                                title={`IP: ${gwIp}`}
+                              >
+                                {gwName === 'N/A' ? 'Sin Gateway' : gwName}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>

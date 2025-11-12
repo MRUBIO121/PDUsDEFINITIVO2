@@ -190,6 +190,7 @@ export function filterRacks(
   countryFilter: string = 'all',
   siteFilter: string = 'all',
   dcFilter: string = 'all',
+  gwFilter: string = 'all',
   searchQuery: string = '',
   searchField: string = 'all',
   metricFilter: string = 'all',
@@ -255,17 +256,27 @@ export function filterRacks(
   if (countryFilter !== 'all') {
     filteredRacks = filteredRacks.filter(rack => rack.country === countryFilter);
   }
-  
+
   // Filter by site
   if (siteFilter !== 'all') {
     filteredRacks = filteredRacks.filter(rack => rack.site === siteFilter);
   }
-  
+
   // Filter by DC
   if (dcFilter !== 'all') {
     filteredRacks = filteredRacks.filter(rack => rack.dc === dcFilter);
   }
-  
+
+  // Filter by Gateway
+  if (gwFilter !== 'all') {
+    filteredRacks = filteredRacks.filter(rack => {
+      const gwName = rack.gwName || 'N/A';
+      const gwIp = rack.gwIp || 'N/A';
+      const gwKey = `${gwName}-${gwIp}`;
+      return gwKey === gwFilter;
+    });
+  }
+
   // Filter by status
   if (showAllRacks) {
     // In "Principal" mode: show all racks regardless of status

@@ -21,9 +21,11 @@ interface UseRackDataReturn {
   activeCountryFilter: string;
   activeSiteFilter: string;
   activeDcFilter: string;
+  activeGwFilter: string;
   availableCountries: string[];
   availableSites: string[];
   availableDcs: string[];
+  availableGateways: string[];
   activeMetricFilter: string;
   toggleCountryExpansion: (country: string) => void;
   toggleSiteExpansion: (site: string) => void;
@@ -33,6 +35,7 @@ interface UseRackDataReturn {
   setActiveCountryFilter: (country: string) => void;
   setActiveSiteFilter: (site: string) => void;
   setActiveDcFilter: (dc: string) => void;
+  setActiveGwFilter: (gwKey: string) => void;
   setActiveMetricFilter: (metric: string) => void;
   refreshData: () => void;
   searchQuery: string;
@@ -57,6 +60,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   const [activeCountryFilter, setActiveCountryFilter] = useState<string>('all');
   const [activeSiteFilter, setActiveSiteFilter] = useState<string>('all');
   const [activeDcFilter, setActiveDcFilter] = useState<string>('all');
+  const [activeGwFilter, setActiveGwFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchField, setSearchField] = useState<string>('all');
   const [activeMetricFilter, setActiveMetricFilter] = useState<string>('all');
@@ -259,19 +263,24 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
 
   const handleCountryFilterChange = (country: string) => {
     setActiveCountryFilter(country);
-    // Reset lower-level filters when country changes
     setActiveSiteFilter('all');
     setActiveDcFilter('all');
+    setActiveGwFilter('all');
   };
 
   const handleSiteFilterChange = (site: string) => {
     setActiveSiteFilter(site);
-    // Reset DC filter when site changes
     setActiveDcFilter('all');
+    setActiveGwFilter('all');
   };
 
   const handleDcFilterChange = (dc: string) => {
     setActiveDcFilter(dc);
+    setActiveGwFilter('all');
+  };
+
+  const handleGwFilterChange = (gwKey: string) => {
+    setActiveGwFilter(gwKey);
   };
 
   // Derive available filter options dynamically
@@ -285,11 +294,25 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   
   const availableDcs = Array.from(new Set(
     racks
-      .filter(rack => 
+      .filter(rack =>
         (activeCountryFilter === 'all' || rack.country === activeCountryFilter) &&
         (activeSiteFilter === 'all' || rack.site === activeSiteFilter)
       )
       .map(rack => rack.dc || 'N/A')
+  )).sort();
+
+  const availableGateways = Array.from(new Set(
+    racks
+      .filter(rack =>
+        (activeCountryFilter === 'all' || rack.country === activeCountryFilter) &&
+        (activeSiteFilter === 'all' || rack.site === activeSiteFilter) &&
+        (activeDcFilter === 'all' || rack.dc === activeDcFilter)
+      )
+      .map(rack => {
+        const gwName = rack.gwName || 'N/A';
+        const gwIp = rack.gwIp || 'N/A';
+        return `${gwName}-${gwIp}`;
+      })
   )).sort();
 
   // Filter and group the racks
@@ -299,6 +322,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     activeCountryFilter,
     activeSiteFilter,
     activeDcFilter,
+    activeGwFilter,
     searchQuery,
     searchField,
     activeMetricFilter,
@@ -322,9 +346,11 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     activeCountryFilter,
     activeSiteFilter,
     activeDcFilter,
+    activeGwFilter,
     availableCountries,
     availableSites,
     availableDcs,
+    availableGateways,
     toggleCountryExpansion,
     toggleSiteExpansion,
     toggleDcExpansion,
@@ -333,6 +359,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     setActiveCountryFilter: handleCountryFilterChange,
     setActiveSiteFilter: handleSiteFilterChange,
     setActiveDcFilter: handleDcFilterChange,
+    setActiveGwFilter: handleGwFilterChange,
     activeMetricFilter,
     setActiveMetricFilter,
     searchQuery,
