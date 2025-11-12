@@ -63,25 +63,20 @@ function App() {
     expandedCountryIds,
     expandedSiteIds,
     expandedDcIds,
-    expandedGatewayIds,
     activeStatusFilter,
     activeCountryFilter,
     activeSiteFilter,
     activeDcFilter,
-    activeGatewayFilter,
     availableCountries,
     availableSites,
     availableDcs,
-    availableGateways,
     toggleCountryExpansion,
     toggleSiteExpansion,
     toggleDcExpansion,
-    toggleGatewayExpansion,
     setActiveStatusFilter,
     setActiveCountryFilter,
     setActiveSiteFilter,
     setActiveDcFilter,
-    setActiveGatewayFilter,
     activeMetricFilter,
     setActiveMetricFilter,
     searchQuery,
@@ -1541,8 +1536,6 @@ function App() {
                       toggleSiteExpansion={toggleSiteExpansion}
                       expandedDcIds={expandedDcIds}
                       toggleDcExpansion={toggleDcExpansion}
-                      expandedGatewayIds={expandedGatewayIds}
-                      toggleGatewayExpansion={toggleGatewayExpansion}
                       getThresholdValue={getThresholdValueWrapper}
                       getMetricStatusColor={getMetricStatusColor}
                       getAmperageStatusColor={getAmperageStatusColorWrapper}

@@ -5,7 +5,7 @@ import { RackData } from '../types';
 
 interface CountryGroupProps {
   country: string;
-  siteGroups: { [site: string]: { [dc: string]: { [gateway: string]: RackData[][] } } };
+  siteGroups: { [site: string]: { [dc: string]: RackData[][] } };
   originalRackGroups: RackData[][];
   activeView: 'principal' | 'alertas' | 'mantenimiento';
   isExpanded: boolean;
@@ -14,8 +14,6 @@ interface CountryGroupProps {
   toggleSiteExpansion: (site: string) => void;
   expandedDcIds: Set<string>;
   toggleDcExpansion: (dc: string) => void;
-  expandedGatewayIds: Set<string>;
-  toggleGatewayExpansion: (gateway: string) => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
     value: number,
@@ -46,8 +44,6 @@ export default function CountryGroup({
   toggleSiteExpansion,
   expandedDcIds,
   toggleDcExpansion,
-  expandedGatewayIds,
-  toggleGatewayExpansion,
   getThresholdValue,
   getMetricStatusColor,
   getAmperageStatusColor,
@@ -139,27 +135,26 @@ export default function CountryGroup({
                 let count = 0;
 
                 if (status === 'maintenance') {
+                  // Count maintenance racks (only show in main view)
                   if (activeView === 'alertas') return null;
-                  count = Object.values(siteGroups).reduce((total, dcGroups) => {
-                    return total + Object.values(dcGroups).reduce((dcTotal, gatewayGroups) => {
-                      return dcTotal + Object.values(gatewayGroups).flat()
-                        .filter(rackGroup => {
-                          const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                          return maintenanceRacks.has(rackId);
-                        }).length;
-                    }, 0);
-                  }, 0);
+                  count = Object.values(siteGroups).reduce((total, dcGroups) =>
+                    total + Object.values(dcGroups).flat()
+                      .filter(rackGroup => {
+                        const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
+                        return maintenanceRacks.has(rackId);
+                      }).length, 0
+                  );
                 } else {
-                  count = Object.values(siteGroups).reduce((total, dcGroups) => {
-                    return total + Object.values(dcGroups).reduce((dcTotal, gatewayGroups) => {
-                      return dcTotal + Object.values(gatewayGroups).flat()
-                        .filter(rackGroup => {
-                          const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                          if (maintenanceRacks.has(rackId)) return false;
-                          return rackGroup.some(rack => rack.status === status);
-                        }).length;
-                    }, 0);
-                  }, 0);
+                  // Count other statuses, excluding maintenance racks
+                  count = Object.values(siteGroups).reduce((total, dcGroups) =>
+                    total + Object.values(dcGroups).flat()
+                      .filter(rackGroup => {
+                        const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
+                        // Don't count if rack is in maintenance
+                        if (maintenanceRacks.has(rackId)) return false;
+                        return rackGroup.some(rack => rack.status === status);
+                      }).length, 0
+                  );
                 }
 
                 if (count === 0 || (activeView === 'alertas' && status === 'normal')) return null;
@@ -252,8 +247,6 @@ export default function CountryGroup({
               onToggleExpand={toggleSiteExpansion}
               expandedDcIds={expandedDcIds}
               toggleDcExpansion={toggleDcExpansion}
-              expandedGatewayIds={expandedGatewayIds}
-              toggleGatewayExpansion={toggleGatewayExpansion}
               getThresholdValue={getThresholdValue}
               getMetricStatusColor={getMetricStatusColor}
               getAmperageStatusColor={getAmperageStatusColor}
