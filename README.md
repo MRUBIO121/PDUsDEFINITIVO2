@@ -5,11 +5,12 @@ Sistema completo de monitoreo en tiempo real para infraestructura de racks y uni
 ## Características Principales
 
 ### 🎯 Dashboard en Tiempo Real
-- Visualización jerárquica: País → Sitio → Data Center → Racks
+- Visualización jerárquica: País → Sitio → Data Center → Gateway → Racks
 - Estados dinámicos con indicadores visuales (Normal, Advertencia, Crítico, Mantenimiento)
 - Actualización automática cada 30 segundos
 - Vista combinada que agrupa múltiples PDUs por rack lógico
 - Contadores globales independientes de filtros activos
+- Agrupamiento por Gateway con información de nombre e IP
 
 ### 📊 Vista de Alertas
 - Toggle entre vista completa y solo alertas activas
@@ -28,12 +29,15 @@ Sistema completo de monitoreo en tiempo real para infraestructura de racks y uni
 - Persistencia en base de datos
 
 ### 🔍 Filtrado y Búsqueda
-- Filtros geográficos: País, Sitio, Data Center
+- Filtros geográficos: País, Sitio, Data Center, Gateway
+- Filtros jerárquicos con actualización dinámica de opciones disponibles
+- Botones "Mostrar más/menos" para Data Centers y Gateways (>4 elementos)
 - Filtros de estado: Crítico, Advertencia
 - Filtros por métrica: Amperaje, Temperatura, Humedad, Voltaje
 - Búsqueda por: sitio, país, DC, nombre de rack, nodo, cadena, número de serie
 - Auto-selección de filtro cuando el usuario tiene un solo sitio asignado
 - Unificación de sitios Cantabria (Norte y Sur se muestran como "Cantabria")
+- Reseteo automático en cascada de filtros inferiores al cambiar un filtro superior
 
 ### 📈 Métricas Monitoreadas
 - **Amperaje**: Fases monofásicas y trifásicas (0A = normal, solo alerta sobrecarga)
@@ -60,7 +64,7 @@ Sistema completo de monitoreo en tiempo real para infraestructura de racks y uni
 #### Roles Disponibles
 1. **Administrador**: Control total incluyendo gestión de usuarios
 2. **Operador**: Control total excepto gestión de usuarios
-3. **Tecnico**: Ver alertas y gestionar mantenimiento solamente
+3. **Técnico**: Ver alertas y gestionar mantenimiento solamente
 4. **Observador**: Solo lectura sin permisos de modificación
 
 #### Restricciones por Sitio
@@ -75,11 +79,15 @@ Sistema completo de monitoreo en tiempo real para infraestructura de racks y uni
 - Botones deshabilitados visualmente para equipos fuera de permisos
 - Unificación automática de Cantabria Norte y Cantabria Sur
 
-#### Gestión de Usuarios
-- Crear, editar y eliminar usuarios (solo Administradores)
-- Asignar roles y sitios específicos
-- Activar/desactivar usuarios sin eliminarlos
+#### Gestión de Usuarios (Solo Administradores)
+- **Crear usuarios**: Asignar usuario, contraseña, rol y sitios específicos
+- **Editar usuarios**: Modificar roles, contraseñas y sitios asignados
+- **Eliminar usuarios**: Soft delete (desactivar sin borrar del sistema)
+- **Listar usuarios**: Vista completa con filtros y estados
+- **Permisos granulares**: Control de acceso por sitio
 - Contraseñas almacenadas en texto plano (sin cifrado)
+- Interfaz dedicada accesible desde el menú principal
+- Listado de todos los sitios disponibles en el sistema
 
 #### Credenciales por Defecto
 - **Usuario**: `admin`
@@ -92,9 +100,19 @@ Frontend (React/TypeScript)
     ↓ HTTP/REST
 Backend (Node.js/Express)
     ↓ SQL
-SQL Server (Configuración y Usuarios)
+SQL Server (Datos, Configuración y Usuarios)
     ↓ HTTP
 Nginx (Reverse Proxy)
+```
+
+### Jerarquía de Datos
+```
+País
+  └── Sitio
+      └── Data Center
+          └── Gateway (nombre + IP)
+              └── Racks (agrupados por ID lógico)
+                  └── PDUs individuales
 ```
 
 ### Stack Tecnológico
@@ -235,6 +253,14 @@ POST /api/export/alerts           # Exportar alertas a Excel
 ```
 
 ## Funcionalidades Destacadas
+
+### Filtros Geográficos Jerárquicos
+- **Jerarquía**: País → Sitio → Data Center → Gateway
+- **Actualización Dinámica**: Los filtros inferiores se actualizan según la selección superior
+- **Reseteo en Cascada**: Cambiar un filtro superior resetea automáticamente los inferiores
+- **UI Optimizada**: Botón "Mostrar más/menos" para listas con >4 elementos
+- **Gateway**: Muestra nombre del gateway con IP en tooltip al hacer hover
+- **Auto-selección**: Filtro automático para usuarios con un solo sitio asignado
 
 ### Unificación de Cantabria
 - Los sitios "Cantabria Norte" y "Cantabria Sur" se unifican como "Cantabria"
