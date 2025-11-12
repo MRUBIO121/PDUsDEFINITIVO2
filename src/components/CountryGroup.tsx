@@ -5,7 +5,7 @@ import { RackData } from '../types';
 
 interface CountryGroupProps {
   country: string;
-  siteGroups: { [site: string]: { [dc: string]: RackData[][] } };
+  siteGroups: { [site: string]: { [dc: string]: { [gwKey: string]: RackData[][] } } };
   originalRackGroups: RackData[][];
   activeView: 'principal' | 'alertas' | 'mantenimiento';
   isExpanded: boolean;
@@ -14,6 +14,8 @@ interface CountryGroupProps {
   toggleSiteExpansion: (site: string) => void;
   expandedDcIds: Set<string>;
   toggleDcExpansion: (dc: string) => void;
+  expandedGwIds: Set<string>;
+  toggleGwExpansion: (gwKey: string) => void;
   getThresholdValue: (key: string) => number | undefined;
   getMetricStatusColor: (
     value: number,
@@ -44,6 +46,8 @@ export default function CountryGroup({
   toggleSiteExpansion,
   expandedDcIds,
   toggleDcExpansion,
+  expandedGwIds,
+  toggleGwExpansion,
   getThresholdValue,
   getMetricStatusColor,
   getAmperageStatusColor,
@@ -135,22 +139,21 @@ export default function CountryGroup({
                 let count = 0;
 
                 if (status === 'maintenance') {
-                  // Count maintenance racks (only show in main view)
                   if (activeView === 'alertas') return null;
                   count = Object.values(siteGroups).reduce((total, dcGroups) =>
-                    total + Object.values(dcGroups).flat()
+                    total + Object.values(dcGroups)
+                      .flatMap(gwGroups => Object.values(gwGroups).flat())
                       .filter(rackGroup => {
                         const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
                         return maintenanceRacks.has(rackId);
                       }).length, 0
                   );
                 } else {
-                  // Count other statuses, excluding maintenance racks
                   count = Object.values(siteGroups).reduce((total, dcGroups) =>
-                    total + Object.values(dcGroups).flat()
+                    total + Object.values(dcGroups)
+                      .flatMap(gwGroups => Object.values(gwGroups).flat())
                       .filter(rackGroup => {
                         const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                        // Don't count if rack is in maintenance
                         if (maintenanceRacks.has(rackId)) return false;
                         return rackGroup.some(rack => rack.status === status);
                       }).length, 0
@@ -247,6 +250,8 @@ export default function CountryGroup({
               onToggleExpand={toggleSiteExpansion}
               expandedDcIds={expandedDcIds}
               toggleDcExpansion={toggleDcExpansion}
+              expandedGwIds={expandedGwIds}
+              toggleGwExpansion={toggleGwExpansion}
               getThresholdValue={getThresholdValue}
               getMetricStatusColor={getMetricStatusColor}
               getAmperageStatusColor={getAmperageStatusColor}

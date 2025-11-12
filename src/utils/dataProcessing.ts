@@ -1,12 +1,11 @@
 import { RackData } from '../types';
 
 /**
- * Groups racks by country, site, DC, and logical rack ID
+ * Groups racks by country, site, DC, Gateway, and logical rack ID
  */
-export function groupRacksByCountry(racks: RackData[]): { [country: string]: { [site: string]: { [dc: string]: RackData[][] } } } {
-  const countryGroups: { [country: string]: { [site: string]: { [dc: string]: RackData[][] } } } = {};
-  
-  // First, group all racks by country
+export function groupRacksByCountry(racks: RackData[]): { [country: string]: { [site: string]: { [dc: string]: { [gwKey: string]: RackData[][] } } } } {
+  const countryGroups: { [country: string]: { [site: string]: { [dc: string]: { [gwKey: string]: RackData[][] } } } } = {};
+
   const racksByCountry: { [country: string]: RackData[] } = {};
   racks.forEach(rack => {
     const country = rack.country || 'N/A';
@@ -15,40 +14,37 @@ export function groupRacksByCountry(racks: RackData[]): { [country: string]: { [
     }
     racksByCountry[country].push(rack);
   });
-  
-  // Then, for each country, group all its racks by site
+
   Object.entries(racksByCountry).forEach(([country, countryRacks]) => {
     if (!countryGroups[country]) {
       countryGroups[country] = {};
     }
-    
+
     const siteGroups = groupRacksBySite(countryRacks);
     Object.entries(siteGroups).forEach(([site, dcGroups]) => {
       if (!countryGroups[country][site]) {
         countryGroups[country][site] = {};
       }
-      
-      Object.entries(dcGroups).forEach(([dc, logicalRackGroups]) => {
+
+      Object.entries(dcGroups).forEach(([dc, gwGroups]) => {
         if (!countryGroups[country][site][dc]) {
-          countryGroups[country][site][dc] = [];
+          countryGroups[country][site][dc] = {};
         }
-        
-        // Add all logical rack groups from this site/dc to the country structure
-        countryGroups[country][site][dc] = logicalRackGroups;
+
+        countryGroups[country][site][dc] = gwGroups;
       });
     });
   });
-  
+
   return countryGroups;
 }
 
 /**
- * Groups racks by site, DC, and logical rack ID
+ * Groups racks by site, DC, Gateway, and logical rack ID
  */
-export function groupRacksBySite(racks: RackData[]): { [site: string]: { [dc: string]: RackData[][] } } {
-  const siteGroups: { [site: string]: { [dc: string]: RackData[][] } } = {};
-  
-  // First, group all racks by site
+export function groupRacksBySite(racks: RackData[]): { [site: string]: { [dc: string]: { [gwKey: string]: RackData[][] } } } {
+  const siteGroups: { [site: string]: { [dc: string]: { [gwKey: string]: RackData[][] } } } = {};
+
   const racksBySite: { [site: string]: RackData[] } = {};
   racks.forEach(rack => {
     const site = rack.site || 'N/A';
@@ -57,34 +53,31 @@ export function groupRacksBySite(racks: RackData[]): { [site: string]: { [dc: st
     }
     racksBySite[site].push(rack);
   });
-  
-  // Then, for each site, group all its racks by DC
+
   Object.entries(racksBySite).forEach(([site, siteRacks]) => {
     if (!siteGroups[site]) {
       siteGroups[site] = {};
     }
-    
+
     const dcGroups = groupRacksByDc(siteRacks);
-    Object.entries(dcGroups).forEach(([dc, logicalRackGroups]) => {
+    Object.entries(dcGroups).forEach(([dc, gwGroups]) => {
       if (!siteGroups[site][dc]) {
-        siteGroups[site][dc] = [];
+        siteGroups[site][dc] = {};
       }
-      
-      // Add all logical rack groups from this DC to the site structure
-      siteGroups[site][dc] = logicalRackGroups;
+
+      siteGroups[site][dc] = gwGroups;
     });
   });
-  
+
   return siteGroups;
 }
 
 /**
- * Groups racks by DC and rack ID
+ * Groups racks by DC and Gateway
  */
-export function groupRacksByDc(racks: RackData[]): { [dc: string]: RackData[][] } {
-  const dcGroups: { [dc: string]: RackData[][] } = {};
-  
-  // First, group racks by DC
+export function groupRacksByDc(racks: RackData[]): { [dc: string]: { [gwKey: string]: RackData[][] } } {
+  const dcGroups: { [dc: string]: { [gwKey: string]: RackData[][] } } = {};
+
   const racksByDc: { [dc: string]: RackData[] } = {};
   racks.forEach(rack => {
     const dc = rack.dc || 'N/A';
@@ -93,12 +86,47 @@ export function groupRacksByDc(racks: RackData[]): { [dc: string]: RackData[][] 
     }
     racksByDc[dc].push(rack);
   });
-  
-  // Then, for each DC, group racks by rack ID using Map for accuracy
+
   Object.entries(racksByDc).forEach(([dc, dcRacks]) => {
+    if (!dcGroups[dc]) {
+      dcGroups[dc] = {};
+    }
+
+    const gwGroups = groupRacksByGateway(dcRacks);
+    Object.entries(gwGroups).forEach(([gwKey, logicalRackGroups]) => {
+      if (!dcGroups[dc][gwKey]) {
+        dcGroups[dc][gwKey] = [];
+      }
+
+      dcGroups[dc][gwKey] = logicalRackGroups;
+    });
+  });
+
+  return dcGroups;
+}
+
+/**
+ * Groups racks by Gateway and rack ID
+ */
+export function groupRacksByGateway(racks: RackData[]): { [gwKey: string]: RackData[][] } {
+  const gwGroups: { [gwKey: string]: RackData[][] } = {};
+
+  const racksByGw: { [gwKey: string]: RackData[] } = {};
+  racks.forEach(rack => {
+    const gwName = rack.gwName || 'N/A';
+    const gwIp = rack.gwIp || 'N/A';
+    const gwKey = `${gwName}-${gwIp}`;
+
+    if (!racksByGw[gwKey]) {
+      racksByGw[gwKey] = [];
+    }
+    racksByGw[gwKey].push(rack);
+  });
+
+  Object.entries(racksByGw).forEach(([gwKey, gwRacks]) => {
     const rackMap = new Map<string, RackData[]>();
 
-    dcRacks.forEach(rack => {
+    gwRacks.forEach(rack => {
       const rackId = rack.rackId || rack.id;
 
       if (!rackMap.has(rackId)) {
@@ -108,25 +136,22 @@ export function groupRacksByDc(racks: RackData[]): { [dc: string]: RackData[][] 
       rackMap.get(rackId)!.push(rack);
     });
 
-    // Convert Map to array of arrays and sort by chain first, then alphabetically by rack name
-    dcGroups[dc] = Array.from(rackMap.values()).sort((a, b) => {
+    gwGroups[gwKey] = Array.from(rackMap.values()).sort((a, b) => {
       const chainA = a[0]?.chain || '';
       const chainB = b[0]?.chain || '';
 
-      // First compare by chain
       const chainComparison = chainA.localeCompare(chainB, undefined, { numeric: true });
       if (chainComparison !== 0) {
         return chainComparison;
       }
 
-      // If chains are equal, sort alphabetically by name
       const nameA = (a[0]?.name || '').toLowerCase();
       const nameB = (b[0]?.name || '').toLowerCase();
       return nameA.localeCompare(nameB);
     });
   });
-  
-  return dcGroups;
+
+  return gwGroups;
 }
 
 /**
