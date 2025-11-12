@@ -129,26 +129,19 @@ function App() {
 
   const filteredRackGroups = React.useMemo(() => {
     const rackGroups: RackData[][] = [];
-    let maintenanceCount = 0;
 
     Object.values(groupedRacks).forEach(siteGroups => {
       Object.values(siteGroups).forEach(dcGroups => {
-        Object.values(dcGroups).forEach(logicalGroups => {
-          logicalGroups.forEach(group => {
-            const rackId = String(group[0]?.rackId || '').trim();
-            const isInMaintenance = rackId && maintenanceRacks.has(rackId);
-
-            if (isInMaintenance) {
-              maintenanceCount++;
-            }
+        Object.values(dcGroups).forEach(gwGroups => {
+          Object.values(gwGroups).forEach(logicalGroups => {
+            rackGroups.push(...logicalGroups);
           });
-          rackGroups.push(...logicalGroups);
         });
       });
     });
 
     return rackGroups;
-  }, [groupedRacks, activeView, maintenanceRacks]);
+  }, [groupedRacks, maintenanceRacks]);
 
   // Calculate alert summary statistics
   const filteredAlertSummary = React.useMemo(() => {

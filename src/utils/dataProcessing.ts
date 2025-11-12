@@ -6,6 +6,11 @@ import { RackData } from '../types';
 export function groupRacksByCountry(racks: RackData[]): { [country: string]: { [site: string]: { [dc: string]: { [gwKey: string]: RackData[][] } } } } {
   const countryGroups: { [country: string]: { [site: string]: { [dc: string]: { [gwKey: string]: RackData[][] } } } } = {};
 
+  if (!Array.isArray(racks)) {
+    console.error('❌ groupRacksByCountry: racks no es un array', racks);
+    return {};
+  }
+
   const racksByCountry: { [country: string]: RackData[] } = {};
   racks.forEach(rack => {
     const country = rack.country || 'N/A';
@@ -34,6 +39,15 @@ export function groupRacksByCountry(racks: RackData[]): { [country: string]: { [
         countryGroups[country][site][dc] = gwGroups;
       });
     });
+  });
+
+  console.log('✅ Estructura de agrupamiento creada:', {
+    países: Object.keys(countryGroups).length,
+    ejemplo: Object.keys(countryGroups)[0] ? {
+      país: Object.keys(countryGroups)[0],
+      sitios: Object.keys(countryGroups[Object.keys(countryGroups)[0]]).length,
+      estructura: 'País → Sitio → DC → Gateway → Racks'
+    } : 'Sin datos'
   });
 
   return countryGroups;
@@ -111,6 +125,11 @@ export function groupRacksByDc(racks: RackData[]): { [dc: string]: { [gwKey: str
 export function groupRacksByGateway(racks: RackData[]): { [gwKey: string]: RackData[][] } {
   const gwGroups: { [gwKey: string]: RackData[][] } = {};
 
+  if (!Array.isArray(racks)) {
+    console.error('❌ groupRacksByGateway: racks no es un array', racks);
+    return {};
+  }
+
   const racksByGw: { [gwKey: string]: RackData[] } = {};
   racks.forEach(rack => {
     const gwName = rack.gwName || 'N/A';
@@ -149,6 +168,14 @@ export function groupRacksByGateway(racks: RackData[]): { [gwKey: string]: RackD
       const nameB = (b[0]?.name || '').toLowerCase();
       return nameA.localeCompare(nameB);
     });
+  });
+
+  console.log('🌐 Gateways agrupados:', {
+    totalGateways: Object.keys(gwGroups).length,
+    gateways: Object.keys(gwGroups).map(key => {
+      const [name, ip] = key.split('-');
+      return { name, ip, racks: gwGroups[key].length };
+    })
   });
 
   return gwGroups;

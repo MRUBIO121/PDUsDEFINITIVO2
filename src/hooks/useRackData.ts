@@ -118,6 +118,15 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         }
       });
 
+      console.log('📡 Datos de racks recibidos:', {
+        total: flatRacks.length,
+        primerosRacks: flatRacks.slice(0, 3).map(r => ({
+          name: r.name,
+          gwName: r.gwName || 'Sin Gateway',
+          gwIp: r.gwIp || 'Sin IP'
+        }))
+      });
+
       setRacks(flatRacks);
     } catch (err) {
       console.error('Error fetching racks:', err);

@@ -92,11 +92,6 @@ export function useThresholds(options: UseThresholdsOptions = {}): UseThresholds
         }
 
         // Log voltage thresholds for verification
-        const voltageThresholds = (data.data || []).filter((t: any) => t.key && t.key.includes('voltage'));
-        if (voltageThresholds.length > 0) {
-          console.log('📊 Umbrales de Voltaje cargados:', voltageThresholds.map((t: any) => `${t.key}=${t.value}V`).join(', '));
-        }
-
         setThresholds(data.data || []);
         setGlobalThresholds(data.data || []);
         setRackSpecificThresholds([]);
