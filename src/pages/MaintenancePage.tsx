@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2, ChevronDown, ChevronUp, Upload, XCircle } from 'lucide-react';
 import ImportMaintenanceModal from '../components/ImportMaintenanceModal';
 import { useAuth } from '../contexts/AuthContext';
+import { useRackData } from '../hooks/useRackData';
 
 interface RackDetail {
   rack_id: string;
@@ -33,6 +34,7 @@ interface MaintenanceEntry {
 
 export default function MaintenancePage() {
   const { user } = useAuth();
+  const { maintenanceRacks } = useRackData({ forceShowAllRacks: false });
   const [maintenanceEntries, setMaintenanceEntries] = useState<MaintenanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -300,14 +302,9 @@ export default function MaintenancePage() {
   // No filtering - show all maintenance entries
   const filteredMaintenanceEntries = maintenanceEntries;
 
-  // Count unique racks across all maintenance entries
-  const uniqueRackIds = new Set<string>();
-  filteredMaintenanceEntries.forEach(entry => {
-    entry.racks.forEach(rack => {
-      uniqueRackIds.add(rack.rack_id);
-    });
-  });
-  const totalRacks = uniqueRackIds.size;
+  // Use maintenanceRacks from useRackData hook - this already counts unique physical racks correctly
+  // This matches the counting logic used in the main dashboard (App.tsx)
+  const totalRacks = maintenanceRacks.size;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">
