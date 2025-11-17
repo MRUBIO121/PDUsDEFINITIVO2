@@ -149,6 +149,32 @@ function App() {
       });
     });
 
+    // Debug: Check which maintenance racks are not in power data
+    const powerRackIds = new Set<string>();
+    rackGroups.forEach(rackGroup => {
+      const rackId = String(rackGroup[0].rackId || '').trim();
+      if (rackId) {
+        powerRackIds.add(rackId);
+      }
+    });
+
+    const maintenanceNotInPower: string[] = [];
+    maintenanceRacks.forEach(maintRackId => {
+      if (!powerRackIds.has(maintRackId)) {
+        maintenanceNotInPower.push(maintRackId);
+      }
+    });
+
+    if (maintenanceNotInPower.length > 0) {
+      console.warn(`⚠️ ${maintenanceNotInPower.length} racks en mantenimiento NO encontrados en datos de power:`, maintenanceNotInPower.slice(0, 10));
+    }
+
+    console.log('🔍 Rack Comparison:', {
+      powerRacks: powerRackIds.size,
+      maintenanceRacks: maintenanceRacks.size,
+      notFoundInPower: maintenanceNotInPower.length
+    });
+
     return rackGroups;
   }, [groupedRacks, maintenanceRacks]);
 
