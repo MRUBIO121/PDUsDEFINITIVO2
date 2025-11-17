@@ -123,10 +123,15 @@ export default function GatewayGroup({
 
             if (status === 'maintenance') {
               if (activeView === 'alertas') return null;
-              count = rackGroups.filter(rackGroup => {
+              // Count unique racks in maintenance (not individual PDUs)
+              const uniqueMaintenanceRacks = new Set<string>();
+              rackGroups.forEach(rackGroup => {
                 const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                return maintenanceRacks.has(rackId);
-              }).length;
+                if (rackId && maintenanceRacks.has(rackId)) {
+                  uniqueMaintenanceRacks.add(rackId);
+                }
+              });
+              count = uniqueMaintenanceRacks.size;
             } else {
               count = rackGroups.filter(rackGroup => {
                 const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;

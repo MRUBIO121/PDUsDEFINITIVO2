@@ -130,12 +130,17 @@ export default function SiteGroup({
 
                 if (status === 'maintenance') {
                   if (activeView === 'alertas') return null;
-                  count = Object.values(dcGroups)
-                    .flatMap(gwGroups => Object.values(gwGroups).flat())
-                    .filter(rackGroup => {
+                  // Count unique racks in maintenance (not individual PDUs)
+                  const uniqueMaintenanceRacks = new Set<string>();
+                  Object.values(dcGroups).forEach(gwGroups => {
+                    Object.values(gwGroups).flat().forEach(rackGroup => {
                       const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                      return maintenanceRacks.has(rackId);
-                    }).length;
+                      if (rackId && maintenanceRacks.has(rackId)) {
+                        uniqueMaintenanceRacks.add(rackId);
+                      }
+                    });
+                  });
+                  count = uniqueMaintenanceRacks.size;
                 } else {
                   count = Object.values(dcGroups)
                     .flatMap(gwGroups => Object.values(gwGroups).flat())

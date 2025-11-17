@@ -128,11 +128,15 @@ export default function DcGroup({
 
             if (status === 'maintenance') {
               if (activeView === 'alertas') return null;
-              count = Object.values(gwGroups).flat()
-                .filter(rackGroup => {
-                  const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                  return maintenanceRacks.has(rackId);
-                }).length;
+              // Count unique racks in maintenance (not individual PDUs)
+              const uniqueMaintenanceRacks = new Set<string>();
+              Object.values(gwGroups).flat().forEach(rackGroup => {
+                const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
+                if (rackId && maintenanceRacks.has(rackId)) {
+                  uniqueMaintenanceRacks.add(rackId);
+                }
+              });
+              count = uniqueMaintenanceRacks.size;
             } else {
               count = Object.values(gwGroups).flat()
                 .filter(rackGroup => {
