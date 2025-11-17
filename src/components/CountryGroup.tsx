@@ -243,7 +243,7 @@ export default function CountryGroup({
       {/* Site Groups within this Country */}
       {isExpanded && (
         <div className="space-y-4 px-3 pb-6">
-          {Object.entries(siteGroups).sort(([a], [b]) => a.localeCompare(b)).map(([site, dcGroups]) => (
+          {Object.entries(siteGroups).sort(([a], [b]) => String(a).localeCompare(String(b))).map(([site, dcGroups]) => (
             <SiteGroup
               key={site}
               site={site}
