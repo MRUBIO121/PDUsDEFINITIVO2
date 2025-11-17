@@ -1359,7 +1359,7 @@ function App() {
                       <option value="all">Todos los campos</option>
                       <option value="site">Sitio</option>
                       <option value="country">País</option>
-                      <option value="dc">Data Center</option>
+                      <option value="dc">Sala</option>
                       <option value="name">Nombre del Rack</option>
                       <option value="node">Nodo</option>
                       <option value="chain">Cadena</option>
@@ -1379,7 +1379,7 @@ function App() {
                               : searchField === 'country'
                                 ? "Buscar por país..."
                                 : searchField === 'dc'
-                                  ? "Buscar por data center..."
+                                  ? "Buscar por sala..."
                                   : searchField === 'name'
                                     ? "Buscar por nombre del rack..."
                                     : searchField === 'node'
@@ -1503,10 +1503,10 @@ function App() {
                         </div>
                       </div>
 
-                      {/* Data Center Filter */}
+                      {/* Sala Filter */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-3">
-                          Data Center:
+                          Sala:
                         </label>
                         <div className="flex flex-wrap gap-2">
                           <button
