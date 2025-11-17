@@ -224,7 +224,7 @@ export default function DcGroup({
 
       {isExpanded && (
         <div className="space-y-4 px-3 pb-6">
-          {Object.entries(gwGroups).sort(([a], [b]) => String(a).localeCompare(String(b))).map(([gwKey, logicalRackGroups]) => {
+          {Object.entries(gwGroups).sort(([a], [b]) => a.localeCompare(b)).map(([gwKey, logicalRackGroups]) => {
             const [gwName, gwIp] = gwKey.split('-');
             return (
               <GatewayGroup

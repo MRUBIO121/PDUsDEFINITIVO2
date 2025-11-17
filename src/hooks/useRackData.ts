@@ -293,12 +293,12 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   };
 
   // Derive available filter options dynamically
-  const availableCountries = Array.from(new Set(racks.map(rack => String(rack.country || 'N/A')))).sort();
+  const availableCountries = Array.from(new Set(racks.map(rack => rack.country || 'N/A'))).sort();
   
   const availableSites = Array.from(new Set(
     racks
       .filter(rack => activeCountryFilter === 'all' || rack.country === activeCountryFilter)
-      .map(rack => String(rack.site || 'N/A'))
+      .map(rack => rack.site || 'N/A')
   )).sort();
   
   const availableDcs = Array.from(new Set(
@@ -307,7 +307,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         (activeCountryFilter === 'all' || rack.country === activeCountryFilter) &&
         (activeSiteFilter === 'all' || rack.site === activeSiteFilter)
       )
-      .map(rack => String(rack.dc || 'N/A'))
+      .map(rack => rack.dc || 'N/A')
   )).sort();
 
   const availableGateways = Array.from(new Set(
@@ -318,8 +318,8 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
         (activeDcFilter === 'all' || rack.dc === activeDcFilter)
       )
       .map(rack => {
-        const gwName = String(rack.gwName || 'N/A');
-        const gwIp = String(rack.gwIp || 'N/A');
+        const gwName = rack.gwName || 'N/A';
+        const gwIp = rack.gwIp || 'N/A';
         return `${gwName}-${gwIp}`;
       })
   )).sort();
