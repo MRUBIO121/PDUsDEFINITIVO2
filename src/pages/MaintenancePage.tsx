@@ -24,6 +24,7 @@ interface MaintenanceEntry {
   site: string | null;
   dc: string;
   reason: string;
+  user: string;
   started_at: string;
   started_by: string;
   created_at: string;
@@ -466,19 +467,30 @@ export default function MaintenancePage() {
                           )}
                         </div>
 
-                        <div className="mt-4 text-sm">
-                          <div className="flex items-center gap-2 text-slate-600 mb-2">
+                        <div className="mt-4 space-y-2 text-sm">
+                          <div className="flex items-center gap-2 text-slate-600">
                             <Calendar className="w-4 h-4" />
                             <span className="font-medium">Inicio:</span>
                             <span>{new Date(entry.started_at).toLocaleString('es-ES')}</span>
                           </div>
-                        </div>
 
-                        {entry.reason && (
-                          <div className="mt-3 text-sm text-slate-700">
-                            <span className="font-medium">Motivo:</span> {entry.reason}
-                          </div>
-                        )}
+                          {entry.user && (
+                            <div className="flex items-center gap-2 text-slate-600">
+                              <User className="w-4 h-4" />
+                              <span className="font-medium">Usuario:</span>
+                              <span>{entry.user}</span>
+                            </div>
+                          )}
+
+                          {entry.reason && (
+                            <div className="flex items-start gap-2 text-slate-700">
+                              <AlertCircle className="w-4 h-4 mt-0.5" />
+                              <div>
+                                <span className="font-medium">Razón:</span> {entry.reason}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {user?.rol !== 'Observador' && canFinishMaintenance && (

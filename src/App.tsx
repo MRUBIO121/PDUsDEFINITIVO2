@@ -563,7 +563,7 @@ function App() {
       return;
     }
 
-    const reason = `(${user?.usuario || 'Usuario'}) ${userReason || 'Mantenimiento programado'}`;
+    const reason = userReason || 'Mantenimiento programado';
 
     try {
       const response = await fetch('/api/maintenance/rack', {
@@ -576,7 +576,7 @@ function App() {
           rackId,
           rackData,
           reason,
-          startedBy: user?.usuario || 'Usuario'
+          user: user?.usuario || 'Sistema'
         })
       });
 
@@ -613,7 +613,7 @@ function App() {
       return;
     }
 
-    const reason = `(${user?.usuario || 'Usuario'}) ${userReason || 'Mantenimiento programado'}`;
+    const reason = userReason || 'Mantenimiento programado';
 
     try {
       const response = await fetch('/api/maintenance/chain', {
@@ -628,7 +628,7 @@ function App() {
           dc,
           rackData,
           reason,
-          startedBy: user?.usuario || 'Usuario'
+          user: user?.usuario || 'Sistema'
         })
       });
 

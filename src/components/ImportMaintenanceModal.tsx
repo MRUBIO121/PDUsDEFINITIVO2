@@ -108,10 +108,8 @@ export default function ImportMaintenanceModal({ isOpen, onClose, onImportComple
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('startedBy', user?.usuario || 'Sistema');
-      // Format: (Usuario) motivo
-      const formattedReason = `(${user?.usuario || 'Sistema'}) ${defaultReason}`;
-      formData.append('defaultReason', formattedReason);
+      formData.append('user', user?.usuario || 'Sistema');
+      formData.append('defaultReason', defaultReason);
 
       const response = await fetch('/api/maintenance/import-excel', {
         method: 'POST',
@@ -181,7 +179,7 @@ export default function ImportMaintenanceModal({ isOpen, onClose, onImportComple
                   Motivo por defecto
                 </label>
                 <div className="mb-2 text-sm text-slate-600">
-                  Se añadirá automáticamente como: <span className="font-medium">({user?.usuario || 'Sistema'})</span> {defaultReason || 'Mantenimiento'}
+                  Usuario: <span className="font-medium">{user?.usuario || 'Sistema'}</span>
                 </div>
                 <input
                   type="text"

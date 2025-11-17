@@ -2047,6 +2047,7 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           site,
           dc,
           reason,
+          [user],
           started_at,
           started_by,
           created_at
@@ -2154,7 +2155,7 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       rackId,
       rackData,
       reason = 'Mantenimiento programado',
-      startedBy = 'Sistema'
+      user = 'Sistema'
     } = req.body;
 
     if (!rackId) {
@@ -2248,12 +2249,13 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         .input('site', sql.NVarChar, site)
         .input('dc', sql.NVarChar, dc)
         .input('reason', sql.NVarChar, reason)
-        .input('started_by', sql.NVarChar, startedBy)
+        .input('user', sql.NVarChar, user)
+        .input('started_by', sql.NVarChar, user)
         .query(`
           INSERT INTO maintenance_entries
-          (id, entry_type, rack_id, chain, site, dc, reason, started_by)
+          (id, entry_type, rack_id, chain, site, dc, reason, [user], started_by)
           VALUES
-          (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @started_by)
+          (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @user, @started_by)
         `);
 
       // Insert rack details
@@ -2343,7 +2345,7 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
       site,
       dc,
       reason = 'Mantenimiento programado de chain',
-      startedBy = 'Sistema'
+      user = 'Sistema'
     } = req.body;
 
     if (!chain || !dc) {
@@ -2555,12 +2557,13 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
         .input('site', sql.NVarChar, site || 'Unknown')
         .input('dc', sql.NVarChar, sanitizedDc)
         .input('reason', sql.NVarChar, reason)
-        .input('started_by', sql.NVarChar, startedBy)
+        .input('user', sql.NVarChar, user)
+        .input('started_by', sql.NVarChar, user)
         .query(`
           INSERT INTO maintenance_entries
-          (id, entry_type, rack_id, chain, site, dc, reason, started_by)
+          (id, entry_type, rack_id, chain, site, dc, reason, [user], started_by)
           VALUES
-          (@entry_id, @entry_type, NULL, @chain, @site, @dc, @reason, @started_by)
+          (@entry_id, @entry_type, NULL, @chain, @site, @dc, @reason, @user, @started_by)
         `);
 
       // Insert all racks as details of this maintenance entry
@@ -3049,7 +3052,7 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
       });
     }
 
-    const { startedBy = 'Sistema', defaultReason = 'Mantenimiento' } = req.body;
+    const { user = 'Sistema', defaultReason = 'Mantenimiento' } = req.body;
 
     console.log(`[${requestId}] 📄 File received: ${req.file.originalname} (${req.file.size} bytes)`);
 
@@ -3171,12 +3174,13 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
             .input('site', sql.NVarChar, rack.site || 'Unknown')
             .input('dc', sql.NVarChar, rack.dc)
             .input('reason', sql.NVarChar, rack.reason)
-            .input('started_by', sql.NVarChar, startedBy)
+            .input('user', sql.NVarChar, user)
+            .input('started_by', sql.NVarChar, user)
             .query(`
               INSERT INTO maintenance_entries
-              (id, entry_type, rack_id, chain, site, dc, reason, started_by)
+              (id, entry_type, rack_id, chain, site, dc, reason, [user], started_by)
               VALUES
-              (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @started_by)
+              (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @user, @started_by)
             `);
 
           await pool.request()
