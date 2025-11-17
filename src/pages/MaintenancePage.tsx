@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2, ChevronDown, ChevronUp, Upload, XCircle } from 'lucide-react';
 import ImportMaintenanceModal from '../components/ImportMaintenanceModal';
 import { useAuth } from '../contexts/AuthContext';
-import { useRackData } from '../hooks/useRackData';
 
 interface RackDetail {
   rack_id: string;
@@ -34,7 +33,6 @@ interface MaintenanceEntry {
 
 export default function MaintenancePage() {
   const { user } = useAuth();
-  const { maintenanceRacks } = useRackData({ forceShowAllRacks: false });
   const [maintenanceEntries, setMaintenanceEntries] = useState<MaintenanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -302,9 +300,33 @@ export default function MaintenancePage() {
   // No filtering - show all maintenance entries
   const filteredMaintenanceEntries = maintenanceEntries;
 
-  // Use maintenanceRacks from useRackData hook - this already counts unique physical racks correctly
+  // Count UNIQUE physical racks across all maintenance entries
+  // Multiple entries can have the same rack_id, so we use a Set to ensure uniqueness
   // This matches the counting logic used in the main dashboard (App.tsx)
-  const totalRacks = maintenanceRacks.size;
+  const uniqueRackIds = new Set<string>();
+  let totalRackRecords = 0;
+
+  filteredMaintenanceEntries.forEach(entry => {
+    entry.racks.forEach(rack => {
+      totalRackRecords++;
+      if (rack.rack_id) {
+        const rackIdStr = String(rack.rack_id).trim();
+        if (rackIdStr) {
+          uniqueRackIds.add(rackIdStr);
+        }
+      }
+    });
+  });
+
+  const totalRacks = uniqueRackIds.size;
+
+  // Debug logging
+  console.log('🔍 Maintenance Page Rack Count:', {
+    entries: filteredMaintenanceEntries.length,
+    totalRackRecords,
+    uniqueRacks: totalRacks,
+    sampleRackIds: Array.from(uniqueRackIds).slice(0, 5)
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">

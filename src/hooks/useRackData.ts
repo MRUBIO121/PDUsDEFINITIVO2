@@ -165,10 +165,12 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       const data = await response.json();
       if (data.success && Array.isArray(data.data)) {
         const maintenanceSet = new Set<string>();
+        let totalRackRecords = 0;
 
         data.data.forEach((entry: any) => {
           if (Array.isArray(entry.racks)) {
             entry.racks.forEach((rack: any) => {
+              totalRackRecords++;
               if (rack.rack_id) {
                 const rackIdStr = String(rack.rack_id).trim();
                 if (rackIdStr) {
@@ -177,6 +179,13 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
               }
             });
           }
+        });
+
+        console.log('🔍 useRackData - Maintenance Racks Loaded:', {
+          entries: data.data.length,
+          totalRackRecords,
+          uniqueRacks: maintenanceSet.size,
+          sampleRackIds: Array.from(maintenanceSet).slice(0, 5)
         });
 
         setMaintenanceRacks(maintenanceSet);
