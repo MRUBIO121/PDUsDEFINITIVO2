@@ -45,6 +45,12 @@ export default function MaintenancePage() {
   // Check if user can finish maintenance for a specific site
   const canUserFinishMaintenance = (siteName: string | null | undefined): boolean => {
     if (!siteName) return false;
+
+    // Administrators have access to all sites
+    if (user?.rol === 'Administrador') {
+      return true;
+    }
+
     if (!user?.sitios_asignados || user.sitios_asignados.length === 0) {
       return true; // No restrictions
     }
@@ -346,8 +352,8 @@ export default function MaintenancePage() {
             Equipos actualmente en mantenimiento (no generan alertas)
           </p>
 
-          {/* Info banner for users with site restrictions */}
-          {user?.sitios_asignados && user.sitios_asignados.length > 0 && (
+          {/* Info banner for users with site restrictions (not for Administrators) */}
+          {user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0 && (
             <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />

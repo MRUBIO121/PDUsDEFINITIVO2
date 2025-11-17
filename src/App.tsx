@@ -32,6 +32,11 @@ function App() {
   // Helper function to check if user has access to a site
   // Handles Cantabria Norte/Sur unification
   const userHasAccessToSite = (siteName: string): boolean => {
+    // Administrators have access to all sites
+    if (user?.rol === 'Administrador') {
+      return true;
+    }
+
     if (!user?.sitios_asignados || user.sitios_asignados.length === 0) {
       return true; // No restrictions
     }
@@ -521,8 +526,8 @@ function App() {
   };
 
   const handleConfigureThresholds = (rackId: string, rackName: string) => {
-    // Check if user has permission based on assigned sites (applies to ALL users including Administrators)
-    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
+    // Check if user has permission based on assigned sites (Administrators are exempt)
+    if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
       // Find rack data to check its site
       const rackData = racks.find(r => r.rackId === rackId);
       if (rackData && !userHasAccessToSite(rackData.site)) {
@@ -549,8 +554,8 @@ function App() {
   };
 
   const handleSendRackToMaintenance = async (rackId: string, chain: string, rackName: string, rackData?: any) => {
-    // Check if user has permission based on assigned sites (applies to ALL users including Administrators)
-    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
+    // Check if user has permission based on assigned sites (Administrators are exempt)
+    if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
       if (rackData && !userHasAccessToSite(rackData.site)) {
         alert(`No tienes permisos para enviar a mantenimiento racks fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;
@@ -599,8 +604,8 @@ function App() {
   };
 
   const handleSendChainToMaintenance = async (chain: string, site: string, dc: string, rackData?: any) => {
-    // Check if user has permission based on assigned sites (applies to ALL users including Administrators)
-    if (user?.sitios_asignados && user.sitios_asignados.length > 0) {
+    // Check if user has permission based on assigned sites (Administrators are exempt)
+    if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
       if (!userHasAccessToSite(site)) {
         alert(`No tienes permisos para enviar a mantenimiento chains fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
         return;

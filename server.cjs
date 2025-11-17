@@ -2894,9 +2894,9 @@ app.delete('/api/maintenance/all', requireAuth, async (req, res) => {
 
   try {
     const result = await executeQuery(async (pool) => {
-      // For users with assigned sites, only delete entries from their sites
+      // For users with assigned sites (but NOT Administrators), only delete entries from their sites
       let whereClause = '';
-      if (req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
+      if (req.session.userRole !== 'Administrador' && req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
         const sitesCondition = req.session.sitiosAsignados.map(site => `'${site.replace("'", "''")}'`).join(',');
         whereClause = `WHERE site IN (${sitesCondition})`;
       }
