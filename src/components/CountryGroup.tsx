@@ -123,7 +123,7 @@ export default function CountryGroup({
               </div>
               <h1 className="font-bold text-gray-900 text-2xl flex items-center">
                 <span className="mr-2 text-3xl">{getCountryFlag(country)}</span>
-                {country}
+                España
               </h1>
               <p className="text-gray-600 mt-1 flex items-center text-sm">
                 <Building className="mr-1 h-4 w-4" />

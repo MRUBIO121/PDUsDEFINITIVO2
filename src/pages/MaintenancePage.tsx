@@ -423,7 +423,7 @@ export default function MaintenancePage() {
             {filteredMaintenanceEntries.map(entry => {
               const isChainEntry = entry.entry_type === 'chain';
               const displayTitle = isChainEntry
-                ? `Chain ${entry.chain} - DC ${entry.dc}`
+                ? `Chain ${entry.chain} - Sala ${entry.dc}`
                 : `Rack Individual: ${entry.rack_id}`;
 
               const bgColor = isChainEntry ? 'from-amber-50 to-amber-100 border-amber-200' : 'from-blue-50 to-blue-100 border-blue-200';
@@ -480,7 +480,7 @@ export default function MaintenancePage() {
                           )}
                           <div className="flex items-center gap-2 text-slate-700">
                             <Server className={`w-4 h-4 ${iconColor}`} />
-                            <span className="font-medium">DC:</span>
+                            <span className="font-medium">Sala:</span>
                             <span>{entry.dc}</span>
                           </div>
                           {isChainEntry && (
@@ -525,7 +525,7 @@ export default function MaintenancePage() {
                             handleRemoveEntry(
                               entry.id,
                               entry.entry_type,
-                              isChainEntry ? `${entry.chain} (DC ${entry.dc})` : entry.rack_id || '',
+                              isChainEntry ? `${entry.chain} (Sala ${entry.dc})` : entry.rack_id || '',
                               entry.site || undefined
                             );
                           }}
@@ -592,7 +592,7 @@ export default function MaintenancePage() {
                             )}
                             {rack.country && (
                               <div>
-                                <span className="font-medium">País:</span> {rack.country}
+                                <span className="font-medium">País:</span> España
                               </div>
                             )}
                             {rack.site && (
@@ -602,7 +602,7 @@ export default function MaintenancePage() {
                             )}
                             {rack.dc && (
                               <div>
-                                <span className="font-medium">DC:</span> {rack.dc}
+                                <span className="font-medium">Sala:</span> {rack.dc}
                               </div>
                             )}
                             {rack.chain && (

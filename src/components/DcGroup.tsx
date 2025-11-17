@@ -106,7 +106,7 @@ export default function DcGroup({
           <div>
             <div className="flex items-center mb-1">
               <span className="font-semibold text-blue-600 uppercase tracking-wider text-xs">
-                DATA CENTER
+                SALA
               </span>
             </div>
             <h2 className="font-bold text-gray-900 text-lg">

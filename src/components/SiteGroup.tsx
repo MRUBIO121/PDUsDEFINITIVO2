@@ -113,11 +113,11 @@ export default function SiteGroup({
                 </span>
               </div>
               <h1 className="font-bold text-gray-900 text-2xl">
-                {site === 'N/A' ? 'Sin Sitio Definido' : `Sitio: ${site}`}
+                {site === 'N/A' ? 'Sin Sitio Definido' : site}
               </h1>
               <p className="text-gray-600 mt-1 flex items-center text-sm">
                 <Layers className="mr-1 h-4 w-4" />
-                {totalRacksForSite} racks • {totalDcsForSite} DC{totalDcsForSite !== 1 ? 's' : ''}
+                {totalRacksForSite} racks • {totalDcsForSite} Sala{totalDcsForSite !== 1 ? 's' : ''}
               </p>
             </div>
           </div>
