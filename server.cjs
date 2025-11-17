@@ -2228,8 +2228,8 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       const dc = rack.dc || 'Unknown';
       const site = rack.site || 'Unknown';
 
-      // Check site permission for users with assigned sites
-      if (req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
+      // Check site permission for users with assigned sites (but NOT for Administrators)
+      if (req.session.userRole !== 'Administrador' && req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
         if (!site || site === 'Unknown') {
           return { error: 'site_unknown', message: 'No se puede determinar el sitio del rack.' };
         }
@@ -2357,8 +2357,8 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
       });
     }
 
-    // Check site permission for users with assigned sites
-    if (req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
+    // Check site permission for users with assigned sites (but NOT for Administrators)
+    if (req.session.userRole !== 'Administrador' && req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
       if (!site) {
         return res.status(400).json({
           success: false,
@@ -2697,8 +2697,8 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
       const entryType = entryResult.recordset[0].entry_type;
       const rackSite = entryResult.recordset[0].site;
 
-      // Check site permission for users with assigned sites
-      if (req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
+      // Check site permission for users with assigned sites (but NOT for Administrators)
+      if (req.session.userRole !== 'Administrador' && req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
         if (!rackSite || rackSite === 'Unknown') {
           return { error: 'site_unknown', message: 'No se puede determinar el sitio del rack.' };
         }
@@ -2808,8 +2808,8 @@ app.delete('/api/maintenance/entry/:entryId', requireAuth, async (req, res) => {
 
       const entry = entryInfo.recordset[0];
 
-      // Check site permission for users with assigned sites
-      if (req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
+      // Check site permission for users with assigned sites (but NOT for Administrators)
+      if (req.session.userRole !== 'Administrador' && req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
         if (!entry.site || entry.site === 'Unknown') {
           return { error: 'site_unknown', message: 'No se puede determinar el sitio de esta entrada de mantenimiento.' };
         }
