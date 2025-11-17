@@ -1583,6 +1583,12 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
 
         if (!hasValidRackName) {
           itemsWithoutRackName.push(powerItem);
+          // Log if this filtered rack is in maintenance
+          const rackIdStr = String(powerItem.rackId || '').trim();
+          if (rackIdStr) {
+            // We'll check this after loading maintenance IDs
+            powerItem._shouldCheckMaintenance = true;
+          }
         }
 
         return hasValidRackName;
@@ -1648,6 +1654,62 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
 
     // Get maintenance rack IDs BEFORE processing
     const maintenanceRackIds = await getMaintenanceRackIds();
+
+    // Check if any filtered items (without rackName) are in maintenance
+    const filteredMaintenanceRacks = itemsWithoutRackName.filter(item => {
+      const rackIdStr = String(item.rackId || '').trim();
+      return rackIdStr && maintenanceRackIds.has(rackIdStr);
+    });
+
+    if (filteredMaintenanceRacks.length > 0) {
+      console.warn(`⚠️ ${filteredMaintenanceRacks.length} racks EN MANTENIMIENTO fueron FILTRADOS por no tener rackName válido:`,
+        filteredMaintenanceRacks.slice(0, 10).map(r => ({ rackId: r.rackId, rackName: r.rackName, id: r.id }))
+      );
+
+      // RECOVER FILTERED MAINTENANCE RACKS - Add them back with a generated name
+      filteredMaintenanceRacks.forEach(powerItem => {
+        const rackIdStr = String(powerItem.rackId || powerItem.id || '').trim();
+        if (!rackIdStr) return;
+
+        const recovered = {
+          id: String(powerItem.id),
+          rackId: rackIdStr,
+          name: rackIdStr, // Use rackId as name if no valid rackName
+          country: 'España',
+          site: powerItem.site,
+          dc: powerItem.dc,
+          phase: powerItem.phase,
+          chain: powerItem.chain,
+          node: powerItem.node,
+          serial: powerItem.serial,
+          current: parseFloat(powerItem.totalAmps) || 0,
+          voltage: parseFloat(powerItem.totalVolts) || 0,
+          temperature: parseFloat(powerItem.avgVolts) || 0,
+          gwName: powerItem.gwName || 'N/A',
+          gwIp: powerItem.gwIp || 'N/A',
+          lastUpdated: powerItem.lastUpdate || new Date().toISOString()
+        };
+
+        // Try to find matching sensor data
+        const matchingSensor = allSensorsData.find(sensor =>
+          String(sensor.rackId) === rackIdStr
+        );
+
+        if (matchingSensor) {
+          recovered.sensorTemperature = (matchingSensor.temperature === 'N/A' || matchingSensor.temperature === null || matchingSensor.temperature === undefined)
+            ? 'N/A'
+            : (parseFloat(matchingSensor.temperature) || null);
+
+          recovered.sensorHumidity = (matchingSensor.humidity === 'N/A' || matchingSensor.humidity === null || matchingSensor.humidity === undefined)
+            ? 'N/A'
+            : (parseFloat(matchingSensor.humidity) || null);
+        }
+
+        combinedData.push(recovered);
+      });
+
+      console.log(`✅ Recuperados ${filteredMaintenanceRacks.length} racks en mantenimiento que fueron filtrados`);
+    }
 
     // ADD RACKS FROM SENSORS THAT ARE NOT IN POWER DATA
     // This ensures all racks (especially in maintenance) are visible and evaluated
