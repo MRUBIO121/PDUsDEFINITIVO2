@@ -1715,8 +1715,59 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
       rackGroups.push(rackGroup);
     });
 
+    // ADD MAINTENANCE RACKS FROM SENSORS THAT ARE NOT IN POWER DATA
+    // This ensures all racks in maintenance are visible in the UI
+    const powerRackIds = new Set(Array.from(rackMap.keys()));
+    const addedFromSensors = [];
+
+    maintenanceRackIds.forEach(maintRackId => {
+      // If rack is in maintenance but not in power data, check sensors
+      if (!powerRackIds.has(maintRackId)) {
+        const sensorData = allSensorsData.find(sensor =>
+          String(sensor.rackId) === String(maintRackId)
+        );
+
+        if (sensorData) {
+          // Create a PDU entry from sensor data
+          const pduFromSensor = {
+            id: sensorData.id || maintRackId,
+            rackId: maintRackId,
+            name: sensorData.rackName || maintRackId,
+            country: 'España',
+            site: sensorData.site || 'Unknown',
+            dc: sensorData.dc || 'Unknown',
+            phase: sensorData.phase || 'Unknown',
+            chain: sensorData.chain || 'Unknown',
+            node: sensorData.node || 'Unknown',
+            serial: sensorData.serial || 'Unknown',
+            current: 0,
+            voltage: 0,
+            temperature: 0,
+            sensorTemperature: (sensorData.temperature === 'N/A' || sensorData.temperature === null || sensorData.temperature === undefined)
+              ? 'N/A'
+              : (parseFloat(sensorData.temperature) || null),
+            sensorHumidity: (sensorData.humidity === 'N/A' || sensorData.humidity === null || sensorData.humidity === undefined)
+              ? 'N/A'
+              : (parseFloat(sensorData.humidity) || null),
+            gwName: sensorData.gwName || 'N/A',
+            gwIp: sensorData.gwIp || 'N/A',
+            lastUpdated: sensorData.lastUpdate || new Date().toISOString(),
+            status: 'normal',
+            reasons: []
+          };
+
+          rackGroups.push([pduFromSensor]);
+          addedFromSensors.push(maintRackId);
+        }
+      }
+    });
+
+    if (addedFromSensors.length > 0) {
+      console.log(`✅ Agregados ${addedFromSensors.length} racks en mantenimiento desde sensores:`, addedFromSensors.slice(0, 10));
+    }
+
     // Grouped into rack groups
-    
+
     // Update cache
     racksCache.data = rackGroups;
     racksCache.timestamp = Date.now();
