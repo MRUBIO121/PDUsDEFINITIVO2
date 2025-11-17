@@ -1645,12 +1645,59 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
     }
     
     // Data collected and combined
-    
-    // Process data with thresholds evaluation
-    const processedData = await processRackData(combinedData, thresholds);
 
-    // Get maintenance rack IDs (for info only, NOT for filtering)
+    // Get maintenance rack IDs BEFORE processing
     const maintenanceRackIds = await getMaintenanceRackIds();
+
+    // ADD RACKS FROM SENSORS THAT ARE NOT IN POWER DATA
+    // This ensures all racks (especially in maintenance) are visible and evaluated
+    const powerRackIds = new Set(combinedData.map(pdu => pdu.rackId));
+    const addedFromSensorsBeforeProcessing = [];
+
+    // Check all sensors for racks not in power data
+    allSensorsData.forEach(sensorData => {
+      const sensorRackId = String(sensorData.rackId);
+
+      // Only add if not already in power data
+      if (!powerRackIds.has(sensorRackId)) {
+        // Create a PDU entry from sensor data
+        const pduFromSensor = {
+          id: sensorData.id || sensorRackId,
+          rackId: sensorRackId,
+          name: sensorData.rackName || sensorRackId,
+          country: 'España',
+          site: sensorData.site || 'Unknown',
+          dc: sensorData.dc || 'Unknown',
+          phase: sensorData.phase || 'Unknown',
+          chain: sensorData.chain || 'Unknown',
+          node: sensorData.node || 'Unknown',
+          serial: sensorData.serial || 'Unknown',
+          current: 0,
+          voltage: 0,
+          temperature: 0,
+          sensorTemperature: (sensorData.temperature === 'N/A' || sensorData.temperature === null || sensorData.temperature === undefined)
+            ? 'N/A'
+            : (parseFloat(sensorData.temperature) || null),
+          sensorHumidity: (sensorData.humidity === 'N/A' || sensorData.humidity === null || sensorData.humidity === undefined)
+            ? 'N/A'
+            : (parseFloat(sensorData.humidity) || null),
+          gwName: sensorData.gwName || 'N/A',
+          gwIp: sensorData.gwIp || 'N/A',
+          lastUpdated: sensorData.lastUpdate || new Date().toISOString()
+        };
+
+        combinedData.push(pduFromSensor);
+        powerRackIds.add(sensorRackId);
+        addedFromSensorsBeforeProcessing.push(sensorRackId);
+      }
+    });
+
+    if (addedFromSensorsBeforeProcessing.length > 0) {
+      console.log(`✅ Agregados ${addedFromSensorsBeforeProcessing.length} racks desde sensores (sin datos de power):`, addedFromSensorsBeforeProcessing.slice(0, 10));
+    }
+
+    // Process data with thresholds evaluation (includes sensor-only racks now)
+    const processedData = await processRackData(combinedData, thresholds);
 
     // DO NOT filter out maintenance racks - send them to frontend for visual indication
     const filteredData = processedData;
@@ -1714,57 +1761,6 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
     Array.from(rackMap.values()).forEach(rackGroup => {
       rackGroups.push(rackGroup);
     });
-
-    // ADD MAINTENANCE RACKS FROM SENSORS THAT ARE NOT IN POWER DATA
-    // This ensures all racks in maintenance are visible in the UI
-    const powerRackIds = new Set(Array.from(rackMap.keys()));
-    const addedFromSensors = [];
-
-    maintenanceRackIds.forEach(maintRackId => {
-      // If rack is in maintenance but not in power data, check sensors
-      if (!powerRackIds.has(maintRackId)) {
-        const sensorData = allSensorsData.find(sensor =>
-          String(sensor.rackId) === String(maintRackId)
-        );
-
-        if (sensorData) {
-          // Create a PDU entry from sensor data
-          const pduFromSensor = {
-            id: sensorData.id || maintRackId,
-            rackId: maintRackId,
-            name: sensorData.rackName || maintRackId,
-            country: 'España',
-            site: sensorData.site || 'Unknown',
-            dc: sensorData.dc || 'Unknown',
-            phase: sensorData.phase || 'Unknown',
-            chain: sensorData.chain || 'Unknown',
-            node: sensorData.node || 'Unknown',
-            serial: sensorData.serial || 'Unknown',
-            current: 0,
-            voltage: 0,
-            temperature: 0,
-            sensorTemperature: (sensorData.temperature === 'N/A' || sensorData.temperature === null || sensorData.temperature === undefined)
-              ? 'N/A'
-              : (parseFloat(sensorData.temperature) || null),
-            sensorHumidity: (sensorData.humidity === 'N/A' || sensorData.humidity === null || sensorData.humidity === undefined)
-              ? 'N/A'
-              : (parseFloat(sensorData.humidity) || null),
-            gwName: sensorData.gwName || 'N/A',
-            gwIp: sensorData.gwIp || 'N/A',
-            lastUpdated: sensorData.lastUpdate || new Date().toISOString(),
-            status: 'normal',
-            reasons: []
-          };
-
-          rackGroups.push([pduFromSensor]);
-          addedFromSensors.push(maintRackId);
-        }
-      }
-    });
-
-    if (addedFromSensors.length > 0) {
-      console.log(`✅ Agregados ${addedFromSensors.length} racks en mantenimiento desde sensores:`, addedFromSensors.slice(0, 10));
-    }
 
     // Grouped into rack groups
 
