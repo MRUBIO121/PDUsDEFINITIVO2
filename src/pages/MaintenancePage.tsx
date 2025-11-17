@@ -466,22 +466,17 @@ export default function MaintenancePage() {
                           )}
                         </div>
 
-                        <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                          <div className="flex items-center gap-2 text-slate-600">
+                        <div className="mt-4 text-sm">
+                          <div className="flex items-center gap-2 text-slate-600 mb-2">
                             <Calendar className="w-4 h-4" />
                             <span className="font-medium">Inicio:</span>
                             <span>{new Date(entry.started_at).toLocaleString('es-ES')}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-slate-600">
-                            <User className="w-4 h-4" />
-                            <span className="font-medium">Por:</span>
-                            <span>{entry.started_by}</span>
                           </div>
                         </div>
 
                         {entry.reason && (
                           <div className="mt-3 text-sm text-slate-700">
-                            <span className="font-medium">Razón:</span> {entry.reason}
+                            <span className="font-medium">Motivo:</span> {entry.reason}
                           </div>
                         )}
                       </div>

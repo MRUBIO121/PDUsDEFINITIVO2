@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { X, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ImportSummary {
   total: number;
@@ -21,13 +22,13 @@ interface ImportMaintenanceModalProps {
 }
 
 export default function ImportMaintenanceModal({ isOpen, onClose, onImportComplete }: ImportMaintenanceModalProps) {
+  const { user } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadComplete, setUploadComplete] = useState(false);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [startedBy, setStartedBy] = useState('');
   const [defaultReason, setDefaultReason] = useState('Mantenimiento');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -39,7 +40,6 @@ export default function ImportMaintenanceModal({ isOpen, onClose, onImportComple
       setUploadComplete(false);
       setSummary(null);
       setError(null);
-      setStartedBy('');
       setDefaultReason('Mantenimiento');
       onClose();
     }
@@ -108,8 +108,10 @@ export default function ImportMaintenanceModal({ isOpen, onClose, onImportComple
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('startedBy', startedBy || 'Sistema');
-      formData.append('defaultReason', defaultReason);
+      formData.append('startedBy', user?.usuario || 'Sistema');
+      // Format: (Usuario) motivo
+      const formattedReason = `(${user?.usuario || 'Sistema'}) ${defaultReason}`;
+      formData.append('defaultReason', formattedReason);
 
       const response = await fetch('/api/maintenance/import-excel', {
         method: 'POST',
@@ -176,22 +178,11 @@ export default function ImportMaintenanceModal({ isOpen, onClose, onImportComple
 
               <div className="mb-6">
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Iniciado por (opcional)
+                  Motivo por defecto
                 </label>
-                <input
-                  type="text"
-                  value={startedBy}
-                  onChange={(e) => setStartedBy(e.target.value)}
-                  placeholder="Sistema"
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  disabled={isUploading}
-                />
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Razón por defecto (opcional)
-                </label>
+                <div className="mb-2 text-sm text-slate-600">
+                  Se añadirá automáticamente como: <span className="font-medium">({user?.usuario || 'Sistema'})</span> {defaultReason || 'Mantenimiento'}
+                </div>
                 <input
                   type="text"
                   value={defaultReason}
