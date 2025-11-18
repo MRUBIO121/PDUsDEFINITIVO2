@@ -2080,14 +2080,11 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
 // Get all maintenance entries with their racks
 app.get('/api/maintenance', requireAuth, async (req, res) => {
   const requestId = `GET_MAINT_${Date.now()}`;
-  console.log(`\n[${requestId}] 🔍 GET /api/maintenance - Inicio de petición`);
+  console.log(`\n[${requestId}] 📥 GET /api/maintenance - Request received`);
 
   try {
-    console.log(`[${requestId}] 🗄️  Intentando conectar con la base de datos...`);
-
     const results = await executeQuery(async (pool) => {
-      console.log(`[${requestId}] ✅ Conexión establecida, ejecutando queries...`);
-
+      // Get all maintenance entries - NO FILTERING
       const entriesResult = await pool.request().query(`
         SELECT
           id,
@@ -2104,8 +2101,8 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
         FROM maintenance_entries
         ORDER BY started_at DESC
       `);
-      console.log(`[${requestId}] ✅ Query entries completada: ${entriesResult.recordset.length} registros`);
 
+      // Get all rack details - NO FILTERING
       const detailsResult = await pool.request().query(`
         SELECT
           mrd.maintenance_entry_id,
@@ -2127,7 +2124,6 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           mrd.gw_ip
         FROM maintenance_rack_details mrd
       `);
-      console.log(`[${requestId}] ✅ Query details completada: ${detailsResult.recordset.length} registros`);
 
       return {
         entries: entriesResult.recordset || [],
@@ -2136,14 +2132,52 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
     });
 
     const { entries, details } = results;
-    console.log(`[${requestId}] 📊 Datos obtenidos - Entradas: ${entries.length}, Detalles: ${details.length}`);
 
+    console.log(`\n========== CONSULTA DE MANTENIMIENTO (SQL Server) ==========`);
+    console.log(`[${requestId}] 📊 Resultados de la Base de Datos:`);
+    console.log(`   ✅ Entradas encontradas: ${entries.length}`);
+    console.log(`   ✅ Detalles de racks encontrados: ${details.length}`);
+
+    if (entries.length > 0) {
+      console.log(`\n📋 ENTRADAS DE MANTENIMIENTO:`);
+      entries.forEach((entry, i) => {
+        console.log(`\n   Entrada ${i + 1}:`);
+        console.log(`      Tipo: ${entry.entry_type}`);
+        console.log(`      Rack ID: "${entry.rack_id || 'N/A'}"`);
+        console.log(`      Chain: "${entry.chain || 'N/A'}"`);
+        console.log(`      Site: "${entry.site || 'N/A'}"`);
+        console.log(`      DC: "${entry.dc}"`);
+        console.log(`      Razón: "${entry.reason}"`);
+        console.log(`      Iniciado: ${entry.started_at}`);
+      });
+    }
+
+    if (details.length > 0) {
+      console.log(`\n📦 DETALLES DE RACKS EN MANTENIMIENTO:`);
+      const uniqueRackIds = new Set();
+      details.forEach((d, i) => {
+        const rackIdStr = String(d.rack_id || '').trim();
+        uniqueRackIds.add(rackIdStr);
+        if (i < 10) {
+          console.log(`   ${i + 1}. rack_id="${d.rack_id}" (type: ${typeof d.rack_id})`);
+          console.log(`      Name: "${d.name}"`);
+          console.log(`      Chain: "${d.chain}"`);
+          console.log(`      DC: "${d.dc}"`);
+        }
+      });
+      console.log(`\n   🔢 Total de rack_id únicos en mantenimiento: ${uniqueRackIds.size}`);
+      console.log(`   📋 Lista de todos los rack_id únicos:`);
+      console.log(`   [${Array.from(uniqueRackIds).join(', ')}]`);
+    }
+
+    // Map details to their entries
     const maintenanceData = entries.map(entry => ({
       ...entry,
       racks: details.filter(d => d.maintenance_entry_id === entry.id)
     }));
 
-    console.log(`[${requestId}] ✅ Enviando ${maintenanceData.length} entradas al cliente`);
+    console.log(`\n[${requestId}] 📤 Enviando respuesta con ${maintenanceData.length} entradas`);
+    console.log(`============================================================\n`);
 
     res.json({
       success: true,
@@ -2155,12 +2189,10 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
     });
 
   } catch (error) {
-    console.error(`[${requestId}] ❌ ERROR en /api/maintenance:`);
-    console.error(`   Tipo: ${error.constructor.name}`);
-    console.error(`   Mensaje: ${error.message}`);
-    console.error(`   Stack: ${error.stack}`);
+    console.error('❌ Error fetching maintenance entries:', error);
+    logger.error('Maintenance entries fetch failed', { error: error.message });
 
-    res.status(500).json({
+    res.json({
       success: false,
       message: 'Failed to fetch maintenance entries',
       error: error.message,
@@ -2169,158 +2201,39 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
   }
 });
 
-// Helper function to fetch rack data from NENG API by rack name
-async function fetchRackDataFromNeng(rackName) {
-  const searchId = `SEARCH_${Date.now()}`;
-  console.log(`\n[${searchId}] 🔍 Buscando rack "${rackName}" en API NENG...`);
-
-  try {
-    if (!process.env.NENG_API_URL || !process.env.NENG_API_KEY) {
-      console.error(`[${searchId}] ❌ Variables de entorno NENG no configuradas`);
-      throw new Error('NENG API configuration missing');
-    }
-
-    console.log(`[${searchId}] 📡 API URL: ${process.env.NENG_API_URL}`);
-
-    const pageSize = 100;
-    let skip = 0;
-    let hasMoreData = true;
-    let totalChecked = 0;
-
-    while (hasMoreData) {
-      console.log(`[${searchId}] 📄 Solicitando página skip=${skip}, limit=${pageSize}`);
-
-      const response = await fetchFromNengApi(
-        `${process.env.NENG_API_URL}?skip=${skip}&limit=${pageSize}`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (!response.ok) {
-        console.error(`[${searchId}] ❌ NENG API error: ${response.status}`);
-        throw new Error(`NENG API returned ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log(`[${searchId}] ✅ Recibidos ${data?.length || 0} items`);
-
-      if (!data || !Array.isArray(data)) {
-        console.log(`[${searchId}] ⚠️  Respuesta no es un array válido`);
-        break;
-      }
-
-      totalChecked += data.length;
-
-      for (const item of data) {
-        if (item.rack_name && item.rack_name.trim() === rackName.trim()) {
-          console.log(`[${searchId}] ✅ ¡ENCONTRADO! Rack "${rackName}" después de revisar ${totalChecked} items`);
-          console.log(`[${searchId}] 📦 Datos del rack:`, {
-            rack_id: item.rack_name,
-            site: item.site,
-            dc: item.dc,
-            chain: item.chain || item.gateway
-          });
-
-          return {
-            rack_id: item.rack_name,
-            pdu_id: item.pdu_name || item.rack_name,
-            name: item.rack_name,
-            country: item.country || 'Unknown',
-            site: item.site || 'Unknown',
-            dc: item.dc || 'Unknown',
-            phase: item.phase || 'Unknown',
-            chain: item.chain || item.gateway || 'Unknown',
-            node: item.node || 'Unknown',
-            serial: item.serial || 'Unknown',
-            gwName: item.gateway || 'N/A',
-            gwIp: item.gateway_ip || 'N/A'
-          };
-        }
-      }
-
-      hasMoreData = data.length === pageSize;
-      skip += pageSize;
-    }
-
-    console.log(`[${searchId}] ❌ Rack "${rackName}" NO encontrado después de revisar ${totalChecked} items`);
-    return null;
-  } catch (error) {
-    console.error(`[${searchId}] ❌ Error en búsqueda:`, error.message);
-    throw error;
-  }
-}
-
 // Add single rack to maintenance
 app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
-  const addId = `ADD_RACK_${Date.now()}`;
-  console.log(`\n[${addId}] 📥 POST /api/maintenance/rack`);
-
   try {
     const {
       rackId,
-      rackName,
       rackData,
       reason = 'Mantenimiento programado',
       user = 'Sistema'
     } = req.body;
 
-    console.log(`[${addId}] 📋 Body recibido:`, {
-      rackId,
-      rackName,
-      hasRackData: !!rackData,
-      reason,
-      user
-    });
-
-    const identifier = rackName || rackId;
-
-    if (!identifier) {
-      console.log(`[${addId}] ❌ Falta identifier`);
+    if (!rackId) {
       return res.status(400).json({
         success: false,
-        message: 'rackName or rackId is required',
+        message: 'rackId is required',
         timestamp: new Date().toISOString()
       });
     }
 
-    const sanitizedIdentifier = String(identifier).trim();
-    console.log(`[${addId}] 🏷️  Identifier: "${sanitizedIdentifier}"`);
-
-    if (!sanitizedIdentifier) {
+    // Validate rackId is a non-empty string
+    const sanitizedRackId = String(rackId || '').trim();
+    if (!sanitizedRackId) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid identifier: must be a non-empty string',
+        message: 'Invalid rackId: must be a non-empty string',
         timestamp: new Date().toISOString()
       });
     }
+
+    // Extract site from rackData if provided, otherwise will be fetched from DB
+    const providedSite = rackData?.site;
 
     const result = await executeQuery(async (pool) => {
-      let rack = rackData;
-      let chain = rackData?.chain;
-
-      if (!rack) {
-        console.log(`[${addId}] 🔎 No rackData proporcionado, buscando en NENG...`);
-        rack = await fetchRackDataFromNeng(sanitizedIdentifier);
-
-        if (!rack) {
-          console.log(`[${addId}] ❌ Rack NO encontrado en NENG`);
-          return { error: 'not_found' };
-        }
-
-        console.log(`[${addId}] ✅ Rack encontrado en NENG`);
-        chain = rack.chain;
-      } else {
-        console.log(`[${addId}] ℹ️  Usando rackData proporcionado`);
-      }
-
-      const sanitizedRackId = rack.rack_id;
-      console.log(`[${addId}] 🆔 Rack ID final: "${sanitizedRackId}"`);
-
+      // Check if rack is already in maintenance
       const existingCheck = await pool.request()
         .input('rack_id', sql.NVarChar, sanitizedRackId)
         .query(`
@@ -2330,7 +2243,39 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         `);
 
       if (existingCheck.recordset[0].count > 0) {
-        return { error: 'already_exists', rackId: sanitizedRackId };
+        return { error: 'already_exists' };
+      }
+
+      // Use rack data from request body if provided, otherwise try to find it
+      let rack = rackData;
+      let chain = rackData?.chain;
+
+      // If rack data not provided, try to find it in alerts table
+      if (!rack) {
+        const rackDbData = await pool.request()
+          .input('rack_id', sql.NVarChar, sanitizedRackId)
+          .query(`
+            SELECT TOP 1
+              pdu_id,
+              rack_id,
+              name,
+              country,
+              site,
+              dc,
+              phase,
+              chain,
+              node,
+              serial
+            FROM active_critical_alerts
+            WHERE rack_id = @rack_id OR pdu_id = @rack_id
+          `);
+
+        if (rackDbData.recordset.length === 0) {
+          return { error: 'not_found' };
+        }
+
+        rack = rackDbData.recordset[0];
+        chain = rack.chain;
       }
 
       const dc = rack.dc || 'Unknown';
@@ -2404,13 +2349,13 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
           (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial, @pdu1_id, @pdu1_serial, @pdu2_id, @pdu2_serial, @gw_name, @gw_ip)
         `);
 
-      return { success: true, entryId, chain, dc, rackId: sanitizedRackId };
+      return { success: true, entryId, chain, dc };
     });
 
     if (result.error === 'already_exists') {
       return res.status(409).json({
         success: false,
-        message: `Rack ${result.rackId || sanitizedIdentifier} is already in maintenance`,
+        message: `Rack ${sanitizedRackId} is already in maintenance`,
         timestamp: new Date().toISOString()
       });
     }
@@ -2418,7 +2363,7 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
     if (result.error === 'not_found') {
       return res.status(404).json({
         success: false,
-        message: `Rack "${sanitizedIdentifier}" not found in NENG API`,
+        message: 'Rack not found. Please provide rack data in request body.',
         timestamp: new Date().toISOString()
       });
     }
@@ -2439,12 +2384,12 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       });
     }
 
-    logger.info(`Rack ${result.rackId} added to maintenance individually`);
+    logger.info(`Rack ${sanitizedRackId} added to maintenance individually`);
 
     res.json({
       success: true,
-      message: `Rack ${result.rackId} added to maintenance`,
-      data: { rackId: result.rackId, chain: result.chain, dc: result.dc, entryId: result.entryId },
+      message: `Rack ${sanitizedRackId} added to maintenance`,
+      data: { rackId: sanitizedRackId, chain: result.chain, dc: result.dc, entryId: result.entryId },
       timestamp: new Date().toISOString()
     });
 
@@ -3214,7 +3159,7 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
     const racks = [];
     const errors = [];
     const duplicatesInFile = new Set();
-    const rackNamesInFile = [];
+    const rackIdsInFile = [];
 
     let rowIndex = 0;
     worksheet.eachRow((row, rowNumber) => {
@@ -3222,25 +3167,54 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
 
       rowIndex++;
 
-      const rackName = row.getCell(1).value?.toString().trim() || '';
-      const reason = row.getCell(2).value?.toString().trim() || defaultReason;
+      const rackData = {
+        rack_id: row.getCell(1).value?.toString().trim() || '',
+        dc: row.getCell(2).value?.toString().trim() || '',
+        chain: row.getCell(3).value?.toString().trim() || null,
+        pdu_id: row.getCell(4).value?.toString().trim() || null,
+        name: row.getCell(5).value?.toString().trim() || null,
+        country: row.getCell(6).value?.toString().trim() || null,
+        site: row.getCell(7).value?.toString().trim() || null,
+        phase: row.getCell(8).value?.toString().trim() || null,
+        node: row.getCell(9).value?.toString().trim() || null,
+        serial: row.getCell(10).value?.toString().trim() || null,
+        reason: row.getCell(11).value?.toString().trim() || defaultReason
+      };
 
-      if (!rackName) {
+      if (!rackData.rack_id && !rackData.dc) {
         return;
       }
 
-      if (rackNamesInFile.includes(rackName)) {
-        duplicatesInFile.add(rackName);
+      if (!rackData.rack_id) {
         errors.push({
           row: rowNumber,
-          error: `Duplicate rack_name in Excel: ${rackName}`,
-          rack_name: rackName
+          error: 'rack_id is required',
+          data: rackData
         });
         return;
       }
 
-      rackNamesInFile.push(rackName);
-      racks.push({ rackName, reason, rowNumber });
+      if (!rackData.dc) {
+        errors.push({
+          row: rowNumber,
+          error: 'dc is required',
+          data: rackData
+        });
+        return;
+      }
+
+      if (rackIdsInFile.includes(rackData.rack_id)) {
+        duplicatesInFile.add(rackData.rack_id);
+        errors.push({
+          row: rowNumber,
+          error: `Duplicate rack_id in Excel: ${rackData.rack_id}`,
+          data: rackData
+        });
+        return;
+      }
+
+      rackIdsInFile.push(rackData.rack_id);
+      racks.push({ ...rackData, rowNumber });
     });
 
     console.log(`[${requestId}] 📊 Parsed ${racks.length} racks from Excel, ${errors.length} errors found`);
@@ -3259,26 +3233,10 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
       const successfulInserts = [];
       const failedInserts = [];
 
-      for (const rackEntry of racks) {
+      for (const rack of racks) {
         try {
-          console.log(`[${requestId}] 🔍 Searching for rack "${rackEntry.rackName}" in NENG API...`);
-
-          const rackData = await fetchRackDataFromNeng(rackEntry.rackName);
-
-          if (!rackData) {
-            console.log(`[${requestId}] ❌ Rack "${rackEntry.rackName}" not found in NENG API`);
-            failedInserts.push({
-              row: rackEntry.rowNumber,
-              rack_name: rackEntry.rackName,
-              error: 'Rack not found in NENG API'
-            });
-            continue;
-          }
-
-          console.log(`[${requestId}] ✅ Found rack "${rackEntry.rackName}" in NENG API`);
-
           const existingCheck = await pool.request()
-            .input('rack_id', sql.NVarChar, rackData.rack_id)
+            .input('rack_id', sql.NVarChar, rack.rack_id)
             .query(`
               SELECT COUNT(*) as count
               FROM maintenance_rack_details
@@ -3287,9 +3245,8 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
 
           if (existingCheck.recordset[0].count > 0) {
             alreadyInMaintenance.push({
-              row: rackEntry.rowNumber,
-              rack_name: rackEntry.rackName,
-              rack_id: rackData.rack_id,
+              row: rack.rowNumber,
+              rack_id: rack.rack_id,
               message: 'Already in maintenance'
             });
             continue;
@@ -3300,11 +3257,11 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
             .input('entry_type', sql.NVarChar, 'individual_rack')
-            .input('rack_id', sql.NVarChar, rackData.rack_id)
-            .input('chain', sql.NVarChar, rackData.chain || 'Unknown')
-            .input('site', sql.NVarChar, rackData.site || 'Unknown')
-            .input('dc', sql.NVarChar, rackData.dc)
-            .input('reason', sql.NVarChar, rackEntry.reason)
+            .input('rack_id', sql.NVarChar, rack.rack_id)
+            .input('chain', sql.NVarChar, rack.chain || 'Unknown')
+            .input('site', sql.NVarChar, rack.site || 'Unknown')
+            .input('dc', sql.NVarChar, rack.dc)
+            .input('reason', sql.NVarChar, rack.reason)
             .input('user', sql.NVarChar, user)
             .input('started_by', sql.NVarChar, user)
             .query(`
@@ -3314,34 +3271,36 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
               (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @user, @started_by)
             `);
 
+          // Extract serial number from the name field (first part before comma)
+          // Format: "SERIAL,data2,data3" -> "SERIAL"
           const extractSerial = (name) => {
             if (!name) return 'Unknown';
             const parts = String(name).split(',');
             return parts[0] ? parts[0].trim() : name;
           };
 
-          const pduId = rackData.pdu_id;
-          const rackName = rackData.name;
+          const pduId = rack.pdu_id || rack.rack_id;
+          const rackName = rack.name || rack.rack_id;
           const serialNumber = extractSerial(rackName);
 
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
-            .input('rack_id', sql.NVarChar, rackData.rack_id)
+            .input('rack_id', sql.NVarChar, rack.rack_id)
             .input('pdu_id', sql.NVarChar, pduId)
             .input('name', sql.NVarChar, rackName)
-            .input('country', sql.NVarChar, rackData.country)
-            .input('site', sql.NVarChar, rackData.site)
-            .input('dc', sql.NVarChar, rackData.dc)
-            .input('phase', sql.NVarChar, rackData.phase)
-            .input('chain', sql.NVarChar, rackData.chain)
-            .input('node', sql.NVarChar, rackData.node)
-            .input('serial', sql.NVarChar, rackData.serial)
+            .input('country', sql.NVarChar, rack.country || 'Unknown')
+            .input('site', sql.NVarChar, rack.site || 'Unknown')
+            .input('dc', sql.NVarChar, rack.dc)
+            .input('phase', sql.NVarChar, rack.phase || 'Unknown')
+            .input('chain', sql.NVarChar, rack.chain || 'Unknown')
+            .input('node', sql.NVarChar, rack.node || 'Unknown')
+            .input('serial', sql.NVarChar, rack.serial || 'Unknown')
             .input('pdu1_id', sql.NVarChar, pduId)
             .input('pdu1_serial', sql.NVarChar, serialNumber)
             .input('pdu2_id', sql.NVarChar, pduId)
             .input('pdu2_serial', sql.NVarChar, serialNumber)
-            .input('gw_name', sql.NVarChar, rackData.gwName)
-            .input('gw_ip', sql.NVarChar, rackData.gwIp)
+            .input('gw_name', sql.NVarChar, rack.gw_name || 'N/A')
+            .input('gw_ip', sql.NVarChar, rack.gw_ip || 'N/A')
             .query(`
               INSERT INTO maintenance_rack_details
               (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial, pdu1_id, pdu1_serial, pdu2_id, pdu2_serial, gw_name, gw_ip)
@@ -3350,16 +3309,15 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
             `);
 
           successfulInserts.push({
-            row: rackEntry.rowNumber,
-            rack_name: rackEntry.rackName,
-            rack_id: rackData.rack_id,
-            dc: rackData.dc
+            row: rack.rowNumber,
+            rack_id: rack.rack_id,
+            dc: rack.dc
           });
 
         } catch (error) {
           failedInserts.push({
-            row: rackEntry.rowNumber,
-            rack_name: rackEntry.rackName,
+            row: rack.rowNumber,
+            rack_id: rack.rack_id,
             error: error.message
           });
         }

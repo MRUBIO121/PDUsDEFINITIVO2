@@ -159,10 +159,9 @@ export default function ImportMaintenanceModal({ isOpen, onClose, onImportComple
                   <h3 className="font-semibold text-blue-900 mb-2">Instrucciones:</h3>
                   <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
                     <li>Descarga la plantilla Excel haciendo clic en el botón de abajo</li>
-                    <li>Rellena solo el nombre del rack (rack_name) en cada fila</li>
-                    <li>Opcionalmente, añade el motivo (reason) en la segunda columna</li>
-                    <li>La aplicación buscará automáticamente todos los datos del rack en la API NENG</li>
+                    <li>Rellena los datos de los racks (rack_id y dc son obligatorios)</li>
                     <li>Guarda el archivo y súbelo aquí</li>
+                    <li>Los racks se añadirán automáticamente a mantenimiento</li>
                   </ol>
                 </div>
 
