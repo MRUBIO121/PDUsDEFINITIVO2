@@ -14,6 +14,11 @@ interface RackDetail {
   chain: string;
   node: string;
   serial: string;
+  // Dual PDU support
+  pdu1_id?: string;
+  pdu1_serial?: string;
+  pdu2_id?: string;
+  pdu2_serial?: string;
 }
 
 interface MaintenanceEntry {
@@ -576,20 +581,19 @@ export default function MaintenancePage() {
 
                           // Extract serial number from the name field (first part before any separator)
                           const extractSerialFromName = (name: string | undefined): string => {
-                            if (!name) return 'N/A';
+                            if (!name) return '';
                             // The serial is typically the first part of the name
                             // Example: "FEX2218AUUZ-0B01.4AE-3.RCOM" -> "FEX2218AUUZ"
                             const parts = name.split('-');
                             return parts[0] || name;
                           };
 
-                          const serialNumber = extractSerialFromName(rack.name);
+                          // Use new dual PDU fields if available, otherwise fall back to legacy fields
+                          const pdu1Id = rack.pdu1_id || rack.pdu_id || rack.rack_id;
+                          const pdu2Id = rack.pdu2_id || rack.pdu_id || rack.rack_id;
 
-                          // Generate PDU IDs based on rack_id
-                          // Typically PDU 1 and PDU 2 are the same as pdu_id but with -1 and -2 suffix
-                          const basePduId = rack.pdu_id || rack.rack_id;
-                          const pdu1Id = basePduId;
-                          const pdu2Id = basePduId; // Both PDUs have the same base ID in most cases
+                          const pdu1Serial = rack.pdu1_serial || extractSerialFromName(rack.name);
+                          const pdu2Serial = rack.pdu2_serial || extractSerialFromName(rack.name);
 
                           return (
                         <div
@@ -618,7 +622,7 @@ export default function MaintenancePage() {
                             <div>
                               <span className="font-medium">Rack ID:</span> {rack.rack_id}
                             </div>
-                            {basePduId && (
+                            {pdu1Id && (
                               <>
                                 <div>
                                   <span className="font-medium">PDU 1:</span> {pdu1Id}
@@ -658,13 +662,13 @@ export default function MaintenancePage() {
                                 <span className="font-medium">Node:</span> {rack.node}
                               </div>
                             )}
-                            {serialNumber && serialNumber !== 'N/A' && (
+                            {pdu1Serial && (
                               <>
                                 <div>
-                                  <span className="font-medium">PDU 1 Serial:</span> {serialNumber}
+                                  <span className="font-medium">PDU 1 Serial:</span> {pdu1Serial}
                                 </div>
                                 <div>
-                                  <span className="font-medium">PDU 2 Serial:</span> {serialNumber}
+                                  <span className="font-medium">PDU 2 Serial:</span> {pdu2Serial}
                                 </div>
                               </>
                             )}
