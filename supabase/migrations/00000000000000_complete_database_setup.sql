@@ -1,8 +1,8 @@
 -- ============================================================================================================
 -- ARCHIVO: complete_database_setup.sql
 -- PROPOSITO: Setup completo consolidado de toda la base de datos del sistema de monitoreo de energía
--- FECHA: 2025-11-17
--- VERSION: 3.0 - Consolidación completa de todos los scripts
+-- FECHA: 2025-11-18
+-- VERSION: 3.1 - Consolidación completa de todos los scripts + migración de campo user
 -- ============================================================================================================
 --
 -- Este script consolidado incluye:
@@ -10,7 +10,8 @@
 --   2. Todas las tablas del sistema (umbrales, alertas, mantenimiento, usuarios)
 --   3. Configuración de umbrales con soporte completo de voltaje
 --   4. Sistema de usuarios con roles y permisos
---   5. Datos iniciales (umbrales por defecto, usuario admin)
+--   5. Migración de campo 'user' en maintenance_entries
+--   6. Datos iniciales (umbrales por defecto, usuario admin)
 --
 -- TABLAS INCLUIDAS:
 --   1. threshold_configs           - Umbrales globales de todas las métricas
@@ -19,6 +20,9 @@
 --   4. maintenance_entries         - Entradas de mantenimiento (racks o chains completas)
 --   5. maintenance_rack_details    - Detalles de cada rack en mantenimiento
 --   6. usersAlertado               - Usuarios del sistema con roles y permisos
+--
+-- MIGRACIONES INCLUIDAS:
+--   - Campo 'user' en maintenance_entries para almacenar el usuario que inició el mantenimiento
 --
 -- ============================================================================================================
 
@@ -446,6 +450,90 @@ END
 GO
 
 -- ============================================================================================================
+-- MIGRACIÓN: Añadir campo 'user' a maintenance_entries
+-- ============================================================================================================
+-- PROPOSITO: Añadir campo independiente para almacenar el usuario que inició el mantenimiento
+--
+-- DESCRIPCION:
+--   Esta sección añade un nuevo campo 'user' a la tabla maintenance_entries para almacenar
+--   el nombre del usuario que inició el mantenimiento de forma independiente.
+--
+-- CAMBIOS:
+--   1. Se añade el campo 'user' (NVARCHAR(255)) a la tabla maintenance_entries
+--   2. Se migran los datos existentes del campo 'started_by' al nuevo campo 'user'
+--   3. Se crea un índice para optimizar búsquedas por usuario
+--
+-- NOTAS:
+--   - El campo 'started_by' se mantiene por compatibilidad pero 'user' será el campo principal
+--   - Los datos existentes se copian de 'started_by' a 'user'
+-- ============================================================================================================
+
+PRINT '';
+PRINT '------------------------------------------------------------------------------------------------------------';
+PRINT 'Añadiendo campo user a maintenance_entries';
+PRINT '------------------------------------------------------------------------------------------------------------';
+
+-- Paso 1: Verificar y añadir el campo 'user' si no existe
+IF NOT EXISTS (
+    SELECT 1
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'maintenance_entries'
+    AND COLUMN_NAME = 'user'
+)
+BEGIN
+    PRINT '🔧 Añadiendo campo "user" a la tabla maintenance_entries...';
+
+    ALTER TABLE maintenance_entries
+    ADD [user] NVARCHAR(255) NULL;
+
+    PRINT '✅ Campo "user" añadido correctamente';
+END
+ELSE
+BEGIN
+    PRINT 'ℹ️  El campo "user" ya existe en maintenance_entries';
+END
+GO
+
+-- Paso 2: Migrar datos existentes de 'started_by' a 'user'
+IF EXISTS (
+    SELECT 1
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'maintenance_entries'
+    AND COLUMN_NAME = 'user'
+)
+BEGIN
+    PRINT '📦 Migrando datos existentes de started_by a user...';
+
+    UPDATE maintenance_entries
+    SET [user] = started_by
+    WHERE started_by IS NOT NULL AND [user] IS NULL;
+
+    DECLARE @rowsAffected INT = @@ROWCOUNT;
+    PRINT '✅ Datos migrados correctamente (' + CAST(@rowsAffected AS NVARCHAR(10)) + ' registros actualizados)';
+END
+GO
+
+-- Paso 3: Crear índice para mejorar las búsquedas por usuario
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IX_maintenance_entries_user'
+    AND object_id = OBJECT_ID('maintenance_entries')
+)
+BEGIN
+    PRINT '📊 Creando índice IX_maintenance_entries_user...';
+
+    CREATE INDEX IX_maintenance_entries_user ON maintenance_entries([user]);
+
+    PRINT '✅ Índice IX_maintenance_entries_user creado';
+END
+ELSE
+BEGIN
+    PRINT 'ℹ️  El índice IX_maintenance_entries_user ya existe';
+END
+GO
+
+-- ============================================================================================================
 -- TABLA 6: usersAlertado
 -- ============================================================================================================
 -- PROPOSITO: Almacena los usuarios del sistema con sus credenciales y roles
@@ -635,6 +723,11 @@ PRINT '  ✅ active_critical_alerts    - Alertas activas';
 PRINT '  ✅ maintenance_entries       - Entradas de mantenimiento';
 PRINT '  ✅ maintenance_rack_details  - Detalles de mantenimiento';
 PRINT '  ✅ usersAlertado             - Sistema de usuarios';
+PRINT '';
+PRINT '🔄 MIGRACIONES APLICADAS:';
+PRINT '  ✅ Campo "user" añadido a maintenance_entries';
+PRINT '  ✅ Datos migrados desde started_by a user';
+PRINT '  ✅ Índice IX_maintenance_entries_user creado';
 PRINT '';
 PRINT '🔌 SOPORTE PARA VOLTAJE:';
 PRINT '  ✅ Umbrales configurados con 0V = crítico (sin energía)';
