@@ -2080,11 +2080,14 @@ app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
 // Get all maintenance entries with their racks
 app.get('/api/maintenance', requireAuth, async (req, res) => {
   const requestId = `GET_MAINT_${Date.now()}`;
-  console.log(`\n[${requestId}] 📥 GET /api/maintenance - Request received`);
+  console.log(`\n[${requestId}] 🔍 GET /api/maintenance - Inicio de petición`);
 
   try {
+    console.log(`[${requestId}] 🗄️  Intentando conectar con la base de datos...`);
+
     const results = await executeQuery(async (pool) => {
-      // Get all maintenance entries - NO FILTERING
+      console.log(`[${requestId}] ✅ Conexión establecida, ejecutando queries...`);
+
       const entriesResult = await pool.request().query(`
         SELECT
           id,
@@ -2101,8 +2104,8 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
         FROM maintenance_entries
         ORDER BY started_at DESC
       `);
+      console.log(`[${requestId}] ✅ Query entries completada: ${entriesResult.recordset.length} registros`);
 
-      // Get all rack details - NO FILTERING
       const detailsResult = await pool.request().query(`
         SELECT
           mrd.maintenance_entry_id,
@@ -2124,6 +2127,7 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           mrd.gw_ip
         FROM maintenance_rack_details mrd
       `);
+      console.log(`[${requestId}] ✅ Query details completada: ${detailsResult.recordset.length} registros`);
 
       return {
         entries: entriesResult.recordset || [],
@@ -2132,52 +2136,14 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
     });
 
     const { entries, details } = results;
+    console.log(`[${requestId}] 📊 Datos obtenidos - Entradas: ${entries.length}, Detalles: ${details.length}`);
 
-    console.log(`\n========== CONSULTA DE MANTENIMIENTO (SQL Server) ==========`);
-    console.log(`[${requestId}] 📊 Resultados de la Base de Datos:`);
-    console.log(`   ✅ Entradas encontradas: ${entries.length}`);
-    console.log(`   ✅ Detalles de racks encontrados: ${details.length}`);
-
-    if (entries.length > 0) {
-      console.log(`\n📋 ENTRADAS DE MANTENIMIENTO:`);
-      entries.forEach((entry, i) => {
-        console.log(`\n   Entrada ${i + 1}:`);
-        console.log(`      Tipo: ${entry.entry_type}`);
-        console.log(`      Rack ID: "${entry.rack_id || 'N/A'}"`);
-        console.log(`      Chain: "${entry.chain || 'N/A'}"`);
-        console.log(`      Site: "${entry.site || 'N/A'}"`);
-        console.log(`      DC: "${entry.dc}"`);
-        console.log(`      Razón: "${entry.reason}"`);
-        console.log(`      Iniciado: ${entry.started_at}`);
-      });
-    }
-
-    if (details.length > 0) {
-      console.log(`\n📦 DETALLES DE RACKS EN MANTENIMIENTO:`);
-      const uniqueRackIds = new Set();
-      details.forEach((d, i) => {
-        const rackIdStr = String(d.rack_id || '').trim();
-        uniqueRackIds.add(rackIdStr);
-        if (i < 10) {
-          console.log(`   ${i + 1}. rack_id="${d.rack_id}" (type: ${typeof d.rack_id})`);
-          console.log(`      Name: "${d.name}"`);
-          console.log(`      Chain: "${d.chain}"`);
-          console.log(`      DC: "${d.dc}"`);
-        }
-      });
-      console.log(`\n   🔢 Total de rack_id únicos en mantenimiento: ${uniqueRackIds.size}`);
-      console.log(`   📋 Lista de todos los rack_id únicos:`);
-      console.log(`   [${Array.from(uniqueRackIds).join(', ')}]`);
-    }
-
-    // Map details to their entries
     const maintenanceData = entries.map(entry => ({
       ...entry,
       racks: details.filter(d => d.maintenance_entry_id === entry.id)
     }));
 
-    console.log(`\n[${requestId}] 📤 Enviando respuesta con ${maintenanceData.length} entradas`);
-    console.log(`============================================================\n`);
+    console.log(`[${requestId}] ✅ Enviando ${maintenanceData.length} entradas al cliente`);
 
     res.json({
       success: true,
@@ -2189,10 +2155,12 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error fetching maintenance entries:', error);
-    logger.error('Maintenance entries fetch failed', { error: error.message });
+    console.error(`[${requestId}] ❌ ERROR en /api/maintenance:`);
+    console.error(`   Tipo: ${error.constructor.name}`);
+    console.error(`   Mensaje: ${error.message}`);
+    console.error(`   Stack: ${error.stack}`);
 
-    res.json({
+    res.status(500).json({
       success: false,
       message: 'Failed to fetch maintenance entries',
       error: error.message,
@@ -2203,16 +2171,25 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
 
 // Helper function to fetch rack data from NENG API by rack name
 async function fetchRackDataFromNeng(rackName) {
+  const searchId = `SEARCH_${Date.now()}`;
+  console.log(`\n[${searchId}] 🔍 Buscando rack "${rackName}" en API NENG...`);
+
   try {
     if (!process.env.NENG_API_URL || !process.env.NENG_API_KEY) {
+      console.error(`[${searchId}] ❌ Variables de entorno NENG no configuradas`);
       throw new Error('NENG API configuration missing');
     }
+
+    console.log(`[${searchId}] 📡 API URL: ${process.env.NENG_API_URL}`);
 
     const pageSize = 100;
     let skip = 0;
     let hasMoreData = true;
+    let totalChecked = 0;
 
     while (hasMoreData) {
+      console.log(`[${searchId}] 📄 Solicitando página skip=${skip}, limit=${pageSize}`);
+
       const response = await fetchFromNengApi(
         `${process.env.NENG_API_URL}?skip=${skip}&limit=${pageSize}`,
         {
@@ -2225,17 +2202,30 @@ async function fetchRackDataFromNeng(rackName) {
       );
 
       if (!response.ok) {
+        console.error(`[${searchId}] ❌ NENG API error: ${response.status}`);
         throw new Error(`NENG API returned ${response.status}`);
       }
 
       const data = await response.json();
+      console.log(`[${searchId}] ✅ Recibidos ${data?.length || 0} items`);
 
       if (!data || !Array.isArray(data)) {
+        console.log(`[${searchId}] ⚠️  Respuesta no es un array válido`);
         break;
       }
 
+      totalChecked += data.length;
+
       for (const item of data) {
         if (item.rack_name && item.rack_name.trim() === rackName.trim()) {
+          console.log(`[${searchId}] ✅ ¡ENCONTRADO! Rack "${rackName}" después de revisar ${totalChecked} items`);
+          console.log(`[${searchId}] 📦 Datos del rack:`, {
+            rack_id: item.rack_name,
+            site: item.site,
+            dc: item.dc,
+            chain: item.chain || item.gateway
+          });
+
           return {
             rack_id: item.rack_name,
             pdu_id: item.pdu_name || item.rack_name,
@@ -2257,15 +2247,19 @@ async function fetchRackDataFromNeng(rackName) {
       skip += pageSize;
     }
 
+    console.log(`[${searchId}] ❌ Rack "${rackName}" NO encontrado después de revisar ${totalChecked} items`);
     return null;
   } catch (error) {
-    logger.error('Error fetching rack data from NENG API:', error);
+    console.error(`[${searchId}] ❌ Error en búsqueda:`, error.message);
     throw error;
   }
 }
 
 // Add single rack to maintenance
 app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
+  const addId = `ADD_RACK_${Date.now()}`;
+  console.log(`\n[${addId}] 📥 POST /api/maintenance/rack`);
+
   try {
     const {
       rackId,
@@ -2275,9 +2269,18 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       user = 'Sistema'
     } = req.body;
 
+    console.log(`[${addId}] 📋 Body recibido:`, {
+      rackId,
+      rackName,
+      hasRackData: !!rackData,
+      reason,
+      user
+    });
+
     const identifier = rackName || rackId;
 
     if (!identifier) {
+      console.log(`[${addId}] ❌ Falta identifier`);
       return res.status(400).json({
         success: false,
         message: 'rackName or rackId is required',
@@ -2286,6 +2289,8 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
     }
 
     const sanitizedIdentifier = String(identifier).trim();
+    console.log(`[${addId}] 🏷️  Identifier: "${sanitizedIdentifier}"`);
+
     if (!sanitizedIdentifier) {
       return res.status(400).json({
         success: false,
@@ -2299,19 +2304,22 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       let chain = rackData?.chain;
 
       if (!rack) {
-        console.log(`🔍 Searching for rack "${sanitizedIdentifier}" in NENG API...`);
+        console.log(`[${addId}] 🔎 No rackData proporcionado, buscando en NENG...`);
         rack = await fetchRackDataFromNeng(sanitizedIdentifier);
 
         if (!rack) {
-          console.log(`❌ Rack "${sanitizedIdentifier}" not found in NENG API`);
+          console.log(`[${addId}] ❌ Rack NO encontrado en NENG`);
           return { error: 'not_found' };
         }
 
-        console.log(`✅ Found rack data in NENG API:`, rack);
+        console.log(`[${addId}] ✅ Rack encontrado en NENG`);
         chain = rack.chain;
+      } else {
+        console.log(`[${addId}] ℹ️  Usando rackData proporcionado`);
       }
 
       const sanitizedRackId = rack.rack_id;
+      console.log(`[${addId}] 🆔 Rack ID final: "${sanitizedRackId}"`);
 
       const existingCheck = await pool.request()
         .input('rack_id', sql.NVarChar, sanitizedRackId)
