@@ -422,9 +422,18 @@ export default function MaintenancePage() {
           <div className="space-y-6">
             {filteredMaintenanceEntries.map(entry => {
               const isChainEntry = entry.entry_type === 'chain';
+
+              // For individual racks, get the rack name from the first rack in the array
+              const rackName = !isChainEntry && entry.racks.length > 0
+                ? (entry.racks[0].name || entry.rack_id)
+                : '';
+              const rackChain = !isChainEntry && entry.racks.length > 0
+                ? entry.racks[0].chain
+                : '';
+
               const displayTitle = isChainEntry
                 ? `Chain ${entry.chain} - Sala ${entry.dc}`
-                : `Rack Individual: ${entry.rack_id}`;
+                : rackName || entry.rack_id || 'Rack sin nombre';
 
               const bgColor = isChainEntry ? 'from-amber-50 to-amber-100 border-amber-200' : 'from-blue-50 to-blue-100 border-blue-200';
               const iconColor = isChainEntry ? 'text-amber-700' : 'text-blue-700';
@@ -483,6 +492,13 @@ export default function MaintenancePage() {
                             <span className="font-medium">Sala:</span>
                             <span>{entry.dc}</span>
                           </div>
+                          {rackChain && !isChainEntry && (
+                            <div className="flex items-center gap-2 text-slate-700">
+                              <Server className={`w-4 h-4 ${iconColor}`} />
+                              <span className="font-medium">Gateway:</span>
+                              <span>{rackChain}</span>
+                            </div>
+                          )}
                           {isChainEntry && (
                             <div className="flex items-center gap-2 text-slate-700">
                               <Server className={`w-4 h-4 ${iconColor}`} />
