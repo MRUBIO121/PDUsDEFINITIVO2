@@ -422,9 +422,13 @@ export default function MaintenancePage() {
           <div className="space-y-6">
             {filteredMaintenanceEntries.map(entry => {
               const isChainEntry = entry.entry_type === 'chain';
+              // For individual racks, use the rack name from the first rack detail if available
+              const rackName = !isChainEntry && entry.racks.length > 0
+                ? (entry.racks[0].name || entry.rack_id)
+                : entry.rack_id;
               const displayTitle = isChainEntry
                 ? `Chain ${entry.chain} - Sala ${entry.dc}`
-                : `Rack Individual: ${entry.rack_id}`;
+                : rackName;
 
               const bgColor = isChainEntry ? 'from-amber-50 to-amber-100 border-amber-200' : 'from-blue-50 to-blue-100 border-blue-200';
               const iconColor = isChainEntry ? 'text-amber-700' : 'text-blue-700';
