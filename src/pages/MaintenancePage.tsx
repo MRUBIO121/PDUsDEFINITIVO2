@@ -19,6 +19,9 @@ interface RackDetail {
   pdu1_serial?: string;
   pdu2_id?: string;
   pdu2_serial?: string;
+  // Gateway support
+  gw_name?: string;
+  gw_ip?: string;
 }
 
 interface MaintenanceEntry {
@@ -671,6 +674,16 @@ export default function MaintenancePage() {
                                   <span className="font-medium">PDU 2 Serial:</span> {pdu2Serial}
                                 </div>
                               </>
+                            )}
+                            {rack.gw_name && rack.gw_name !== 'N/A' && (
+                              <div>
+                                <span className="font-medium">Gateway:</span> {rack.gw_name}
+                              </div>
+                            )}
+                            {rack.gw_ip && rack.gw_ip !== 'N/A' && (
+                              <div>
+                                <span className="font-medium">Gateway IP:</span> {rack.gw_ip}
+                              </div>
                             )}
                           </div>
                           </div>

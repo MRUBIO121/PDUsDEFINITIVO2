@@ -1,10 +1,10 @@
 /*
-  # Añadir soporte para dos PDUs por rack en mantenimiento
+  # Añadir soporte para dos PDUs y Gateway en mantenimiento
 
   ## Descripción
   Esta migración modifica la tabla `maintenance_rack_details` para soportar
   el almacenamiento de información de dos PDUs por rack físico, incluyendo
-  sus IDs y números de serie individuales.
+  sus IDs y números de serie individuales, además de información del gateway.
 
   ## Cambios en la tabla maintenance_rack_details
 
@@ -16,7 +16,11 @@
     - `pdu2_id` (NVARCHAR(255)) - ID de la segunda PDU
     - `pdu2_serial` (NVARCHAR(255)) - Serial de la segunda PDU
 
-  3. Migración de datos existentes:
+  3. Nuevos campos para Gateway:
+    - `gw_name` (NVARCHAR(255)) - Nombre del gateway
+    - `gw_ip` (NVARCHAR(255)) - IP del gateway
+
+  4. Migración de datos existentes:
     - Los valores actuales de `pdu_id` se copian a `pdu1_id`
     - Los valores actuales de `serial` se copian a `pdu1_serial`
     - Los campos originales `pdu_id` y `serial` se mantienen por compatibilidad
@@ -25,6 +29,7 @@
   - Los campos `pdu_id` y `serial` originales se mantienen por compatibilidad
   - El código frontend ahora mostrará PDU 1 y PDU 2 con sus respectivos seriales
   - Si solo hay datos para PDU 1, PDU 2 mostrará valores NULL o vacíos
+  - Los datos de gateway se mostrarán cuando estén disponibles
 */
 
 USE energy_monitor_db;
@@ -115,6 +120,47 @@ END
 ELSE
 BEGIN
     PRINT 'ℹ️  Columna pdu2_serial ya existe';
+END
+
+-- ============================================================================================================
+-- PASO 2.5: Añadir columnas para Gateway
+-- ============================================================================================================
+
+PRINT '';
+PRINT 'Paso 2.5: Añadiendo columnas para Gateway...';
+
+-- Añadir gw_name
+IF NOT EXISTS (
+    SELECT 1
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'maintenance_rack_details'
+    AND COLUMN_NAME = 'gw_name'
+)
+BEGIN
+    ALTER TABLE maintenance_rack_details
+    ADD gw_name NVARCHAR(255) NULL;
+    PRINT '✅ Columna gw_name añadida';
+END
+ELSE
+BEGIN
+    PRINT 'ℹ️  Columna gw_name ya existe';
+END
+
+-- Añadir gw_ip
+IF NOT EXISTS (
+    SELECT 1
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'maintenance_rack_details'
+    AND COLUMN_NAME = 'gw_ip'
+)
+BEGIN
+    ALTER TABLE maintenance_rack_details
+    ADD gw_ip NVARCHAR(255) NULL;
+    PRINT '✅ Columna gw_ip añadida';
+END
+ELSE
+BEGIN
+    PRINT 'ℹ️  Columna gw_ip ya existe';
 END
 GO
 
