@@ -574,6 +574,23 @@ export default function MaintenancePage() {
                           // Check if user can finish this specific rack's maintenance
                           const canFinishRackMaintenance = canUserFinishMaintenance(rack.site);
 
+                          // Extract serial number from the name field (first part before any separator)
+                          const extractSerialFromName = (name: string | undefined): string => {
+                            if (!name) return 'N/A';
+                            // The serial is typically the first part of the name
+                            // Example: "FEX2218AUUZ-0B01.4AE-3.RCOM" -> "FEX2218AUUZ"
+                            const parts = name.split('-');
+                            return parts[0] || name;
+                          };
+
+                          const serialNumber = extractSerialFromName(rack.name);
+
+                          // Generate PDU IDs based on rack_id
+                          // Typically PDU 1 and PDU 2 are the same as pdu_id but with -1 and -2 suffix
+                          const basePduId = rack.pdu_id || rack.rack_id;
+                          const pdu1Id = basePduId;
+                          const pdu2Id = basePduId; // Both PDUs have the same base ID in most cases
+
                           return (
                         <div
                           key={rack.rack_id}
@@ -601,10 +618,15 @@ export default function MaintenancePage() {
                             <div>
                               <span className="font-medium">Rack ID:</span> {rack.rack_id}
                             </div>
-                            {rack.pdu_id && (
-                              <div>
-                                <span className="font-medium">PDU ID:</span> {rack.pdu_id}
-                              </div>
+                            {basePduId && (
+                              <>
+                                <div>
+                                  <span className="font-medium">PDU 1:</span> {pdu1Id}
+                                </div>
+                                <div>
+                                  <span className="font-medium">PDU 2:</span> {pdu2Id}
+                                </div>
+                              </>
                             )}
                             {rack.country && (
                               <div>
@@ -636,10 +658,15 @@ export default function MaintenancePage() {
                                 <span className="font-medium">Node:</span> {rack.node}
                               </div>
                             )}
-                            {rack.serial && (
-                              <div>
-                                <span className="font-medium">Serial:</span> {rack.serial}
-                              </div>
+                            {serialNumber && serialNumber !== 'N/A' && (
+                              <>
+                                <div>
+                                  <span className="font-medium">PDU 1 Serial:</span> {serialNumber}
+                                </div>
+                                <div>
+                                  <span className="font-medium">PDU 2 Serial:</span> {serialNumber}
+                                </div>
+                              </>
                             )}
                           </div>
                           </div>
