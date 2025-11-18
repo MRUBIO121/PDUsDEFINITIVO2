@@ -14,14 +14,6 @@ interface RackDetail {
   chain: string;
   node: string;
   serial: string;
-  // Dual PDU support
-  pdu1_id?: string;
-  pdu1_serial?: string;
-  pdu2_id?: string;
-  pdu2_serial?: string;
-  // Gateway support
-  gw_name?: string;
-  gw_ip?: string;
 }
 
 interface MaintenanceEntry {
@@ -430,18 +422,9 @@ export default function MaintenancePage() {
           <div className="space-y-6">
             {filteredMaintenanceEntries.map(entry => {
               const isChainEntry = entry.entry_type === 'chain';
-
-              // For individual racks, get the rack name from the first rack in the array
-              const rackName = !isChainEntry && entry.racks.length > 0
-                ? (entry.racks[0].name || entry.rack_id)
-                : '';
-              const rackChain = !isChainEntry && entry.racks.length > 0
-                ? entry.racks[0].chain
-                : '';
-
               const displayTitle = isChainEntry
                 ? `Chain ${entry.chain} - Sala ${entry.dc}`
-                : rackName || entry.rack_id || 'Rack sin nombre';
+                : `Rack Individual: ${entry.rack_id}`;
 
               const bgColor = isChainEntry ? 'from-amber-50 to-amber-100 border-amber-200' : 'from-blue-50 to-blue-100 border-blue-200';
               const iconColor = isChainEntry ? 'text-amber-700' : 'text-blue-700';
@@ -500,13 +483,6 @@ export default function MaintenancePage() {
                             <span className="font-medium">Sala:</span>
                             <span>{entry.dc}</span>
                           </div>
-                          {rackChain && !isChainEntry && (
-                            <div className="flex items-center gap-2 text-slate-700">
-                              <Server className={`w-4 h-4 ${iconColor}`} />
-                              <span className="font-medium">Gateway:</span>
-                              <span>{rackChain}</span>
-                            </div>
-                          )}
                           {isChainEntry && (
                             <div className="flex items-center gap-2 text-slate-700">
                               <Server className={`w-4 h-4 ${iconColor}`} />
@@ -582,22 +558,6 @@ export default function MaintenancePage() {
                           // Check if user can finish this specific rack's maintenance
                           const canFinishRackMaintenance = canUserFinishMaintenance(rack.site);
 
-                          // Extract serial number from the name field (first part before comma)
-                          const extractSerialFromName = (name: string | undefined): string => {
-                            if (!name) return '';
-                            // The serial is the first part before comma
-                            // Format: "SERIAL,data2,data3" -> "SERIAL"
-                            const parts = name.split(',');
-                            return parts[0] ? parts[0].trim() : name;
-                          };
-
-                          // Use new dual PDU fields if available, otherwise fall back to legacy fields
-                          const pdu1Id = rack.pdu1_id || rack.pdu_id || rack.rack_id;
-                          const pdu2Id = rack.pdu2_id || rack.pdu_id || rack.rack_id;
-
-                          const pdu1Serial = rack.pdu1_serial || extractSerialFromName(rack.name);
-                          const pdu2Serial = rack.pdu2_serial || extractSerialFromName(rack.name);
-
                           return (
                         <div
                           key={rack.rack_id}
@@ -625,15 +585,10 @@ export default function MaintenancePage() {
                             <div>
                               <span className="font-medium">Rack ID:</span> {rack.rack_id}
                             </div>
-                            {pdu1Id && (
-                              <>
-                                <div>
-                                  <span className="font-medium">PDU 1:</span> {pdu1Id}
-                                </div>
-                                <div>
-                                  <span className="font-medium">PDU 2:</span> {pdu2Id}
-                                </div>
-                              </>
+                            {rack.pdu_id && (
+                              <div>
+                                <span className="font-medium">PDU ID:</span> {rack.pdu_id}
+                              </div>
                             )}
                             {rack.country && (
                               <div>
@@ -665,24 +620,9 @@ export default function MaintenancePage() {
                                 <span className="font-medium">Node:</span> {rack.node}
                               </div>
                             )}
-                            {pdu1Serial && (
-                              <>
-                                <div>
-                                  <span className="font-medium">PDU 1 Serial:</span> {pdu1Serial}
-                                </div>
-                                <div>
-                                  <span className="font-medium">PDU 2 Serial:</span> {pdu2Serial}
-                                </div>
-                              </>
-                            )}
-                            {rack.gw_name && rack.gw_name !== 'N/A' && (
+                            {rack.serial && (
                               <div>
-                                <span className="font-medium">Gateway:</span> {rack.gw_name}
-                              </div>
-                            )}
-                            {rack.gw_ip && rack.gw_ip !== 'N/A' && (
-                              <div>
-                                <span className="font-medium">Gateway IP:</span> {rack.gw_ip}
+                                <span className="font-medium">Serial:</span> {rack.serial}
                               </div>
                             )}
                           </div>

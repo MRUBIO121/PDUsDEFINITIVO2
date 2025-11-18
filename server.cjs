@@ -2115,13 +2115,7 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           mrd.phase,
           mrd.chain,
           mrd.node,
-          mrd.serial,
-          mrd.pdu1_id,
-          mrd.pdu1_serial,
-          mrd.pdu2_id,
-          mrd.pdu2_serial,
-          mrd.gw_name,
-          mrd.gw_ip
+          mrd.serial
         FROM maintenance_rack_details mrd
       `);
 
@@ -2312,23 +2306,11 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         `);
 
       // Insert rack details
-      // Extract serial number from the name field (first part before comma)
-      // Format: "SERIAL,data2,data3" -> "SERIAL"
-      const extractSerial = (name) => {
-        if (!name) return 'Unknown';
-        const parts = String(name).split(',');
-        return parts[0] ? parts[0].trim() : name;
-      };
-
-      const pduId = String(rack.pdu_id || rack.id || sanitizedRackId);
-      const rackName = String(rack.name || sanitizedRackId);
-      const serialNumber = extractSerial(rackName);
-
       await pool.request()
         .input('entry_id', sql.UniqueIdentifier, entryId)
         .input('rack_id', sql.NVarChar, sanitizedRackId)
-        .input('pdu_id', sql.NVarChar, pduId)
-        .input('name', sql.NVarChar, rackName)
+        .input('pdu_id', sql.NVarChar, String(rack.pdu_id || rack.id || sanitizedRackId))
+        .input('name', sql.NVarChar, String(rack.name || sanitizedRackId))
         .input('country', sql.NVarChar, String(rack.country || 'Unknown'))
         .input('site', sql.NVarChar, site)
         .input('dc', sql.NVarChar, dc)
@@ -2336,17 +2318,11 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         .input('chain', sql.NVarChar, String(chain || 'Unknown'))
         .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
         .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
-        .input('pdu1_id', sql.NVarChar, pduId)
-        .input('pdu1_serial', sql.NVarChar, serialNumber)
-        .input('pdu2_id', sql.NVarChar, pduId)
-        .input('pdu2_serial', sql.NVarChar, serialNumber)
-        .input('gw_name', sql.NVarChar, String(rack.gwName || 'N/A'))
-        .input('gw_ip', sql.NVarChar, String(rack.gwIp || 'N/A'))
         .query(`
           INSERT INTO maintenance_rack_details
-          (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial, pdu1_id, pdu1_serial, pdu2_id, pdu2_serial, gw_name, gw_ip)
+          (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial)
           VALUES
-          (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial, @pdu1_id, @pdu1_serial, @pdu2_id, @pdu2_serial, @gw_name, @gw_ip)
+          (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial)
         `);
 
       return { success: true, entryId, chain, dc };
@@ -2662,22 +2638,11 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
             continue;
           }
 
-          // Extract serial number from the name field (first part before comma)
-          // Format: "SERIAL,data2,data3" -> "SERIAL"
-          const extractSerial = (name) => {
-            if (!name) return 'Unknown';
-            const parts = String(name).split(',');
-            return parts[0] ? parts[0].trim() : name;
-          };
-
-          const rackName = String(rack.rackName || rack.name || 'Unknown');
-          const serialNumber = extractSerial(rackName);
-
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
             .input('rack_id', sql.NVarChar, rackId)
             .input('pdu_id', sql.NVarChar, pduId)
-            .input('name', sql.NVarChar, rackName)
+            .input('name', sql.NVarChar, String(rack.rackName || rack.name || 'Unknown'))
             .input('country', sql.NVarChar, 'España')
             .input('site', sql.NVarChar, site || String(rack.site || 'Unknown'))
             .input('dc', sql.NVarChar, sanitizedDc)
@@ -2685,17 +2650,11 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
             .input('chain', sql.NVarChar, sanitizedChain)
             .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
             .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
-            .input('pdu1_id', sql.NVarChar, pduId)
-            .input('pdu1_serial', sql.NVarChar, serialNumber)
-            .input('pdu2_id', sql.NVarChar, pduId)
-            .input('pdu2_serial', sql.NVarChar, serialNumber)
-            .input('gw_name', sql.NVarChar, String(rack.gwName || 'N/A'))
-            .input('gw_ip', sql.NVarChar, String(rack.gwIp || 'N/A'))
             .query(`
               INSERT INTO maintenance_rack_details
-              (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial, pdu1_id, pdu1_serial, pdu2_id, pdu2_serial, gw_name, gw_ip)
+              (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial)
               VALUES
-              (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial, @pdu1_id, @pdu1_serial, @pdu2_id, @pdu2_serial, @gw_name, @gw_ip)
+              (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial)
             `);
 
           insertedCount++;
@@ -3271,23 +3230,11 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
               (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @user, @started_by)
             `);
 
-          // Extract serial number from the name field (first part before comma)
-          // Format: "SERIAL,data2,data3" -> "SERIAL"
-          const extractSerial = (name) => {
-            if (!name) return 'Unknown';
-            const parts = String(name).split(',');
-            return parts[0] ? parts[0].trim() : name;
-          };
-
-          const pduId = rack.pdu_id || rack.rack_id;
-          const rackName = rack.name || rack.rack_id;
-          const serialNumber = extractSerial(rackName);
-
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
             .input('rack_id', sql.NVarChar, rack.rack_id)
-            .input('pdu_id', sql.NVarChar, pduId)
-            .input('name', sql.NVarChar, rackName)
+            .input('pdu_id', sql.NVarChar, rack.pdu_id || rack.rack_id)
+            .input('name', sql.NVarChar, rack.name || rack.rack_id)
             .input('country', sql.NVarChar, rack.country || 'Unknown')
             .input('site', sql.NVarChar, rack.site || 'Unknown')
             .input('dc', sql.NVarChar, rack.dc)
@@ -3295,17 +3242,11 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
             .input('chain', sql.NVarChar, rack.chain || 'Unknown')
             .input('node', sql.NVarChar, rack.node || 'Unknown')
             .input('serial', sql.NVarChar, rack.serial || 'Unknown')
-            .input('pdu1_id', sql.NVarChar, pduId)
-            .input('pdu1_serial', sql.NVarChar, serialNumber)
-            .input('pdu2_id', sql.NVarChar, pduId)
-            .input('pdu2_serial', sql.NVarChar, serialNumber)
-            .input('gw_name', sql.NVarChar, rack.gw_name || 'N/A')
-            .input('gw_ip', sql.NVarChar, rack.gw_ip || 'N/A')
             .query(`
               INSERT INTO maintenance_rack_details
-              (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial, pdu1_id, pdu1_serial, pdu2_id, pdu2_serial, gw_name, gw_ip)
+              (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial)
               VALUES
-              (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial, @pdu1_id, @pdu1_serial, @pdu2_id, @pdu2_serial, @gw_name, @gw_ip)
+              (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial)
             `);
 
           successfulInserts.push({
