@@ -2201,39 +2201,118 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
   }
 });
 
+// Helper function to fetch rack data from NENG API by rack name
+async function fetchRackDataFromNeng(rackName) {
+  try {
+    if (!process.env.NENG_API_URL || !process.env.NENG_API_KEY) {
+      throw new Error('NENG API configuration missing');
+    }
+
+    const pageSize = 100;
+    let skip = 0;
+    let hasMoreData = true;
+
+    while (hasMoreData) {
+      const response = await fetchFromNengApi(
+        `${process.env.NENG_API_URL}?skip=${skip}&limit=${pageSize}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`NENG API returned ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data || !Array.isArray(data)) {
+        break;
+      }
+
+      for (const item of data) {
+        if (item.rack_name && item.rack_name.trim() === rackName.trim()) {
+          return {
+            rack_id: item.rack_name,
+            pdu_id: item.pdu_name || item.rack_name,
+            name: item.rack_name,
+            country: item.country || 'Unknown',
+            site: item.site || 'Unknown',
+            dc: item.dc || 'Unknown',
+            phase: item.phase || 'Unknown',
+            chain: item.chain || item.gateway || 'Unknown',
+            node: item.node || 'Unknown',
+            serial: item.serial || 'Unknown',
+            gwName: item.gateway || 'N/A',
+            gwIp: item.gateway_ip || 'N/A'
+          };
+        }
+      }
+
+      hasMoreData = data.length === pageSize;
+      skip += pageSize;
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('Error fetching rack data from NENG API:', error);
+    throw error;
+  }
+}
+
 // Add single rack to maintenance
 app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
   try {
     const {
       rackId,
+      rackName,
       rackData,
       reason = 'Mantenimiento programado',
       user = 'Sistema'
     } = req.body;
 
-    if (!rackId) {
+    const identifier = rackName || rackId;
+
+    if (!identifier) {
       return res.status(400).json({
         success: false,
-        message: 'rackId is required',
+        message: 'rackName or rackId is required',
         timestamp: new Date().toISOString()
       });
     }
 
-    // Validate rackId is a non-empty string
-    const sanitizedRackId = String(rackId || '').trim();
-    if (!sanitizedRackId) {
+    const sanitizedIdentifier = String(identifier).trim();
+    if (!sanitizedIdentifier) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid rackId: must be a non-empty string',
+        message: 'Invalid identifier: must be a non-empty string',
         timestamp: new Date().toISOString()
       });
     }
-
-    // Extract site from rackData if provided, otherwise will be fetched from DB
-    const providedSite = rackData?.site;
 
     const result = await executeQuery(async (pool) => {
-      // Check if rack is already in maintenance
+      let rack = rackData;
+      let chain = rackData?.chain;
+
+      if (!rack) {
+        console.log(`🔍 Searching for rack "${sanitizedIdentifier}" in NENG API...`);
+        rack = await fetchRackDataFromNeng(sanitizedIdentifier);
+
+        if (!rack) {
+          console.log(`❌ Rack "${sanitizedIdentifier}" not found in NENG API`);
+          return { error: 'not_found' };
+        }
+
+        console.log(`✅ Found rack data in NENG API:`, rack);
+        chain = rack.chain;
+      }
+
+      const sanitizedRackId = rack.rack_id;
+
       const existingCheck = await pool.request()
         .input('rack_id', sql.NVarChar, sanitizedRackId)
         .query(`
@@ -2243,39 +2322,7 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         `);
 
       if (existingCheck.recordset[0].count > 0) {
-        return { error: 'already_exists' };
-      }
-
-      // Use rack data from request body if provided, otherwise try to find it
-      let rack = rackData;
-      let chain = rackData?.chain;
-
-      // If rack data not provided, try to find it in alerts table
-      if (!rack) {
-        const rackDbData = await pool.request()
-          .input('rack_id', sql.NVarChar, sanitizedRackId)
-          .query(`
-            SELECT TOP 1
-              pdu_id,
-              rack_id,
-              name,
-              country,
-              site,
-              dc,
-              phase,
-              chain,
-              node,
-              serial
-            FROM active_critical_alerts
-            WHERE rack_id = @rack_id OR pdu_id = @rack_id
-          `);
-
-        if (rackDbData.recordset.length === 0) {
-          return { error: 'not_found' };
-        }
-
-        rack = rackDbData.recordset[0];
-        chain = rack.chain;
+        return { error: 'already_exists', rackId: sanitizedRackId };
       }
 
       const dc = rack.dc || 'Unknown';
@@ -2349,13 +2396,13 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
           (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial, @pdu1_id, @pdu1_serial, @pdu2_id, @pdu2_serial, @gw_name, @gw_ip)
         `);
 
-      return { success: true, entryId, chain, dc };
+      return { success: true, entryId, chain, dc, rackId: sanitizedRackId };
     });
 
     if (result.error === 'already_exists') {
       return res.status(409).json({
         success: false,
-        message: `Rack ${sanitizedRackId} is already in maintenance`,
+        message: `Rack ${result.rackId || sanitizedIdentifier} is already in maintenance`,
         timestamp: new Date().toISOString()
       });
     }
@@ -2363,7 +2410,7 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
     if (result.error === 'not_found') {
       return res.status(404).json({
         success: false,
-        message: 'Rack not found. Please provide rack data in request body.',
+        message: `Rack "${sanitizedIdentifier}" not found in NENG API`,
         timestamp: new Date().toISOString()
       });
     }
@@ -2384,12 +2431,12 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       });
     }
 
-    logger.info(`Rack ${sanitizedRackId} added to maintenance individually`);
+    logger.info(`Rack ${result.rackId} added to maintenance individually`);
 
     res.json({
       success: true,
-      message: `Rack ${sanitizedRackId} added to maintenance`,
-      data: { rackId: sanitizedRackId, chain: result.chain, dc: result.dc, entryId: result.entryId },
+      message: `Rack ${result.rackId} added to maintenance`,
+      data: { rackId: result.rackId, chain: result.chain, dc: result.dc, entryId: result.entryId },
       timestamp: new Date().toISOString()
     });
 
@@ -3159,7 +3206,7 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
     const racks = [];
     const errors = [];
     const duplicatesInFile = new Set();
-    const rackIdsInFile = [];
+    const rackNamesInFile = [];
 
     let rowIndex = 0;
     worksheet.eachRow((row, rowNumber) => {
@@ -3167,54 +3214,25 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
 
       rowIndex++;
 
-      const rackData = {
-        rack_id: row.getCell(1).value?.toString().trim() || '',
-        dc: row.getCell(2).value?.toString().trim() || '',
-        chain: row.getCell(3).value?.toString().trim() || null,
-        pdu_id: row.getCell(4).value?.toString().trim() || null,
-        name: row.getCell(5).value?.toString().trim() || null,
-        country: row.getCell(6).value?.toString().trim() || null,
-        site: row.getCell(7).value?.toString().trim() || null,
-        phase: row.getCell(8).value?.toString().trim() || null,
-        node: row.getCell(9).value?.toString().trim() || null,
-        serial: row.getCell(10).value?.toString().trim() || null,
-        reason: row.getCell(11).value?.toString().trim() || defaultReason
-      };
+      const rackName = row.getCell(1).value?.toString().trim() || '';
+      const reason = row.getCell(2).value?.toString().trim() || defaultReason;
 
-      if (!rackData.rack_id && !rackData.dc) {
+      if (!rackName) {
         return;
       }
 
-      if (!rackData.rack_id) {
+      if (rackNamesInFile.includes(rackName)) {
+        duplicatesInFile.add(rackName);
         errors.push({
           row: rowNumber,
-          error: 'rack_id is required',
-          data: rackData
+          error: `Duplicate rack_name in Excel: ${rackName}`,
+          rack_name: rackName
         });
         return;
       }
 
-      if (!rackData.dc) {
-        errors.push({
-          row: rowNumber,
-          error: 'dc is required',
-          data: rackData
-        });
-        return;
-      }
-
-      if (rackIdsInFile.includes(rackData.rack_id)) {
-        duplicatesInFile.add(rackData.rack_id);
-        errors.push({
-          row: rowNumber,
-          error: `Duplicate rack_id in Excel: ${rackData.rack_id}`,
-          data: rackData
-        });
-        return;
-      }
-
-      rackIdsInFile.push(rackData.rack_id);
-      racks.push({ ...rackData, rowNumber });
+      rackNamesInFile.push(rackName);
+      racks.push({ rackName, reason, rowNumber });
     });
 
     console.log(`[${requestId}] 📊 Parsed ${racks.length} racks from Excel, ${errors.length} errors found`);
@@ -3233,10 +3251,26 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
       const successfulInserts = [];
       const failedInserts = [];
 
-      for (const rack of racks) {
+      for (const rackEntry of racks) {
         try {
+          console.log(`[${requestId}] 🔍 Searching for rack "${rackEntry.rackName}" in NENG API...`);
+
+          const rackData = await fetchRackDataFromNeng(rackEntry.rackName);
+
+          if (!rackData) {
+            console.log(`[${requestId}] ❌ Rack "${rackEntry.rackName}" not found in NENG API`);
+            failedInserts.push({
+              row: rackEntry.rowNumber,
+              rack_name: rackEntry.rackName,
+              error: 'Rack not found in NENG API'
+            });
+            continue;
+          }
+
+          console.log(`[${requestId}] ✅ Found rack "${rackEntry.rackName}" in NENG API`);
+
           const existingCheck = await pool.request()
-            .input('rack_id', sql.NVarChar, rack.rack_id)
+            .input('rack_id', sql.NVarChar, rackData.rack_id)
             .query(`
               SELECT COUNT(*) as count
               FROM maintenance_rack_details
@@ -3245,8 +3279,9 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
 
           if (existingCheck.recordset[0].count > 0) {
             alreadyInMaintenance.push({
-              row: rack.rowNumber,
-              rack_id: rack.rack_id,
+              row: rackEntry.rowNumber,
+              rack_name: rackEntry.rackName,
+              rack_id: rackData.rack_id,
               message: 'Already in maintenance'
             });
             continue;
@@ -3257,11 +3292,11 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
             .input('entry_type', sql.NVarChar, 'individual_rack')
-            .input('rack_id', sql.NVarChar, rack.rack_id)
-            .input('chain', sql.NVarChar, rack.chain || 'Unknown')
-            .input('site', sql.NVarChar, rack.site || 'Unknown')
-            .input('dc', sql.NVarChar, rack.dc)
-            .input('reason', sql.NVarChar, rack.reason)
+            .input('rack_id', sql.NVarChar, rackData.rack_id)
+            .input('chain', sql.NVarChar, rackData.chain || 'Unknown')
+            .input('site', sql.NVarChar, rackData.site || 'Unknown')
+            .input('dc', sql.NVarChar, rackData.dc)
+            .input('reason', sql.NVarChar, rackEntry.reason)
             .input('user', sql.NVarChar, user)
             .input('started_by', sql.NVarChar, user)
             .query(`
@@ -3271,36 +3306,34 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
               (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @user, @started_by)
             `);
 
-          // Extract serial number from the name field (first part before comma)
-          // Format: "SERIAL,data2,data3" -> "SERIAL"
           const extractSerial = (name) => {
             if (!name) return 'Unknown';
             const parts = String(name).split(',');
             return parts[0] ? parts[0].trim() : name;
           };
 
-          const pduId = rack.pdu_id || rack.rack_id;
-          const rackName = rack.name || rack.rack_id;
+          const pduId = rackData.pdu_id;
+          const rackName = rackData.name;
           const serialNumber = extractSerial(rackName);
 
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
-            .input('rack_id', sql.NVarChar, rack.rack_id)
+            .input('rack_id', sql.NVarChar, rackData.rack_id)
             .input('pdu_id', sql.NVarChar, pduId)
             .input('name', sql.NVarChar, rackName)
-            .input('country', sql.NVarChar, rack.country || 'Unknown')
-            .input('site', sql.NVarChar, rack.site || 'Unknown')
-            .input('dc', sql.NVarChar, rack.dc)
-            .input('phase', sql.NVarChar, rack.phase || 'Unknown')
-            .input('chain', sql.NVarChar, rack.chain || 'Unknown')
-            .input('node', sql.NVarChar, rack.node || 'Unknown')
-            .input('serial', sql.NVarChar, rack.serial || 'Unknown')
+            .input('country', sql.NVarChar, rackData.country)
+            .input('site', sql.NVarChar, rackData.site)
+            .input('dc', sql.NVarChar, rackData.dc)
+            .input('phase', sql.NVarChar, rackData.phase)
+            .input('chain', sql.NVarChar, rackData.chain)
+            .input('node', sql.NVarChar, rackData.node)
+            .input('serial', sql.NVarChar, rackData.serial)
             .input('pdu1_id', sql.NVarChar, pduId)
             .input('pdu1_serial', sql.NVarChar, serialNumber)
             .input('pdu2_id', sql.NVarChar, pduId)
             .input('pdu2_serial', sql.NVarChar, serialNumber)
-            .input('gw_name', sql.NVarChar, rack.gw_name || 'N/A')
-            .input('gw_ip', sql.NVarChar, rack.gw_ip || 'N/A')
+            .input('gw_name', sql.NVarChar, rackData.gwName)
+            .input('gw_ip', sql.NVarChar, rackData.gwIp)
             .query(`
               INSERT INTO maintenance_rack_details
               (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial, pdu1_id, pdu1_serial, pdu2_id, pdu2_serial, gw_name, gw_ip)
@@ -3309,15 +3342,16 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
             `);
 
           successfulInserts.push({
-            row: rack.rowNumber,
-            rack_id: rack.rack_id,
-            dc: rack.dc
+            row: rackEntry.rowNumber,
+            rack_name: rackEntry.rackName,
+            rack_id: rackData.rack_id,
+            dc: rackData.dc
           });
 
         } catch (error) {
           failedInserts.push({
-            row: rack.rowNumber,
-            rack_id: rack.rack_id,
+            row: rackEntry.rowNumber,
+            rack_name: rackEntry.rackName,
             error: error.message
           });
         }

@@ -14,73 +14,56 @@ async function createTemplate() {
   
   const instructions = [
     '1. Ve a la pestaña "Datos" para rellenar la información de los racks',
-    '2. Rellena OBLIGATORIAMENTE las columnas: rack_id y dc',
-    '3. Las demás columnas son opcionales pero recomendadas',
+    '2. Rellena OBLIGATORIAMENTE la columna: rack_name',
+    '3. La columna "reason" es opcional (si está vacía se usará el motivo por defecto)',
     '4. No modifiques los nombres de las columnas (primera fila)',
     '5. No dejes filas vacías entre racks',
     '6. Máximo 1000 racks por archivo',
-    '7. Guarda el archivo y súbelo en la aplicación',
+    '7. La aplicación buscará automáticamente todos los datos del rack en la API NENG',
+    '8. Guarda el archivo y súbelo en la aplicación',
   ];
-  
+
   instructions.forEach((instruction, index) => {
     instructionsSheet.getCell(`A${5 + index}`).value = instruction;
   });
-  
-  instructionsSheet.getCell('A14').value = 'DESCRIPCIÓN DE COLUMNAS:';
-  instructionsSheet.getCell('A14').font = { bold: true, size: 12 };
-  
+
+  instructionsSheet.getCell('A15').value = 'DESCRIPCIÓN DE COLUMNAS:';
+  instructionsSheet.getCell('A15').font = { bold: true, size: 12 };
+
   const columns = [
-    ['rack_id', 'OBLIGATORIO', 'ID único del rack', 'RACK-001'],
-    ['dc', 'OBLIGATORIO', 'Data center', 'DC-01'],
-    ['chain', 'Opcional', 'Número de chain', 'CHAIN-A'],
-    ['pdu_id', 'Opcional', 'ID del PDU', 'PDU-001'],
-    ['name', 'Opcional', 'Nombre descriptivo', 'Rack Principal Norte'],
-    ['country', 'Opcional', 'País', 'España'],
-    ['site', 'Opcional', 'Sitio', 'Site-North'],
-    ['phase', 'Opcional', 'Fase', 'Fase-A'],
-    ['node', 'Opcional', 'Nodo', 'Node-01'],
-    ['serial', 'Opcional', 'Número de serie', 'SN123456789'],
-    ['reason', 'Opcional', 'Razón del mantenimiento', 'Mantenimiento preventivo'],
+    ['rack_name', 'OBLIGATORIO', 'Nombre del rack (debe existir en la API NENG)', 'RACK-001'],
+    ['reason', 'Opcional', 'Razón del mantenimiento (opcional)', 'Mantenimiento preventivo'],
   ];
   
-  instructionsSheet.getCell('A16').value = 'Columna';
-  instructionsSheet.getCell('B16').value = 'Obligatorio';
-  instructionsSheet.getCell('C16').value = 'Descripción';
-  instructionsSheet.getCell('D16').value = 'Ejemplo';
-  instructionsSheet.getRow(16).font = { bold: true };
-  
+  instructionsSheet.getCell('A17').value = 'Columna';
+  instructionsSheet.getCell('B17').value = 'Obligatorio';
+  instructionsSheet.getCell('C17').value = 'Descripción';
+  instructionsSheet.getCell('D17').value = 'Ejemplo';
+  instructionsSheet.getRow(17).font = { bold: true };
+
   columns.forEach((col, index) => {
-    const row = 17 + index;
+    const row = 18 + index;
     instructionsSheet.getCell(`A${row}`).value = col[0];
     instructionsSheet.getCell(`B${row}`).value = col[1];
     instructionsSheet.getCell(`C${row}`).value = col[2];
     instructionsSheet.getCell(`D${row}`).value = col[3];
   });
-  
+
   instructionsSheet.columns = [
     { width: 20 },
     { width: 15 },
-    { width: 35 },
+    { width: 50 },
     { width: 30 }
   ];
-  
+
   // Sheet 2: Data
   const dataSheet = workbook.addWorksheet('Datos');
-  
+
   dataSheet.columns = [
-    { header: 'rack_id', key: 'rack_id', width: 20 },
-    { header: 'dc', key: 'dc', width: 15 },
-    { header: 'chain', key: 'chain', width: 15 },
-    { header: 'pdu_id', key: 'pdu_id', width: 20 },
-    { header: 'name', key: 'name', width: 30 },
-    { header: 'country', key: 'country', width: 15 },
-    { header: 'site', key: 'site', width: 20 },
-    { header: 'phase', key: 'phase', width: 15 },
-    { header: 'node', key: 'node', width: 15 },
-    { header: 'serial', key: 'serial', width: 20 },
-    { header: 'reason', key: 'reason', width: 35 }
+    { header: 'rack_name', key: 'rack_name', width: 30 },
+    { header: 'reason', key: 'reason', width: 50 }
   ];
-  
+
   // Style header row
   dataSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
   dataSheet.getRow(1).fill = {
@@ -89,50 +72,23 @@ async function createTemplate() {
     fgColor: { argb: 'FF0066CC' }
   };
   dataSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-  
+
   // Add example rows
   dataSheet.addRow({
-    rack_id: 'RACK-001',
-    dc: 'DC-01',
-    chain: 'CHAIN-A',
-    pdu_id: 'PDU-001',
-    name: 'Rack Principal Norte',
-    country: 'España',
-    site: 'Site-North',
-    phase: 'Fase-A',
-    node: 'Node-01',
-    serial: 'SN123456789',
+    rack_name: 'RACK-001',
     reason: 'Mantenimiento preventivo'
   });
-  
+
   dataSheet.addRow({
-    rack_id: 'RACK-002',
-    dc: 'DC-01',
-    chain: 'CHAIN-A',
-    pdu_id: 'PDU-002',
-    name: 'Rack Norte 2',
-    country: 'España',
-    site: 'Site-North',
-    phase: 'Fase-A',
-    node: 'Node-02',
-    serial: 'SN123457',
-    reason: 'Mantenimiento preventivo'
+    rack_name: 'RACK-002',
+    reason: 'Actualización de firmware'
   });
-  
+
   dataSheet.addRow({
-    rack_id: 'RACK-003',
-    dc: 'DC-02',
-    chain: 'CHAIN-B',
-    pdu_id: '',
-    name: '',
-    country: '',
-    site: '',
-    phase: '',
-    node: '',
-    serial: '',
-    reason: 'Reparación urgente'
+    rack_name: 'RACK-003',
+    reason: ''
   });
-  
+
   // Style example rows with light yellow
   [2, 3, 4].forEach(rowNum => {
     dataSheet.getRow(rowNum).fill = {
@@ -141,11 +97,11 @@ async function createTemplate() {
       fgColor: { argb: 'FFFFFACD' }
     };
   });
-  
+
   // Add note
-  dataSheet.getCell('A5').value = 'NOTA: Las filas 2-4 son ejemplos. Bórralas y añade tus datos debajo.';
+  dataSheet.getCell('A5').value = 'NOTA: Las filas 2-4 son ejemplos. Bórralas y añade tus datos debajo. La app buscará automáticamente los datos en la API NENG.';
   dataSheet.getCell('A5').font = { italic: true, color: { argb: 'FFFF0000' } };
-  dataSheet.mergeCells('A5:K5');
+  dataSheet.mergeCells('A5:B5');
   
   await workbook.xlsx.writeFile('plantilla_mantenimiento.xlsx');
   console.log('✅ Excel template created successfully in project root!');
