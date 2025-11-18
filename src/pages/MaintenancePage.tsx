@@ -579,13 +579,13 @@ export default function MaintenancePage() {
                           // Check if user can finish this specific rack's maintenance
                           const canFinishRackMaintenance = canUserFinishMaintenance(rack.site);
 
-                          // Extract serial number from the name field (first part before any separator)
+                          // Extract serial number from the name field (first part before comma)
                           const extractSerialFromName = (name: string | undefined): string => {
                             if (!name) return '';
-                            // The serial is typically the first part of the name
-                            // Example: "FEX2218AUUZ-0B01.4AE-3.RCOM" -> "FEX2218AUUZ"
-                            const parts = name.split('-');
-                            return parts[0] || name;
+                            // The serial is the first part before comma
+                            // Format: "SERIAL,data2,data3" -> "SERIAL"
+                            const parts = name.split(',');
+                            return parts[0] ? parts[0].trim() : name;
                           };
 
                           // Use new dual PDU fields if available, otherwise fall back to legacy fields

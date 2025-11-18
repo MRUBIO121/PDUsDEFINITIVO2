@@ -2310,11 +2310,12 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         `);
 
       // Insert rack details
-      // Extract serial number from the name field (first part before separator)
+      // Extract serial number from the name field (first part before comma)
+      // Format: "SERIAL,data2,data3" -> "SERIAL"
       const extractSerial = (name) => {
         if (!name) return 'Unknown';
-        const parts = String(name).split('-');
-        return parts[0] || name;
+        const parts = String(name).split(',');
+        return parts[0] ? parts[0].trim() : name;
       };
 
       const pduId = String(rack.pdu_id || rack.id || sanitizedRackId);
@@ -2657,11 +2658,12 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
             continue;
           }
 
-          // Extract serial number from the name field
+          // Extract serial number from the name field (first part before comma)
+          // Format: "SERIAL,data2,data3" -> "SERIAL"
           const extractSerial = (name) => {
             if (!name) return 'Unknown';
-            const parts = String(name).split('-');
-            return parts[0] || name;
+            const parts = String(name).split(',');
+            return parts[0] ? parts[0].trim() : name;
           };
 
           const rackName = String(rack.rackName || rack.name || 'Unknown');
@@ -3263,11 +3265,12 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
               (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @user, @started_by)
             `);
 
-          // Extract serial number from the name field
+          // Extract serial number from the name field (first part before comma)
+          // Format: "SERIAL,data2,data3" -> "SERIAL"
           const extractSerial = (name) => {
             if (!name) return 'Unknown';
-            const parts = String(name).split('-');
-            return parts[0] || name;
+            const parts = String(name).split(',');
+            return parts[0] ? parts[0].trim() : name;
           };
 
           const pduId = rack.pdu_id || rack.rack_id;
