@@ -2278,6 +2278,42 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         chain = rack.chain;
       }
 
+      // Enrich rack data from NENG API if data is missing
+      try {
+        const rackName = String(rack.name || sanitizedRackId);
+
+        // Check if we need to fetch more data (missing PDU IDs, serials, or gateway info)
+        const needsEnrichment = !rack.pdu1_id || !rack.pdu2_id || !rack.pdu1_serial || !rack.pdu2_serial || !rack.gwName || !rack.gwIp;
+
+        if (needsEnrichment) {
+          // Fetch from NENG API /power endpoint
+          const powerUrl = `${nengApiUrl}/power`;
+          const powerResponse = await fetch(powerUrl, { headers });
+
+          if (powerResponse.ok) {
+            const powerData = await powerResponse.json();
+
+            // Find matching rack by name
+            const matchingRack = powerData.find(item => item.name === rackName);
+
+            if (matchingRack) {
+              // Enrich with data from API
+              rack.pdu1_id = rack.pdu1_id || matchingRack.id;
+              rack.pdu1_serial = rack.pdu1_serial || matchingRack.serial;
+              rack.pdu2_id = rack.pdu2_id || matchingRack.pdu2_id;
+              rack.pdu2_serial = rack.pdu2_serial || matchingRack.pdu2_serial;
+              rack.gwName = rack.gwName || matchingRack.gwName;
+              rack.gwIp = rack.gwIp || matchingRack.gwIp;
+
+              logger.info(`Enriched rack data from NENG API for ${rackName}`);
+            }
+          }
+        }
+      } catch (enrichError) {
+        // If enrichment fails, continue with available data
+        logger.warn(`Failed to enrich rack data from NENG API: ${enrichError.message}`);
+      }
+
       const dc = rack.dc || 'Unknown';
       const site = rack.site || 'Unknown';
 
@@ -2324,6 +2360,12 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       const rackName = String(rack.name || sanitizedRackId);
       const serialNumber = extractSerial(rackName);
 
+      // Use enriched data if available, fallback to extracted serial
+      const pdu1Id = String(rack.pdu1_id || pduId);
+      const pdu2Id = String(rack.pdu2_id || pduId);
+      const pdu1Serial = String(rack.pdu1_serial || serialNumber);
+      const pdu2Serial = String(rack.pdu2_serial || serialNumber);
+
       await pool.request()
         .input('entry_id', sql.UniqueIdentifier, entryId)
         .input('rack_id', sql.NVarChar, sanitizedRackId)
@@ -2336,10 +2378,10 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         .input('chain', sql.NVarChar, String(chain || 'Unknown'))
         .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
         .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
-        .input('pdu1_id', sql.NVarChar, pduId)
-        .input('pdu1_serial', sql.NVarChar, serialNumber)
-        .input('pdu2_id', sql.NVarChar, pduId)
-        .input('pdu2_serial', sql.NVarChar, serialNumber)
+        .input('pdu1_id', sql.NVarChar, pdu1Id)
+        .input('pdu1_serial', sql.NVarChar, pdu1Serial)
+        .input('pdu2_id', sql.NVarChar, pdu2Id)
+        .input('pdu2_serial', sql.NVarChar, pdu2Serial)
         .input('gw_name', sql.NVarChar, String(rack.gwName || 'N/A'))
         .input('gw_ip', sql.NVarChar, String(rack.gwIp || 'N/A'))
         .query(`
@@ -2673,6 +2715,38 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
           const rackName = String(rack.rackName || rack.name || 'Unknown');
           const serialNumber = extractSerial(rackName);
 
+          // Enrich rack data from NENG API if data is missing
+          try {
+            const needsEnrichment = !rack.pdu1_id || !rack.pdu2_id || !rack.pdu1_serial || !rack.pdu2_serial || !rack.gwName || !rack.gwIp;
+
+            if (needsEnrichment) {
+              const powerUrl = `${nengApiUrl}/power`;
+              const powerResponse = await fetch(powerUrl, { headers });
+
+              if (powerResponse.ok) {
+                const powerData = await powerResponse.json();
+                const matchingRack = powerData.find(item => item.name === rackName);
+
+                if (matchingRack) {
+                  rack.pdu1_id = rack.pdu1_id || matchingRack.id;
+                  rack.pdu1_serial = rack.pdu1_serial || matchingRack.serial;
+                  rack.pdu2_id = rack.pdu2_id || matchingRack.pdu2_id;
+                  rack.pdu2_serial = rack.pdu2_serial || matchingRack.pdu2_serial;
+                  rack.gwName = rack.gwName || matchingRack.gwName;
+                  rack.gwIp = rack.gwIp || matchingRack.gwIp;
+                }
+              }
+            }
+          } catch (enrichError) {
+            logger.warn(`Failed to enrich rack data: ${enrichError.message}`);
+          }
+
+          // Use enriched data if available
+          const pdu1Id = String(rack.pdu1_id || pduId);
+          const pdu2Id = String(rack.pdu2_id || pduId);
+          const pdu1Serial = String(rack.pdu1_serial || serialNumber);
+          const pdu2Serial = String(rack.pdu2_serial || serialNumber);
+
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
             .input('rack_id', sql.NVarChar, rackId)
@@ -2685,10 +2759,10 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
             .input('chain', sql.NVarChar, sanitizedChain)
             .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
             .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
-            .input('pdu1_id', sql.NVarChar, pduId)
-            .input('pdu1_serial', sql.NVarChar, serialNumber)
-            .input('pdu2_id', sql.NVarChar, pduId)
-            .input('pdu2_serial', sql.NVarChar, serialNumber)
+            .input('pdu1_id', sql.NVarChar, pdu1Id)
+            .input('pdu1_serial', sql.NVarChar, pdu1Serial)
+            .input('pdu2_id', sql.NVarChar, pdu2Id)
+            .input('pdu2_serial', sql.NVarChar, pdu2Serial)
             .input('gw_name', sql.NVarChar, String(rack.gwName || 'N/A'))
             .input('gw_ip', sql.NVarChar, String(rack.gwIp || 'N/A'))
             .query(`
