@@ -116,6 +116,7 @@ ELSE
 BEGIN
     PRINT 'ℹ️  Columna pdu2_serial ya existe';
 END
+GO
 
 -- ============================================================================================================
 -- PASO 3: Migrar datos existentes
@@ -125,20 +126,21 @@ PRINT '';
 PRINT 'Paso 3: Migrando datos existentes...';
 
 -- Copiar pdu_id a pdu1_id para registros existentes que no tienen pdu1_id
+DECLARE @updatedPduIds INT;
 UPDATE maintenance_rack_details
 SET pdu1_id = pdu_id
 WHERE pdu1_id IS NULL AND pdu_id IS NOT NULL;
-
-DECLARE @updatedPduIds INT = @@ROWCOUNT;
+SET @updatedPduIds = @@ROWCOUNT;
 PRINT '✅ ' + CAST(@updatedPduIds AS NVARCHAR(10)) + ' registros actualizados con pdu1_id';
 
 -- Copiar serial a pdu1_serial para registros existentes que no tienen pdu1_serial
+DECLARE @updatedSerials INT;
 UPDATE maintenance_rack_details
 SET pdu1_serial = serial
 WHERE pdu1_serial IS NULL AND serial IS NOT NULL;
-
-DECLARE @updatedSerials INT = @@ROWCOUNT;
+SET @updatedSerials = @@ROWCOUNT;
 PRINT '✅ ' + CAST(@updatedSerials AS NVARCHAR(10)) + ' registros actualizados con pdu1_serial';
+GO
 
 -- ============================================================================================================
 -- PASO 4: Crear índices para mejorar el rendimiento
@@ -182,6 +184,7 @@ ELSE
 BEGIN
     PRINT 'ℹ️  Índice IX_maintenance_rack_details_pdu2_id ya existe';
 END
+GO
 
 -- ============================================================================================================
 -- PASO 5: Resumen de cambios
