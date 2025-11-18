@@ -1071,6 +1071,14 @@ function App() {
                         )}
                       </div>
                     )}
+                    {maintenanceRacks.size > 0 && (
+                      <div className="ml-3 flex items-center">
+                        <div className="w-2 h-2 bg-blue-600 rounded-full mr-1"></div>
+                        <span className="text-xs font-medium text-blue-700">
+                          {maintenanceRacks.size} en mantenimiento
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
