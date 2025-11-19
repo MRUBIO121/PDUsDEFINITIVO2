@@ -110,6 +110,11 @@ export default function MaintenancePage() {
         throw new Error(data.message || 'Failed to fetch maintenance entries');
       }
 
+      console.log('🔍 Maintenance entries received:', data.data);
+      if (data.data && data.data.length > 0 && data.data[0].racks && data.data[0].racks.length > 0) {
+        console.log('🔍 First rack details:', data.data[0].racks[0]);
+      }
+
       setMaintenanceEntries(data.data || []);
     } catch (err) {
       console.error('Error fetching maintenance entries:', err);

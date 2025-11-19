@@ -2159,6 +2159,8 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           console.log(`      Name: "${d.name}"`);
           console.log(`      Chain: "${d.chain}"`);
           console.log(`      DC: "${d.dc}"`);
+          console.log(`      Gateway: "${d.gwName || 'N/A'}"`);
+          console.log(`      Gateway IP: "${d.gwIp || 'N/A'}"`);
         }
       });
       console.log(`\n   🔢 Total de rack_id únicos en mantenimiento: ${uniqueRackIds.size}`);
