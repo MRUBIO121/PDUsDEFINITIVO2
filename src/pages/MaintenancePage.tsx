@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface RackDetail {
   rack_id: string;
-  pdu_id: string;
   name: string;
   country: string;
   site: string;
@@ -13,7 +12,6 @@ interface RackDetail {
   phase: string;
   chain: string;
   node: string;
-  serial: string;
   gwName?: string;
   gwIp?: string;
 }
@@ -610,11 +608,6 @@ export default function MaintenancePage() {
                             <div>
                               <span className="font-medium">Rack ID:</span> {rack.rack_id}
                             </div>
-                            {rack.pdu_id && (
-                              <div>
-                                <span className="font-medium">PDU ID:</span> {rack.pdu_id}
-                              </div>
-                            )}
                             {rack.country && (
                               <div>
                                 <span className="font-medium">País:</span> España
@@ -643,11 +636,6 @@ export default function MaintenancePage() {
                             {rack.node && (
                               <div>
                                 <span className="font-medium">Node:</span> {rack.node}
-                              </div>
-                            )}
-                            {rack.serial && (
-                              <div>
-                                <span className="font-medium">Serial:</span> {rack.serial}
                               </div>
                             )}
                           </div>

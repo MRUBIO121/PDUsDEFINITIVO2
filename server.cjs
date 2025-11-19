@@ -2107,7 +2107,6 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
         SELECT
           mrd.maintenance_entry_id,
           mrd.rack_id,
-          mrd.pdu_id,
           mrd.name,
           mrd.country,
           mrd.site,
@@ -2115,7 +2114,6 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           mrd.phase,
           mrd.chain,
           mrd.node,
-          mrd.serial,
           mrd.gwName,
           mrd.gwIp
         FROM maintenance_rack_details mrd
@@ -2420,7 +2418,6 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       await pool.request()
         .input('entry_id', sql.UniqueIdentifier, entryId)
         .input('rack_id', sql.NVarChar, sanitizedRackId)
-        .input('pdu_id', sql.NVarChar, String(rack.pdu_id || rack.id || sanitizedRackId))
         .input('name', sql.NVarChar, String(rack.name || sanitizedRackId))
         .input('country', sql.NVarChar, String(rack.country || 'Unknown'))
         .input('site', sql.NVarChar, site)
@@ -2428,14 +2425,13 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         .input('phase', sql.NVarChar, String(rack.phase || 'Unknown'))
         .input('chain', sql.NVarChar, String(chain || 'Unknown'))
         .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
-        .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
         .input('gwName', sql.NVarChar, String(rack.gwName || 'N/A'))
         .input('gwIp', sql.NVarChar, String(rack.gwIp || 'N/A'))
         .query(`
           INSERT INTO maintenance_rack_details
-          (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial, gwName, gwIp)
+          (maintenance_entry_id, rack_id, name, country, site, dc, phase, chain, node, gwName, gwIp)
           VALUES
-          (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial, @gwName, @gwIp)
+          (@entry_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @gwName, @gwIp)
         `);
 
       return { success: true, entryId, chain, dc };
@@ -2754,7 +2750,6 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
             .input('rack_id', sql.NVarChar, rackId)
-            .input('pdu_id', sql.NVarChar, pduId)
             .input('name', sql.NVarChar, String(rack.rackName || rack.name || 'Unknown'))
             .input('country', sql.NVarChar, 'España')
             .input('site', sql.NVarChar, site || String(rack.site || 'Unknown'))
@@ -2762,14 +2757,13 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
             .input('phase', sql.NVarChar, String(rack.phase || 'Unknown'))
             .input('chain', sql.NVarChar, sanitizedChain)
             .input('node', sql.NVarChar, String(rack.node || 'Unknown'))
-            .input('serial', sql.NVarChar, String(rack.serial || 'Unknown'))
             .input('gwName', sql.NVarChar, String(rack.gwName || 'N/A'))
             .input('gwIp', sql.NVarChar, String(rack.gwIp || 'N/A'))
             .query(`
               INSERT INTO maintenance_rack_details
-              (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial, gwName, gwIp)
+              (maintenance_entry_id, rack_id, name, country, site, dc, phase, chain, node, gwName, gwIp)
               VALUES
-              (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial, @gwName, @gwIp)
+              (@entry_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @gwName, @gwIp)
             `);
 
           insertedCount++;
@@ -3321,7 +3315,6 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
       const rackName = String(pdu.rackName || '').trim();
       if (rackName && !rackDataMap.has(rackName)) {
         rackDataMap.set(rackName, {
-          pdu_id: pdu.id || rackName,
           name: rackName,
           rackName: rackName,
           country: pdu.country || 'Unknown',
@@ -3330,7 +3323,6 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
           phase: pdu.phase || 'Unknown',
           chain: pdu.chain || 'Unknown',
           node: pdu.node || 'Unknown',
-          serial: pdu.serial || 'Unknown',
           gwName: pdu.gwName || 'N/A',
           gwIp: pdu.gwIp || 'N/A'
         });
@@ -3378,7 +3370,6 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
             notFoundInAPI.push(rack.rack_id);
             rackInfo = {
               rack_id: rack.rack_id,
-              pdu_id: rack.rack_id,
               name: rack.rack_id,
               country: 'Unknown',
               site: 'Unknown',
@@ -3386,7 +3377,6 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
               phase: 'Unknown',
               chain: 'Unknown',
               node: 'Unknown',
-              serial: 'Unknown',
               gwName: 'N/A',
               gwIp: 'N/A',
               reason: rack.reason
@@ -3415,7 +3405,6 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
             .input('rack_id', sql.NVarChar, rackInfo.rack_id)
-            .input('pdu_id', sql.NVarChar, rackInfo.pdu_id)
             .input('name', sql.NVarChar, rackInfo.name)
             .input('country', sql.NVarChar, rackInfo.country)
             .input('site', sql.NVarChar, rackInfo.site)
@@ -3423,14 +3412,13 @@ app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res
             .input('phase', sql.NVarChar, rackInfo.phase)
             .input('chain', sql.NVarChar, rackInfo.chain)
             .input('node', sql.NVarChar, rackInfo.node)
-            .input('serial', sql.NVarChar, rackInfo.serial)
             .input('gwName', sql.NVarChar, rackInfo.gwName)
             .input('gwIp', sql.NVarChar, rackInfo.gwIp)
             .query(`
               INSERT INTO maintenance_rack_details
-              (maintenance_entry_id, rack_id, pdu_id, name, country, site, dc, phase, chain, node, serial, gwName, gwIp)
+              (maintenance_entry_id, rack_id, name, country, site, dc, phase, chain, node, gwName, gwIp)
               VALUES
-              (@entry_id, @rack_id, @pdu_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial, @gwName, @gwIp)
+              (@entry_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @gwName, @gwIp)
             `);
 
           successfulInserts.push({
