@@ -14,6 +14,8 @@ interface RackDetail {
   chain: string;
   node: string;
   serial: string;
+  gwName?: string;
+  gwIp?: string;
 }
 
 interface MaintenanceEntry {
