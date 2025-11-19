@@ -496,6 +496,26 @@ export default function MaintenancePage() {
                           )}
                         </div>
 
+                        {/* Gateway Information - Show for individual racks */}
+                        {!isChainEntry && entry.racks.length > 0 && (entry.racks[0].gwName || entry.racks[0].gwIp) && (
+                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            {entry.racks[0].gwName && entry.racks[0].gwName !== 'N/A' && (
+                              <div className="flex items-center gap-2 text-slate-700">
+                                <Server className={`w-4 h-4 ${iconColor}`} />
+                                <span className="font-medium">Gateway:</span>
+                                <span>{entry.racks[0].gwName}</span>
+                              </div>
+                            )}
+                            {entry.racks[0].gwIp && entry.racks[0].gwIp !== 'N/A' && (
+                              <div className="flex items-center gap-2 text-slate-700">
+                                <Server className={`w-4 h-4 ${iconColor}`} />
+                                <span className="font-medium">IP Gateway:</span>
+                                <span>{entry.racks[0].gwIp}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         <div className="mt-4 space-y-2 text-sm">
                           <div className="flex items-center gap-2 text-slate-600">
                             <Calendar className="w-4 h-4" />
