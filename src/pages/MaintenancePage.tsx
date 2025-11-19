@@ -498,7 +498,6 @@ export default function MaintenancePage() {
                           )}
                         </div>
 
-                        {/* Gateway Information - Show for individual racks */}
                         {!isChainEntry && entry.racks.length > 0 && (
                           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                             {entry.racks[0].gwName && entry.racks[0].gwName !== 'N/A' && (
