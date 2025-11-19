@@ -14,12 +14,14 @@ async function createTemplate() {
   
   const instructions = [
     '1. Ve a la pestaña "Datos" para rellenar la información de los racks',
-    '2. Rellena OBLIGATORIAMENTE las columnas: rack_id y dc',
-    '3. Las demás columnas son opcionales pero recomendadas',
-    '4. No modifiques los nombres de las columnas (primera fila)',
-    '5. No dejes filas vacías entre racks',
-    '6. Máximo 1000 racks por archivo',
-    '7. Guarda el archivo y súbelo en la aplicación',
+    '2. Rellena OBLIGATORIAMENTE la columna: rack_id (nombre del rack)',
+    '3. La columna reason es opcional para especificar el motivo del mantenimiento',
+    '4. El sistema buscará automáticamente los datos del rack en la API',
+    '5. Si no encuentra el rack, lo agregará solo con el nombre proporcionado',
+    '6. No modifiques el nombre de la columna (primera fila)',
+    '7. No dejes filas vacías entre racks',
+    '8. Máximo 1000 racks por archivo',
+    '9. Guarda el archivo y súbelo en la aplicación',
   ];
   
   instructions.forEach((instruction, index) => {
@@ -30,16 +32,7 @@ async function createTemplate() {
   instructionsSheet.getCell('A14').font = { bold: true, size: 12 };
   
   const columns = [
-    ['rack_id', 'OBLIGATORIO', 'ID único del rack', 'RACK-001'],
-    ['dc', 'OBLIGATORIO', 'Data center', 'DC-01'],
-    ['chain', 'Opcional', 'Número de chain', 'CHAIN-A'],
-    ['pdu_id', 'Opcional', 'ID del PDU', 'PDU-001'],
-    ['name', 'Opcional', 'Nombre descriptivo', 'Rack Principal Norte'],
-    ['country', 'Opcional', 'País', 'España'],
-    ['site', 'Opcional', 'Sitio', 'Site-North'],
-    ['phase', 'Opcional', 'Fase', 'Fase-A'],
-    ['node', 'Opcional', 'Nodo', 'Node-01'],
-    ['serial', 'Opcional', 'Número de serie', 'SN123456789'],
+    ['rack_id', 'OBLIGATORIO', 'Nombre del rack (el sistema buscará automáticamente el resto de datos)', 'RACK-001'],
     ['reason', 'Opcional', 'Razón del mantenimiento', 'Mantenimiento preventivo'],
   ];
   
@@ -66,19 +59,10 @@ async function createTemplate() {
   
   // Sheet 2: Data
   const dataSheet = workbook.addWorksheet('Datos');
-  
+
   dataSheet.columns = [
-    { header: 'rack_id', key: 'rack_id', width: 20 },
-    { header: 'dc', key: 'dc', width: 15 },
-    { header: 'chain', key: 'chain', width: 15 },
-    { header: 'pdu_id', key: 'pdu_id', width: 20 },
-    { header: 'name', key: 'name', width: 30 },
-    { header: 'country', key: 'country', width: 15 },
-    { header: 'site', key: 'site', width: 20 },
-    { header: 'phase', key: 'phase', width: 15 },
-    { header: 'node', key: 'node', width: 15 },
-    { header: 'serial', key: 'serial', width: 20 },
-    { header: 'reason', key: 'reason', width: 35 }
+    { header: 'rack_id', key: 'rack_id', width: 30 },
+    { header: 'reason', key: 'reason', width: 50 }
   ];
   
   // Style header row
@@ -93,43 +77,16 @@ async function createTemplate() {
   // Add example rows
   dataSheet.addRow({
     rack_id: 'RACK-001',
-    dc: 'DC-01',
-    chain: 'CHAIN-A',
-    pdu_id: 'PDU-001',
-    name: 'Rack Principal Norte',
-    country: 'España',
-    site: 'Site-North',
-    phase: 'Fase-A',
-    node: 'Node-01',
-    serial: 'SN123456789',
     reason: 'Mantenimiento preventivo'
   });
-  
+
   dataSheet.addRow({
     rack_id: 'RACK-002',
-    dc: 'DC-01',
-    chain: 'CHAIN-A',
-    pdu_id: 'PDU-002',
-    name: 'Rack Norte 2',
-    country: 'España',
-    site: 'Site-North',
-    phase: 'Fase-A',
-    node: 'Node-02',
-    serial: 'SN123457',
     reason: 'Mantenimiento preventivo'
   });
-  
+
   dataSheet.addRow({
     rack_id: 'RACK-003',
-    dc: 'DC-02',
-    chain: 'CHAIN-B',
-    pdu_id: '',
-    name: '',
-    country: '',
-    site: '',
-    phase: '',
-    node: '',
-    serial: '',
     reason: 'Reparación urgente'
   });
   
@@ -145,7 +102,7 @@ async function createTemplate() {
   // Add note
   dataSheet.getCell('A5').value = 'NOTA: Las filas 2-4 son ejemplos. Bórralas y añade tus datos debajo.';
   dataSheet.getCell('A5').font = { italic: true, color: { argb: 'FFFF0000' } };
-  dataSheet.mergeCells('A5:K5');
+  dataSheet.mergeCells('A5:B5');
   
   await workbook.xlsx.writeFile('plantilla_mantenimiento.xlsx');
   console.log('✅ Excel template created successfully in project root!');
