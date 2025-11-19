@@ -209,8 +209,14 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       fetchAllData();
     }, 100);
 
+    // Auto-refresh after initial load - only once
+    const autoRefreshTimer = setTimeout(() => {
+      fetchAllData();
+    }, 3000);
+
     return () => {
       clearTimeout(initTimer);
+      clearTimeout(autoRefreshTimer);
     };
   }, []);
 
