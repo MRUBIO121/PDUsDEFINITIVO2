@@ -110,11 +110,6 @@ export default function MaintenancePage() {
         throw new Error(data.message || 'Failed to fetch maintenance entries');
       }
 
-      console.log('🔍 Maintenance entries received:', data.data);
-      if (data.data && data.data.length > 0 && data.data[0].racks && data.data[0].racks.length > 0) {
-        console.log('🔍 First rack details:', data.data[0].racks[0]);
-      }
-
       setMaintenanceEntries(data.data || []);
     } catch (err) {
       console.error('Error fetching maintenance entries:', err);
@@ -504,7 +499,7 @@ export default function MaintenancePage() {
                         </div>
 
                         {/* Gateway Information - Show for individual racks */}
-                        {!isChainEntry && entry.racks.length > 0 && (entry.racks[0].gwName || entry.racks[0].gwIp) && (
+                        {!isChainEntry && entry.racks.length > 0 && (
                           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                             {entry.racks[0].gwName && entry.racks[0].gwName !== 'N/A' && (
                               <div className="flex items-center gap-2 text-slate-700">

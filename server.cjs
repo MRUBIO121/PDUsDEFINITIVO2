@@ -2159,13 +2159,120 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           console.log(`      Name: "${d.name}"`);
           console.log(`      Chain: "${d.chain}"`);
           console.log(`      DC: "${d.dc}"`);
-          console.log(`      Gateway: "${d.gwName || 'N/A'}"`);
-          console.log(`      Gateway IP: "${d.gwIp || 'N/A'}"`);
         }
       });
       console.log(`\n   🔢 Total de rack_id únicos en mantenimiento: ${uniqueRackIds.size}`);
       console.log(`   📋 Lista de todos los rack_id únicos:`);
       console.log(`   [${Array.from(uniqueRackIds).join(', ')}]`);
+    }
+
+    // Enrich details with API data if gwName or gwIp are missing
+    console.log(`\n[${requestId}] 🔍 Checking for missing gateway data...`);
+
+    const detailsWithMissingGateway = details.filter(d => {
+      const gwName = String(d.gwName || '').trim();
+      const gwIp = String(d.gwIp || '').trim();
+      return !gwName || gwName === 'N/A' || !gwIp || gwIp === 'N/A';
+    });
+
+    console.log(`[${requestId}] Found ${detailsWithMissingGateway.length} racks with missing gateway data`);
+
+    if (detailsWithMissingGateway.length > 0 && process.env.NENG_API_URL && process.env.NENG_API_KEY) {
+      try {
+        console.log(`[${requestId}] 🔄 Fetching data from NENG API to enrich missing gateway info...`);
+
+        // Fetch power data from API
+        let allPowerData = [];
+        let skip = 0;
+        const limit = 100;
+        let hasMore = true;
+
+        while (hasMore) {
+          const response = await fetchFromNengApi(
+            `${process.env.NENG_API_URL}?skip=${skip}&limit=${limit}`,
+            {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          if (response.success && Array.isArray(response.data)) {
+            allPowerData = allPowerData.concat(response.data);
+            if (response.data.length < limit) {
+              hasMore = false;
+            } else {
+              skip += limit;
+            }
+          } else {
+            hasMore = false;
+          }
+        }
+
+        console.log(`[${requestId}] ✅ Fetched ${allPowerData.length} power records from API`);
+
+        // Create lookup map by rackName
+        const rackApiDataMap = new Map();
+        allPowerData.forEach(pdu => {
+          const rackName = String(pdu.rackName || '').trim();
+          if (rackName) {
+            rackApiDataMap.set(rackName, {
+              gwName: pdu.gwName || 'N/A',
+              gwIp: pdu.gwIp || 'N/A',
+              dc: pdu.dc || null,
+              site: pdu.site || null,
+              chain: pdu.chain || null,
+              phase: pdu.phase || null,
+              node: pdu.node || null
+            });
+          }
+        });
+
+        // Update details with API data and save to database
+        let enrichedCount = 0;
+        const pool = await sql.connect(sqlConfig);
+
+        for (const detail of detailsWithMissingGateway) {
+          const rackName = String(detail.name || detail.rack_id || '').trim();
+          const apiData = rackApiDataMap.get(rackName);
+
+          if (apiData && apiData.gwName && apiData.gwName !== 'N/A') {
+            console.log(`[${requestId}] ✅ Found gateway data for ${rackName}: ${apiData.gwName} (${apiData.gwIp})`);
+
+            // Update in memory
+            detail.gwName = apiData.gwName;
+            detail.gwIp = apiData.gwIp;
+
+            // Update in database
+            try {
+              await pool.request()
+                .input('rack_id', sql.NVarChar, detail.rack_id)
+                .input('maintenance_entry_id', sql.UniqueIdentifier, detail.maintenance_entry_id)
+                .input('gwName', sql.NVarChar, apiData.gwName)
+                .input('gwIp', sql.NVarChar, apiData.gwIp)
+                .query(`
+                  UPDATE maintenance_rack_details
+                  SET gwName = @gwName, gwIp = @gwIp
+                  WHERE rack_id = @rack_id AND maintenance_entry_id = @maintenance_entry_id
+                `);
+
+              enrichedCount++;
+            } catch (updateError) {
+              console.warn(`[${requestId}] ⚠️ Failed to update gateway data for ${rackName}:`, updateError.message);
+            }
+          } else {
+            console.log(`[${requestId}] ⚠️ No gateway data found in API for ${rackName}`);
+          }
+        }
+
+        await pool.close();
+        console.log(`[${requestId}] ✅ Enriched ${enrichedCount} racks with gateway data from API`);
+
+      } catch (apiError) {
+        console.warn(`[${requestId}] ⚠️ Failed to fetch/enrich data from API:`, apiError.message);
+      }
     }
 
     // Map details to their entries
