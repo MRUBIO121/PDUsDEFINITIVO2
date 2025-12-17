@@ -248,11 +248,6 @@ function App() {
         return;
       }
 
-      // Skip racks from sites the user doesn't have access to
-      if (!userHasAccessToSite(rackGroup[0].site)) {
-        return;
-      }
-
       // Determine overall status for this rack group
       const overallStatus = rackGroup.some(r => r.status === 'critical')
         ? 'critical'
@@ -338,10 +333,6 @@ function App() {
 
     return { rackSummary, pduSummary };
   }, [filteredRackGroups, maintenanceRacks]);
-
-  // Count unique maintenance racks (for topbar display)
-  // This counts ALL maintenance racks to match MaintenancePage count
-  const totalMaintenanceRacksCount = maintenanceRacks.size;
 
   // Calculate GLOBAL alert summary statistics (for header display - always unfiltered)
   const globalAlertSummary = React.useMemo(() => {
@@ -1080,14 +1071,15 @@ function App() {
                         )}
                       </div>
                     )}
-                    {totalMaintenanceRacksCount > 0 && (
+                    {maintenanceRacks.size > 0 && (
                       <div className="ml-3 flex items-center">
                         <div className="w-2 h-2 bg-blue-600 rounded-full mr-1"></div>
                         <span className="text-xs font-medium text-blue-700">
-                          {totalMaintenanceRacksCount} en mantenimiento
+                          {maintenanceRacks.size} en mantenimiento
                         </span>
                       </div>
                     )}
+                  </div>
                 </div>
 
                 {/* User Info */}
@@ -1663,7 +1655,6 @@ function App() {
             )}
           </div>
         </div>
-      </div>
       } />
     </Routes>
   );
