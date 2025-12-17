@@ -523,26 +523,25 @@ function App() {
     rackSummary.warning.humidity = warningRacksByMetric.humidity.size;
     rackSummary.warning.voltage = warningRacksByMetric.voltage.size;
 
-    // Calculate total racks accessible by user (excluding maintenance)
+    // Calculate total racks accessible by user (INCLUDING maintenance for consistency with group counts)
     const totalUserRacks = originalRackGroups.filter(rackGroup => {
+      return userHasAccessToSite(rackGroup[0].site);
+    }).length;
+
+    // Calculate racks in maintenance that user has access to
+    const userMaintenanceRacks = originalRackGroups.filter(rackGroup => {
       const rackId = String(rackGroup[0].rackId || '').trim();
       const isInMaintenance = rackId && maintenanceRacks.has(rackId);
-
-      // Exclude maintenance racks
-      if (isInMaintenance) {
-        return false;
-      }
-
-      // Include only racks from sites the user has access to
-      return userHasAccessToSite(rackGroup[0].site);
+      return isInMaintenance && userHasAccessToSite(rackGroup[0].site);
     }).length;
 
     return {
       rackSummary,
       pduSummary,
       totalAlertingPdus: pduSummary.critical.total + pduSummary.warning.total,
-      totalAlertingRacks: allAlertingRacks.size, // Total unique racks with any type of alert
-      totalUserRacks // Total racks accessible by user
+      totalAlertingRacks: allAlertingRacks.size,
+      totalUserRacks,
+      userMaintenanceRacks
     };
   }, [originalRackGroups, racks, maintenanceRacks, user]);
 
