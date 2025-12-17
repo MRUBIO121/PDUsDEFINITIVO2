@@ -729,6 +729,194 @@ async function ensureConnection() {
 }
 
 /**
+ * Guarda un registro en el historial de alertas
+ * Se llama cuando se crea una nueva alerta o cuando se resuelve
+ */
+async function saveAlertToHistory(alertData, resolvedBy = null, resolutionType = 'auto') {
+  try {
+    await executeQuery(async (pool) => {
+      if (resolvedBy) {
+        await pool.request()
+          .input('pdu_id', sql.NVarChar, alertData.pdu_id)
+          .input('metric_type', sql.NVarChar, alertData.metric_type)
+          .input('alert_reason', sql.NVarChar, alertData.alert_reason)
+          .input('resolved_at', sql.DateTime, new Date())
+          .input('resolved_by', sql.NVarChar, resolvedBy)
+          .input('resolution_type', sql.NVarChar, resolutionType)
+          .query(`
+            UPDATE alerts_history
+            SET resolved_at = @resolved_at,
+                resolved_by = @resolved_by,
+                resolution_type = @resolution_type,
+                duration_minutes = DATEDIFF(MINUTE, created_at, @resolved_at)
+            WHERE pdu_id = @pdu_id
+              AND metric_type = @metric_type
+              AND alert_reason = @alert_reason
+              AND resolved_at IS NULL
+          `);
+      } else {
+        await pool.request()
+          .input('pdu_id', sql.NVarChar, alertData.pdu_id)
+          .input('rack_id', sql.NVarChar, alertData.rack_id)
+          .input('name', sql.NVarChar, alertData.name)
+          .input('country', sql.NVarChar, alertData.country)
+          .input('site', sql.NVarChar, alertData.site)
+          .input('dc', sql.NVarChar, alertData.dc)
+          .input('phase', sql.NVarChar, alertData.phase)
+          .input('chain', sql.NVarChar, alertData.chain)
+          .input('node', sql.NVarChar, alertData.node)
+          .input('serial', sql.NVarChar, alertData.serial)
+          .input('metric_type', sql.NVarChar, alertData.metric_type)
+          .input('alert_reason', sql.NVarChar, alertData.alert_reason)
+          .input('alert_value', sql.Decimal(18, 4), alertData.alert_value)
+          .input('alert_field', sql.NVarChar, alertData.alert_field)
+          .input('threshold_exceeded', sql.Decimal(18, 4), alertData.threshold_exceeded)
+          .query(`
+            INSERT INTO alerts_history
+            (pdu_id, rack_id, name, country, site, dc, phase, chain, node, serial,
+             metric_type, alert_reason, alert_value, alert_field, threshold_exceeded)
+            VALUES
+            (@pdu_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial,
+             @metric_type, @alert_reason, @alert_value, @alert_field, @threshold_exceeded)
+          `);
+      }
+    });
+  } catch (error) {
+    logger.error('Error saving alert to history', { error: error.message, pdu_id: alertData.pdu_id });
+  }
+}
+
+/**
+ * Guarda registros de mantenimiento en el historial
+ * Se llama cuando un rack o chain sale de mantenimiento
+ */
+async function saveMaintenanceToHistory(pool, entryId, endedBy) {
+  try {
+    const dataResult = await pool.request()
+      .input('entry_id', sql.UniqueIdentifier, entryId)
+      .query(`
+        SELECT
+          me.id as original_entry_id,
+          me.entry_type,
+          me.reason,
+          me.started_by,
+          me.started_at,
+          mrd.rack_id,
+          mrd.name as rack_name,
+          mrd.country,
+          mrd.site,
+          mrd.dc,
+          mrd.phase,
+          mrd.chain,
+          mrd.node,
+          mrd.gwName,
+          mrd.gwIp
+        FROM maintenance_entries me
+        JOIN maintenance_rack_details mrd ON me.id = mrd.maintenance_entry_id
+        WHERE me.id = @entry_id
+      `);
+
+    for (const row of dataResult.recordset) {
+      await pool.request()
+        .input('original_entry_id', sql.UniqueIdentifier, row.original_entry_id)
+        .input('entry_type', sql.NVarChar, row.entry_type)
+        .input('rack_id', sql.NVarChar, row.rack_id)
+        .input('rack_name', sql.NVarChar, row.rack_name)
+        .input('country', sql.NVarChar, row.country)
+        .input('site', sql.NVarChar, row.site)
+        .input('dc', sql.NVarChar, row.dc)
+        .input('phase', sql.NVarChar, row.phase)
+        .input('chain', sql.NVarChar, row.chain)
+        .input('node', sql.NVarChar, row.node)
+        .input('gwName', sql.NVarChar, row.gwName)
+        .input('gwIp', sql.NVarChar, row.gwIp)
+        .input('reason', sql.NVarChar, row.reason)
+        .input('started_by', sql.NVarChar, row.started_by)
+        .input('started_at', sql.DateTime, row.started_at)
+        .input('ended_by', sql.NVarChar, endedBy)
+        .input('ended_at', sql.DateTime, new Date())
+        .query(`
+          INSERT INTO maintenance_history
+          (original_entry_id, entry_type, rack_id, rack_name, country, site, dc, phase, chain, node, gwName, gwIp,
+           reason, started_by, ended_by, started_at, ended_at, duration_minutes)
+          VALUES
+          (@original_entry_id, @entry_type, @rack_id, @rack_name, @country, @site, @dc, @phase, @chain, @node, @gwName, @gwIp,
+           @reason, @started_by, @ended_by, @started_at, @ended_at, DATEDIFF(MINUTE, @started_at, @ended_at))
+        `);
+    }
+
+    logger.info(`Saved ${dataResult.recordset.length} racks to maintenance history for entry ${entryId}`);
+  } catch (error) {
+    logger.error('Error saving maintenance to history', { error: error.message, entryId });
+  }
+}
+
+/**
+ * Guarda un rack individual en el historial de mantenimiento
+ */
+async function saveRackMaintenanceToHistory(pool, rackId, endedBy) {
+  try {
+    const dataResult = await pool.request()
+      .input('rack_id', sql.NVarChar, rackId)
+      .query(`
+        SELECT
+          me.id as original_entry_id,
+          me.entry_type,
+          me.reason,
+          me.started_by,
+          me.started_at,
+          mrd.rack_id,
+          mrd.name as rack_name,
+          mrd.country,
+          mrd.site,
+          mrd.dc,
+          mrd.phase,
+          mrd.chain,
+          mrd.node,
+          mrd.gwName,
+          mrd.gwIp
+        FROM maintenance_rack_details mrd
+        JOIN maintenance_entries me ON mrd.maintenance_entry_id = me.id
+        WHERE mrd.rack_id = @rack_id
+      `);
+
+    if (dataResult.recordset.length > 0) {
+      const row = dataResult.recordset[0];
+      await pool.request()
+        .input('original_entry_id', sql.UniqueIdentifier, row.original_entry_id)
+        .input('entry_type', sql.NVarChar, row.entry_type)
+        .input('rack_id', sql.NVarChar, row.rack_id)
+        .input('rack_name', sql.NVarChar, row.rack_name)
+        .input('country', sql.NVarChar, row.country)
+        .input('site', sql.NVarChar, row.site)
+        .input('dc', sql.NVarChar, row.dc)
+        .input('phase', sql.NVarChar, row.phase)
+        .input('chain', sql.NVarChar, row.chain)
+        .input('node', sql.NVarChar, row.node)
+        .input('gwName', sql.NVarChar, row.gwName)
+        .input('gwIp', sql.NVarChar, row.gwIp)
+        .input('reason', sql.NVarChar, row.reason)
+        .input('started_by', sql.NVarChar, row.started_by)
+        .input('started_at', sql.DateTime, row.started_at)
+        .input('ended_by', sql.NVarChar, endedBy)
+        .input('ended_at', sql.DateTime, new Date())
+        .query(`
+          INSERT INTO maintenance_history
+          (original_entry_id, entry_type, rack_id, rack_name, country, site, dc, phase, chain, node, gwName, gwIp,
+           reason, started_by, ended_by, started_at, ended_at, duration_minutes)
+          VALUES
+          (@original_entry_id, @entry_type, @rack_id, @rack_name, @country, @site, @dc, @phase, @chain, @node, @gwName, @gwIp,
+           @reason, @started_by, @ended_by, @started_at, @ended_at, DATEDIFF(MINUTE, @started_at, @ended_at))
+        `);
+
+      logger.info(`Saved rack ${rackId} to maintenance history`);
+    }
+  } catch (error) {
+    logger.error('Error saving rack maintenance to history', { error: error.message, rackId });
+  }
+}
+
+/**
  * Manages active critical alerts in the database
  * Inserts new critical alerts and removes resolved ones
  * Excludes racks that are in maintenance mode
@@ -855,6 +1043,25 @@ async function processCriticalAlert(pdu, reason, thresholds) {
             (@pdu_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial,
              @metric_type, @alert_reason, @alert_value, @alert_field, @threshold_exceeded)
           `);
+
+        // Guardar en historial de alertas
+        await saveAlertToHistory({
+          pdu_id: pdu.id,
+          rack_id: pdu.rackId || pdu.id,
+          name: pdu.name,
+          country: pdu.country,
+          site: pdu.site,
+          dc: pdu.dc,
+          phase: pdu.phase,
+          chain: pdu.chain,
+          node: pdu.node,
+          serial: pdu.serial,
+          metric_type: metricType,
+          alert_reason: reason,
+          alert_value: alertValue,
+          alert_field: alertField,
+          threshold_exceeded: thresholdExceeded
+        });
       }
 
       return true;
@@ -959,6 +1166,7 @@ function getThresholdFromReason(reason, thresholds) {
 
 /**
  * Removes alerts from database for PDUs that are no longer critical
+ * Also marks them as resolved in alerts_history
  */
 async function cleanupResolvedAlerts(currentCriticalPdus) {
   try {
@@ -966,7 +1174,30 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
       const currentCriticalPduIds = currentCriticalPdus.map(pdu => pdu.id);
 
       if (currentCriticalPduIds.length === 0) {
-        // If no critical PDUs, delete all alerts
+        // Marcar todas las alertas como resueltas en el historial antes de eliminar
+        const alertsToResolve = await pool.request().query(`
+          SELECT pdu_id, metric_type, alert_reason FROM active_critical_alerts
+        `);
+
+        for (const alert of alertsToResolve.recordset) {
+          await pool.request()
+            .input('pdu_id', sql.NVarChar, alert.pdu_id)
+            .input('metric_type', sql.NVarChar, alert.metric_type)
+            .input('alert_reason', sql.NVarChar, alert.alert_reason)
+            .input('resolved_at', sql.DateTime, new Date())
+            .query(`
+              UPDATE alerts_history
+              SET resolved_at = @resolved_at,
+                  resolved_by = 'Sistema',
+                  resolution_type = 'auto',
+                  duration_minutes = DATEDIFF(MINUTE, created_at, @resolved_at)
+              WHERE pdu_id = @pdu_id
+                AND metric_type = @metric_type
+                AND alert_reason = @alert_reason
+                AND resolved_at IS NULL
+            `);
+        }
+
         const deleteResult = await pool.request().query(`
           DELETE FROM active_critical_alerts
         `);
@@ -975,6 +1206,31 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
 
       // Create a string of PDU IDs for the NOT IN clause
       const pduIdsList = currentCriticalPduIds.map(id => `'${id.replace("'", "''")}'`).join(',');
+
+      // Obtener alertas que se van a eliminar para marcarlas como resueltas
+      const alertsToResolve = await pool.request().query(`
+        SELECT pdu_id, metric_type, alert_reason FROM active_critical_alerts
+        WHERE pdu_id NOT IN (${pduIdsList})
+      `);
+
+      for (const alert of alertsToResolve.recordset) {
+        await pool.request()
+          .input('pdu_id', sql.NVarChar, alert.pdu_id)
+          .input('metric_type', sql.NVarChar, alert.metric_type)
+          .input('alert_reason', sql.NVarChar, alert.alert_reason)
+          .input('resolved_at', sql.DateTime, new Date())
+          .query(`
+            UPDATE alerts_history
+            SET resolved_at = @resolved_at,
+                resolved_by = 'Sistema',
+                resolution_type = 'auto',
+                duration_minutes = DATEDIFF(MINUTE, created_at, @resolved_at)
+            WHERE pdu_id = @pdu_id
+              AND metric_type = @metric_type
+              AND alert_reason = @alert_reason
+              AND resolved_at IS NULL
+          `);
+      }
 
       // Delete alerts for PDUs that are no longer critical
       const deleteResult = await pool.request().query(`
@@ -988,6 +1244,33 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
 
         if (currentReasons.length > 0) {
           const reasonsList = currentReasons.map(reason => `'${reason.replace("'", "''")}'`).join(',');
+
+          // Obtener alertas que se van a eliminar por cambio de razon
+          const alertsToResolveByReason = await pool.request()
+            .input('pdu_id', sql.NVarChar, criticalPdu.id)
+            .query(`
+              SELECT pdu_id, metric_type, alert_reason FROM active_critical_alerts
+              WHERE pdu_id = @pdu_id AND alert_reason NOT IN (${reasonsList})
+            `);
+
+          for (const alert of alertsToResolveByReason.recordset) {
+            await pool.request()
+              .input('pdu_id', sql.NVarChar, alert.pdu_id)
+              .input('metric_type', sql.NVarChar, alert.metric_type)
+              .input('alert_reason', sql.NVarChar, alert.alert_reason)
+              .input('resolved_at', sql.DateTime, new Date())
+              .query(`
+                UPDATE alerts_history
+                SET resolved_at = @resolved_at,
+                    resolved_by = 'Sistema',
+                    resolution_type = 'auto',
+                    duration_minutes = DATEDIFF(MINUTE, created_at, @resolved_at)
+                WHERE pdu_id = @pdu_id
+                  AND metric_type = @metric_type
+                  AND alert_reason = @alert_reason
+                  AND resolved_at IS NULL
+              `);
+          }
 
           await pool.request()
             .input('pdu_id', sql.NVarChar, criticalPdu.id)
@@ -2863,6 +3146,10 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
         }
       }
 
+      // Guardar en historial antes de eliminar
+      const endedBy = req.session.userName || req.session.userId || 'Sistema';
+      await saveRackMaintenanceToHistory(pool, sanitizedRackId, endedBy);
+
       // Delete the rack detail
       await pool.request()
         .input('rack_id', sql.NVarChar, sanitizedRackId)
@@ -2974,6 +3261,10 @@ app.delete('/api/maintenance/entry/:entryId', requireAuth, async (req, res) => {
         }
       }
 
+      // Guardar en historial antes de eliminar
+      const endedBy = req.session.userName || req.session.userId || 'Sistema';
+      await saveMaintenanceToHistory(pool, entryId, endedBy);
+
       // Delete the maintenance entry (CASCADE will delete all related rack details)
       await pool.request()
         .input('entry_id', sql.UniqueIdentifier, entryId)
@@ -3081,6 +3372,16 @@ app.delete('/api/maintenance/all', requireAuth, async (req, res) => {
 
       if (entry_count === 0) {
         return { entry_count: 0, rack_count: 0, deleted: false };
+      }
+
+      // Obtener todos los entry IDs para guardar en historial
+      const endedBy = req.session.userName || req.session.userId || 'Sistema';
+      let entriesQuery = `SELECT id FROM maintenance_entries ${whereClause}`;
+      const entriesResult = await pool.request().query(entriesQuery);
+
+      // Guardar cada entrada en el historial antes de eliminar
+      for (const row of entriesResult.recordset) {
+        await saveMaintenanceToHistory(pool, row.id, endedBy);
       }
 
       // Delete rack details first (foreign key constraint)
