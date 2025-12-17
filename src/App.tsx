@@ -248,6 +248,11 @@ function App() {
         return;
       }
 
+      // Skip racks from sites the user doesn't have access to
+      if (!userHasAccessToSite(rackGroup[0].site)) {
+        return;
+      }
+
       // Determine overall status for this rack group
       const overallStatus = rackGroup.some(r => r.status === 'critical')
         ? 'critical'
