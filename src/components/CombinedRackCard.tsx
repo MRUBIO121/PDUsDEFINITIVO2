@@ -131,6 +131,7 @@ export default function CombinedRackCard({
   const rackId = String(commonInfo.rackId || commonInfo.id || '').trim();
   const isInMaintenance = rackId && maintenanceRacks.has(rackId);
   const sonarError = racks.find(r => r.sonarError)?.sonarError;
+  const sonarSent = racks.some(r => r.sonarSent);
 
   return (
     <div className={`rounded-lg shadow hover:shadow-md transition-all bg-white ${
@@ -153,8 +154,14 @@ export default function CombinedRackCard({
               !isInMaintenance && overallStatus !== 'normal' ? 'animate-pulse' : ''
             }`}></div>
             <Server className="text-gray-600 h-5 w-5" />
-            <h3 className="font-semibold text-gray-900 text-base">
+            <h3 className="font-semibold text-gray-900 text-base flex items-center gap-1">
               {commonInfo.name}
+              {sonarSent && (
+                <Zap
+                  className="w-3.5 h-3.5 text-amber-500"
+                  title="Alerta enviada a SONAR"
+                />
+              )}
             </h3>
             {isInMaintenance && (
               <span className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded flex items-center gap-1">

@@ -108,6 +108,8 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       const currentSonarErrors = data.sonarErrors || {};
       setSonarErrors(currentSonarErrors);
 
+      const sonarSentRacks = new Set<string>(data.sonarSentRacks || []);
+
       const rackGroups = Array.isArray(data.data) ? data.data : [];
       setOriginalRackGroups(rackGroups);
 
@@ -119,6 +121,9 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
               const rackId = rack.rackId || rack.id;
               if (rackId && currentSonarErrors[rackId]) {
                 rack.sonarError = currentSonarErrors[rackId].error;
+              }
+              if (rackId && sonarSentRacks.has(rackId)) {
+                rack.sonarSent = true;
               }
             });
             flatRacks.push(...rackGroup);

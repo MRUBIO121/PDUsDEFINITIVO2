@@ -486,6 +486,26 @@ async function closeSonarAlertsForMaintenanceBatch(rackIds) {
   return { closed: totalClosed, errors: totalErrors };
 }
 
+/**
+ * Get rack IDs that have alerts sent to SONAR (uuid_open exists and not closed)
+ * @returns {Promise<Set<string>>}
+ */
+async function getRacksWithSonarAlerts() {
+  try {
+    const result = await executeQuery(async (pool) => {
+      return await pool.request().query(`
+        SELECT DISTINCT rack_id
+        FROM active_critical_alerts
+        WHERE uuid_open IS NOT NULL AND uuid_closed IS NULL
+      `);
+    });
+    return new Set(result.recordset.map(r => r.rack_id));
+  } catch (error) {
+    logger.error('Error fetching racks with SONAR alerts', { error: error.message });
+    return new Set();
+  }
+}
+
 // Middleware Configuration
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -2101,6 +2121,7 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
         success: true,
         data: racksCache.data,
         sonarErrors: getAllSonarErrors(),
+        sonarSentRacks: racksCache.sonarSentRacks || [],
         message: 'Rack data retrieved successfully (cached)',
         count: racksCache.data ? racksCache.data.flat().length : 0,
         timestamp: new Date().toISOString()
@@ -2398,14 +2419,19 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
 
     // Grouped into rack groups
 
+    // Get racks with alerts sent to SONAR
+    const sonarSentRacks = await getRacksWithSonarAlerts();
+
     // Update cache
     racksCache.data = rackGroups;
+    racksCache.sonarSentRacks = Array.from(sonarSentRacks);
     racksCache.timestamp = Date.now();
 
     const response = {
       success: true,
       data: rackGroups,
       sonarErrors: getAllSonarErrors(),
+      sonarSentRacks: Array.from(sonarSentRacks),
       message: 'Rack data retrieved successfully',
       count: processedData.length,
       timestamp: new Date().toISOString()

@@ -24,6 +24,8 @@ export interface RackData {
   reasons?: string[];
   // SONAR error (if failed to send alert)
   sonarError?: string;
+  // SONAR alert sent successfully
+  sonarSent?: boolean;
 }
 
 export interface ThresholdData {
