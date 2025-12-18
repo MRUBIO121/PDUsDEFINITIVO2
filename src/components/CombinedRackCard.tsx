@@ -128,7 +128,7 @@ export default function CombinedRackCard({
   };
 
   const commonInfo = racks[0];
-  const rackId = String(commonInfo.rackId || '').trim();
+  const rackId = String(commonInfo.rackId || commonInfo.id || '').trim();
   const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
   return (

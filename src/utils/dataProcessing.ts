@@ -285,13 +285,13 @@ export function filterRacks(
       if (statusFilter === 'maintenance') {
         // Filter to show only racks in maintenance
         filteredRacks = filteredRacks.filter(rack => {
-          const rackId = String(rack.rackId || '').trim();
+          const rackId = String(rack.rackId || rack.id || '').trim();
           return rackId && maintenanceRacks.has(rackId);
         });
       } else {
         // Filter by normal status (exclude maintenance racks)
         filteredRacks = filteredRacks.filter(rack => {
-          const rackId = String(rack.rackId || '').trim();
+          const rackId = String(rack.rackId || rack.id || '').trim();
           const isInMaintenance = rackId && maintenanceRacks.has(rackId);
           return !isInMaintenance && rack.status === statusFilter;
         });
@@ -304,7 +304,7 @@ export function filterRacks(
     let alertCount = 0;
 
     filteredRacks = filteredRacks.filter(rack => {
-      const rackId = String(rack.rackId || '').trim();
+      const rackId = String(rack.rackId || rack.id || '').trim();
       const isInMaintenance = rackId && maintenanceRacks.has(rackId);
       const hasAlert = rack.status === 'critical' || rack.status === 'warning';
 

@@ -240,7 +240,7 @@ function App() {
     };
 
     filteredRackGroups.forEach(rackGroup => {
-      const rackId = String(rackGroup[0].rackId || '').trim();
+      const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
       const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
       // Skip racks in maintenance - they shouldn't count in alerts
@@ -358,7 +358,7 @@ function App() {
 
     // Count individual PDUs with alerts (for header display) - EXCLUDE maintenance racks and filter by site
     racks.forEach(pdu => {
-      const rackId = String(pdu.rackId || '').trim();
+      const rackId = String(pdu.rackId || pdu.id || '').trim();
       const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
       // Skip PDUs that are in maintenance
@@ -445,7 +445,7 @@ function App() {
     };
 
     originalRackGroups.forEach(rackGroup => {
-      const rackId = String(rackGroup[0].rackId || '').trim();
+      const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
       const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
       // Skip racks in maintenance - they shouldn't count in alerts
@@ -530,7 +530,7 @@ function App() {
 
     // Calculate racks in maintenance that user has access to
     const userMaintenanceRacks = originalRackGroups.filter(rackGroup => {
-      const rackId = String(rackGroup[0].rackId || '').trim();
+      const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
       const isInMaintenance = rackId && maintenanceRacks.has(rackId);
       return isInMaintenance && userHasAccessToSite(rackGroup[0].site);
     }).length;
