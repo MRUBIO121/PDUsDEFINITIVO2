@@ -213,34 +213,43 @@ async function sendToSonar(alertData, state) {
     const rackName = alertData.name || alertData.rack_id || 'UNKNOWN';
     const alertIdentifier = `ALERTA_${rackName}`;
 
-    const payload = {
-      pid: alertIdentifier,
-      state: state,
-      impactedentity: 'LOGICAL_ENGINE',
-      problemimpact: 'APPLICATION',
-      origin: 'NGEN_ALERT',
-      entity: 'SGT',
-      problemdetailstext: alertIdentifier,
-      problemtitle: alertIdentifier,
-      problemdetailsjson: {
-        rack_id: alertData.rack_id || '',
-        name: alertData.name || '',
-        country: alertData.country || '',
-        site: alertData.site || '',
-        dc: alertData.dc || '',
-        phase: alertData.phase || '',
-        chain: alertData.chain || '',
-        node: alertData.node || '',
-        serial: alertData.serial || '',
-        alert_reason: alertData.alert_reason || '',
-        amperaje: alertData.current || 0,
-        voltage: alertData.voltage || 0,
-        temperature: alertData.temperature || 0,
-        humidity: alertData.humidity || 0,
-        gwName: alertData.gwName || 'N/A',
-        gwIp: alertData.gwIp || 'N/A'
-      }
-    };
+    let payload;
+
+    if (state === 'CLOSED') {
+      payload = {
+        pid: alertIdentifier,
+        state: 'CLOSED'
+      };
+    } else {
+      payload = {
+        pid: alertIdentifier,
+        state: state,
+        impactedentity: 'LOGICAL_ENGINE',
+        problemimpact: 'APPLICATION',
+        origin: 'NGEN_ALERT',
+        entity: 'SGT',
+        problemdetailstext: alertIdentifier,
+        problemtitle: alertIdentifier,
+        problemdetailsjson: {
+          rack_id: alertData.rack_id || '',
+          name: alertData.name || '',
+          country: alertData.country || '',
+          site: alertData.site || '',
+          dc: alertData.dc || '',
+          phase: alertData.phase || '',
+          chain: alertData.chain || '',
+          node: alertData.node || '',
+          serial: alertData.serial || '',
+          alert_reason: alertData.alert_reason || '',
+          amperaje: alertData.current || 0,
+          voltage: alertData.voltage || 0,
+          temperature: alertData.temperature || 0,
+          humidity: alertData.humidity || 0,
+          gwName: alertData.gwName || 'N/A',
+          gwIp: alertData.gwIp || 'N/A'
+        }
+      };
+    }
 
     logger.info('Sending alert to SONAR', { state, pid: alertIdentifier, rack: rackName });
 
