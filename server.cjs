@@ -189,9 +189,19 @@ const SONAR_CONFIG = {
 };
 
 if (SONAR_CONFIG.enabled) {
-  logger.info('SONAR integration enabled', { url: SONAR_CONFIG.apiUrl });
+  const tokenPreview = SONAR_CONFIG.bearerToken ?
+    `${SONAR_CONFIG.bearerToken.substring(0, 10)}...${SONAR_CONFIG.bearerToken.substring(SONAR_CONFIG.bearerToken.length - 5)}` :
+    'NOT SET';
+  logger.info('SONAR integration enabled', {
+    url: SONAR_CONFIG.apiUrl,
+    tokenPreview: tokenPreview,
+    tokenLength: SONAR_CONFIG.bearerToken?.length || 0
+  });
 } else {
-  logger.warn('SONAR integration disabled - missing SONAR_API_URL or SONAR_BEARER_TOKEN');
+  logger.warn('SONAR integration disabled - missing SONAR_API_URL or SONAR_BEARER_TOKEN', {
+    hasUrl: !!process.env.SONAR_API_URL,
+    hasToken: !!process.env.SONAR_BEARER_TOKEN
+  });
 }
 
 // Store for tracking SONAR errors per rack (in-memory cache)
@@ -204,8 +214,14 @@ const sonarErrorCache = new Map();
  * @returns {Promise<{success: boolean, uuid?: string, error?: string}>}
  */
 async function sendToSonar(alertData, state) {
+  logger.info('[SONAR] Starting sendToSonar', {
+    state,
+    pdu_id: alertData.pdu_id || alertData.PID,
+    rack_name: alertData.name || alertData.rack_id
+  });
+
   if (!SONAR_CONFIG.enabled) {
-    logger.debug('SONAR disabled, skipping API call');
+    logger.warn('[SONAR] Integration disabled, skipping API call');
     return { success: false, error: 'SONAR integration disabled' };
   }
 
@@ -252,7 +268,15 @@ async function sendToSonar(alertData, state) {
       };
     }
 
-    logger.info('Sending alert to SONAR', { state, pid: alertIdentifier, rack: rackName });
+    logger.info('[SONAR] Preparing request', {
+      url: SONAR_CONFIG.apiUrl,
+      method: 'POST',
+      state,
+      pid: alertIdentifier,
+      payloadSize: JSON.stringify(payload).length
+    });
+
+    logger.debug('[SONAR] Full payload', { payload: JSON.stringify(payload) });
 
     const response = await fetch(SONAR_CONFIG.apiUrl, {
       method: 'POST',
@@ -263,27 +287,50 @@ async function sendToSonar(alertData, state) {
       body: JSON.stringify(payload)
     });
 
+    logger.info('[SONAR] Response received', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+
     if (!response.ok) {
       const errorText = await response.text();
+      logger.error('[SONAR] API returned error', {
+        status: response.status,
+        statusText: response.statusText,
+        errorBody: errorText
+      });
       throw new Error(`SONAR API error: ${response.status} - ${errorText}`);
     }
 
     const responseData = await response.json();
     const uuid = responseData.reason;
 
+    logger.info('[SONAR] Response parsed', {
+      responseData: JSON.stringify(responseData),
+      uuid: uuid || 'NO_UUID'
+    });
+
     if (uuid) {
-      logger.info('SONAR response received', { state, uuid, pdu_id: alertData.pdu_id || alertData.PID });
+      logger.info('[SONAR] SUCCESS - Alert sent', {
+        state,
+        uuid,
+        pid: alertIdentifier,
+        pdu_id: alertData.pdu_id || alertData.PID
+      });
       return { success: true, uuid };
     } else {
-      logger.warn('SONAR response missing UUID', { responseData });
+      logger.warn('[SONAR] Response missing UUID in reason field', { responseData });
       return { success: true, uuid: null };
     }
 
   } catch (error) {
-    logger.error('SONAR API call failed', {
+    logger.error('[SONAR] FAILED - API call error', {
       error: error.message,
+      stack: error.stack,
       state,
-      pdu_id: alertData.pdu_id || alertData.PID
+      pdu_id: alertData.pdu_id || alertData.PID,
+      url: SONAR_CONFIG.apiUrl
     });
     return { success: false, error: error.message };
   }
@@ -297,9 +344,20 @@ async function sendToSonar(alertData, state) {
  * @returns {Promise<{success: boolean, uuid?: string, error?: string}>}
  */
 async function openSonarAlert(pdu, alertReason, alertId) {
+  const pduIdStr = String(pdu.id);
+  const rackIdStr = String(pdu.rackId || pdu.id);
+
+  logger.info('[SONAR] openSonarAlert called', {
+    pdu_id: pduIdStr,
+    rack_id: rackIdStr,
+    name: pdu.name,
+    alertReason,
+    alertId
+  });
+
   const alertData = {
-    pdu_id: pdu.id,
-    rack_id: pdu.rackId || pdu.id,
+    pdu_id: pduIdStr,
+    rack_id: rackIdStr,
     name: pdu.name,
     country: pdu.country,
     site: pdu.site,
@@ -331,17 +389,18 @@ async function openSonarAlert(pdu, alertReason, alertId) {
             WHERE id = @alert_id
           `);
       });
-      sonarErrorCache.delete(pdu.rackId || pdu.id);
-      logger.info('UUID_OPEN saved to database', { alertId, uuid: result.uuid });
+      sonarErrorCache.delete(rackIdStr);
+      logger.info('[SONAR] UUID_OPEN saved to database', { alertId, uuid: result.uuid, pdu_id: pduIdStr });
     } catch (dbError) {
-      logger.error('Failed to save UUID_OPEN to database', { alertId, error: dbError.message });
+      logger.error('[SONAR] Failed to save UUID_OPEN to database', { alertId, error: dbError.message });
     }
   } else if (!result.success) {
-    sonarErrorCache.set(pdu.rackId || pdu.id, {
+    sonarErrorCache.set(rackIdStr, {
       error: result.error,
       timestamp: new Date(),
       alertReason
     });
+    logger.warn('[SONAR] Alert open failed, cached error', { pdu_id: pduIdStr, error: result.error });
   }
 
   return result;
@@ -353,8 +412,16 @@ async function openSonarAlert(pdu, alertReason, alertId) {
  * @returns {Promise<{success: boolean, uuid?: string, error?: string}>}
  */
 async function closeSonarAlert(alert) {
+  logger.info('[SONAR] closeSonarAlert called', {
+    pdu_id: alert.pdu_id,
+    rack_id: alert.rack_id,
+    name: alert.name,
+    uuid_open: alert.uuid_open,
+    alert_id: alert.id
+  });
+
   if (!alert.uuid_open) {
-    logger.debug('No UUID_OPEN for alert, skipping SONAR close', { pdu_id: alert.pdu_id });
+    logger.warn('[SONAR] No UUID_OPEN for alert, skipping SONAR close', { pdu_id: alert.pdu_id, alert_id: alert.id });
     return { success: false, error: 'No UUID_OPEN to close' };
   }
 
@@ -384,9 +451,9 @@ async function closeSonarAlert(alert) {
           `);
       });
       sonarErrorCache.delete(alert.rack_id);
-      logger.info('UUID_CLOSED saved to database', { alertId: alert.id, uuid: result.uuid });
+      logger.info('[SONAR] UUID_CLOSED saved to database', { alertId: alert.id, uuid: result.uuid, pdu_id: alert.pdu_id });
     } catch (dbError) {
-      logger.error('Failed to save UUID_CLOSED to database', { alertId: alert.id, error: dbError.message });
+      logger.error('[SONAR] Failed to save UUID_CLOSED to database', { alertId: alert.id, error: dbError.message });
     }
   } else if (!result.success) {
     sonarErrorCache.set(alert.rack_id, {
@@ -394,6 +461,7 @@ async function closeSonarAlert(alert) {
       timestamp: new Date(),
       type: 'close_failed'
     });
+    logger.warn('[SONAR] Alert close failed, cached error', { pdu_id: alert.pdu_id, error: result.error });
   }
 
   return result;
@@ -1324,7 +1392,9 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
  */
 async function processCriticalAlert(pdu, reason, thresholds) {
   try {
-    // Extract metric type and field from reason (passing thresholds)
+    const pduIdStr = String(pdu.id);
+    const rackIdStr = String(pdu.rackId || pdu.id);
+
     const metricInfo = extractMetricInfo(reason, pdu, thresholds);
 
     if (!metricInfo) {
@@ -1335,9 +1405,8 @@ async function processCriticalAlert(pdu, reason, thresholds) {
     const { metricType, alertField, alertValue, thresholdExceeded } = metricInfo;
 
     await executeQuery(async (pool) => {
-      // Check if this alert already exists
       const existingAlert = await pool.request()
-        .input('pdu_id', sql.NVarChar, pdu.id)
+        .input('pdu_id', sql.NVarChar, pduIdStr)
         .input('metric_type', sql.NVarChar, metricType)
         .input('alert_reason', sql.NVarChar, reason)
         .query(`
@@ -1346,9 +1415,8 @@ async function processCriticalAlert(pdu, reason, thresholds) {
         `);
 
       if (existingAlert.recordset.length > 0) {
-        // Update existing alert
         await pool.request()
-          .input('pdu_id', sql.NVarChar, pdu.id)
+          .input('pdu_id', sql.NVarChar, pduIdStr)
           .input('metric_type', sql.NVarChar, metricType)
           .input('alert_reason', sql.NVarChar, reason)
           .input('alert_value', sql.Decimal(18, 4), alertValue)
@@ -1361,10 +1429,9 @@ async function processCriticalAlert(pdu, reason, thresholds) {
             WHERE pdu_id = @pdu_id AND metric_type = @metric_type AND alert_reason = @alert_reason
           `);
       } else {
-        // Insert new alert and get the inserted ID
         const insertResult = await pool.request()
-          .input('pdu_id', sql.NVarChar, pdu.id)
-          .input('rack_id', sql.NVarChar, pdu.rackId || pdu.id)
+          .input('pdu_id', sql.NVarChar, pduIdStr)
+          .input('rack_id', sql.NVarChar, rackIdStr)
           .input('name', sql.NVarChar, pdu.name)
           .input('country', sql.NVarChar, pdu.country)
           .input('site', sql.NVarChar, pdu.site)
@@ -1393,14 +1460,13 @@ async function processCriticalAlert(pdu, reason, thresholds) {
         // Send to SONAR API (async, don't block the main flow)
         if (insertedAlertId && SONAR_CONFIG.enabled) {
           openSonarAlert(pdu, reason, insertedAlertId).catch(err => {
-            logger.error('Failed to send alert to SONAR', { error: err.message, pdu_id: pdu.id });
+            logger.error('[SONAR] Failed to send alert to SONAR', { error: err.message, pdu_id: pduIdStr });
           });
         }
 
-        // Guardar en historial de alertas
         await saveAlertToHistory({
-          pdu_id: pdu.id,
-          rack_id: pdu.rackId || pdu.id,
+          pdu_id: pduIdStr,
+          rack_id: rackIdStr,
           name: pdu.name,
           country: pdu.country,
           site: pdu.site,
