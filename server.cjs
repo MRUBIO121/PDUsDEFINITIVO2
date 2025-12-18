@@ -2099,8 +2099,8 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
   }
 });
 
-// Endpoint para obtener umbrales globales
-app.get('/api/thresholds', async (req, res) => {
+// Endpoint para obtener umbrales globales (requires auth)
+app.get('/api/thresholds', requireAuth, async (req, res) => {
   try {
     const thresholds = await fetchThresholdsFromDatabase();
     
@@ -2125,10 +2125,10 @@ app.get('/api/thresholds', async (req, res) => {
   }
 });
 
-// Endpoint para actualizar umbrales globales
-app.put('/api/thresholds', async (req, res) => {
+// Endpoint para actualizar umbrales globales (only Administrador and Operador)
+app.put('/api/thresholds', requireAuth, requireRole('Administrador', 'Operador'), async (req, res) => {
   try {
-    
+
     const { thresholds } = req.body;
     
     if (!thresholds || typeof thresholds !== 'object') {
@@ -2194,8 +2194,8 @@ app.put('/api/thresholds', async (req, res) => {
   }
 });
 
-// Endpoint para obtener umbrales específicos de un rack
-app.get('/api/racks/:rackId/thresholds', async (req, res) => {
+// Endpoint para obtener umbrales específicos de un rack (requires auth)
+app.get('/api/racks/:rackId/thresholds', requireAuth, async (req, res) => {
   try {
     const { rackId } = req.params;
 
@@ -2243,8 +2243,8 @@ app.get('/api/racks/:rackId/thresholds', async (req, res) => {
   }
 });
 
-// Endpoint para actualizar umbrales específicos de un rack
-app.put('/api/racks/:rackId/thresholds', async (req, res) => {
+// Endpoint para actualizar umbrales específicos de un rack (only Administrador and Operador)
+app.put('/api/racks/:rackId/thresholds', requireAuth, requireRole('Administrador', 'Operador'), async (req, res) => {
   try {
     const { rackId } = req.params;
     const { thresholds } = req.body;
@@ -2341,8 +2341,8 @@ app.put('/api/racks/:rackId/thresholds', async (req, res) => {
   }
 });
 
-// Endpoint para resetear umbrales específicos de un rack (usar valores globales)
-app.delete('/api/racks/:rackId/thresholds', async (req, res) => {
+// Endpoint para resetear umbrales específicos de un rack (only Administrador and Operador)
+app.delete('/api/racks/:rackId/thresholds', requireAuth, requireRole('Administrador', 'Operador'), async (req, res) => {
   try {
     const { rackId } = req.params;
 
@@ -3515,8 +3515,15 @@ app.get('/api/maintenance/template', (req, res) => {
   });
 });
 
-// Endpoint to import racks from Excel
-app.post('/api/maintenance/import-excel', upload.single('file'), async (req, res) => {
+// Endpoint to import racks from Excel (requires auth, not for Observador)
+app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), async (req, res) => {
+  if (req.session.userRole === 'Observador') {
+    return res.status(403).json({
+      success: false,
+      message: 'No tiene permisos para importar mantenimientos.',
+      timestamp: new Date().toISOString()
+    });
+  }
   const requestId = crypto.randomUUID();
   console.log(`\n[${requestId}] 📥 POST /api/maintenance/import-excel - Request received`);
 
