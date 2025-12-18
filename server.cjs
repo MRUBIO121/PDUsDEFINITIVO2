@@ -415,6 +415,77 @@ function getAllSonarErrors() {
   return Object.fromEntries(sonarErrorCache);
 }
 
+/**
+ * Close SONAR alerts for a rack when it enters maintenance
+ * @param {string} rackId - Rack ID
+ * @returns {Promise<{closed: number, errors: number}>}
+ */
+async function closeSonarAlertsForMaintenance(rackId) {
+  if (!SONAR_CONFIG.enabled) {
+    return { closed: 0, errors: 0 };
+  }
+
+  try {
+    const alerts = await executeQuery(async (pool) => {
+      return await pool.request()
+        .input('rack_id', sql.NVarChar, rackId)
+        .query(`
+          SELECT id, pdu_id, rack_id, name, country, site, dc, alert_reason, uuid_open
+          FROM active_critical_alerts
+          WHERE (rack_id = @rack_id OR pdu_id = @rack_id) AND uuid_open IS NOT NULL AND uuid_closed IS NULL
+        `);
+    });
+
+    let closed = 0;
+    let errors = 0;
+
+    for (const alert of alerts.recordset) {
+      try {
+        const result = await closeSonarAlert(alert);
+        if (result.success) {
+          closed++;
+        } else {
+          errors++;
+        }
+      } catch (err) {
+        logger.error('Failed to close SONAR alert for maintenance', { rackId, alertId: alert.id, error: err.message });
+        errors++;
+      }
+    }
+
+    if (closed > 0) {
+      logger.info(`Closed ${closed} SONAR alerts for rack entering maintenance`, { rackId });
+    }
+
+    return { closed, errors };
+  } catch (error) {
+    logger.error('Error closing SONAR alerts for maintenance', { rackId, error: error.message });
+    return { closed: 0, errors: 1 };
+  }
+}
+
+/**
+ * Close SONAR alerts for multiple racks when entering maintenance
+ * @param {string[]} rackIds - Array of rack IDs
+ * @returns {Promise<{closed: number, errors: number}>}
+ */
+async function closeSonarAlertsForMaintenanceBatch(rackIds) {
+  if (!SONAR_CONFIG.enabled || !rackIds || rackIds.length === 0) {
+    return { closed: 0, errors: 0 };
+  }
+
+  let totalClosed = 0;
+  let totalErrors = 0;
+
+  for (const rackId of rackIds) {
+    const result = await closeSonarAlertsForMaintenance(rackId);
+    totalClosed += result.closed;
+    totalErrors += result.errors;
+  }
+
+  return { closed: totalClosed, errors: totalErrors };
+}
+
 // Middleware Configuration
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -3035,6 +3106,10 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
 
     logger.info(`Rack ${sanitizedRackId} added to maintenance individually`);
 
+    closeSonarAlertsForMaintenance(sanitizedRackId).catch(err => {
+      logger.error('Failed to close SONAR alerts for rack maintenance', { rackId: sanitizedRackId, error: err.message });
+    });
+
     res.json({
       success: true,
       message: `Rack ${sanitizedRackId} added to maintenance`,
@@ -3348,6 +3423,11 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
 
     const successMessage = `Chain ${sanitizedChain} from DC ${sanitizedDc} added to maintenance`;
     logger.info(`${successMessage} (${result.insertedCount}/${uniqueRacks.length} racks)`);
+
+    const rackIdsForSonar = uniqueRacks.map(r => r.sanitizedRackId).filter(Boolean);
+    closeSonarAlertsForMaintenanceBatch(rackIdsForSonar).catch(err => {
+      logger.error('Failed to close SONAR alerts for chain maintenance', { chain: sanitizedChain, error: err.message });
+    });
 
     console.log(`[${requestId}] ✅ Sending success response...`);
 
@@ -4053,6 +4133,13 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
     };
 
     console.log(`[${requestId}] ✅ Import completed: ${summary.successful} successful (${racksFoundInAPI} found in API, ${racksNotFoundInAPI} not found), ${summary.failed} failed`);
+
+    const rackIdsForSonar = result.successfulInserts.map(r => r.rack_id).filter(Boolean);
+    if (rackIdsForSonar.length > 0) {
+      closeSonarAlertsForMaintenanceBatch(rackIdsForSonar).catch(err => {
+        logger.error('Failed to close SONAR alerts for Excel import maintenance', { error: err.message });
+      });
+    }
 
     logger.info(`Excel import completed: ${summary.successful}/${summary.total} racks added to maintenance`, {
       requestId,
