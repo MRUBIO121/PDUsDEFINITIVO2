@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2, ChevronDown, ChevronUp, Upload, XCircle } from 'lucide-react';
+import { Wrench, Calendar, User, MapPin, Server, AlertCircle, X, Trash2, ChevronDown, ChevronUp, Upload, XCircle, Download } from 'lucide-react';
 import ImportMaintenanceModal from '../components/ImportMaintenanceModal';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -41,6 +41,34 @@ export default function MaintenancePage() {
   const [removingAll, setRemovingAll] = useState(false);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+
+  const handleDownloadTemplate = async () => {
+    try {
+      setDownloadingTemplate(true);
+      const response = await fetch('/api/maintenance/template', {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Error al descargar la plantilla');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'plantilla_mantenimiento_racks.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Error downloading template:', err);
+      alert('Error al descargar la plantilla');
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  };
 
   // Check if user can finish maintenance for a specific site
   const canUserFinishMaintenance = (siteName: string | null | undefined): boolean => {
@@ -358,6 +386,24 @@ export default function MaintenancePage() {
                   )}
                 </button>
               )}
+              <button
+                onClick={handleDownloadTemplate}
+                disabled={downloadingTemplate}
+                className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Descargar plantilla Excel para importar racks"
+              >
+                {downloadingTemplate ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                    Descargando...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-5 h-5" />
+                    Plantilla
+                  </>
+                )}
+              </button>
               <button
                 onClick={() => setIsImportModalOpen(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
