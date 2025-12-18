@@ -263,6 +263,26 @@ function isCacheValid(cache) {
   return cache.data && cache.timestamp && (Date.now() - cache.timestamp) < cache.ttl;
 }
 
+// Helper function to check if user has access to a site (handles Cantabria unification)
+function userHasAccessToSiteMaintenance(userSites, siteName) {
+  if (!userSites || !Array.isArray(userSites) || userSites.length === 0) {
+    return true;
+  }
+  if (!siteName || siteName === 'Unknown') {
+    return false;
+  }
+  if (userSites.includes(siteName)) {
+    return true;
+  }
+  const normalizedSite = siteName.toLowerCase().includes('cantabria') ? 'Cantabria' : siteName;
+  if (normalizedSite === 'Cantabria') {
+    return userSites.some(assignedSite =>
+      assignedSite.toLowerCase().includes('cantabria')
+    );
+  }
+  return false;
+}
+
 // Real NENG API fetch function
 async function fetchFromNengApi(url, options = {}) {
   const apiTimeout = parseInt(process.env.API_TIMEOUT) || 10000;
@@ -2668,11 +2688,11 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       const site = rack.site || 'Unknown';
 
       // Check site permission for users with assigned sites (but NOT for Administrators)
-      if (req.session.userRole !== 'Administrador' && req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
-        if (!site || site === 'Unknown') {
-          return { error: 'site_unknown', message: 'No se puede determinar el sitio del rack.' };
-        }
-        if (!req.session.sitiosAsignados.includes(site)) {
+      if (req.session.userRole !== 'Administrador') {
+        if (!userHasAccessToSiteMaintenance(req.session.sitiosAsignados, site)) {
+          if (!site || site === 'Unknown') {
+            return { error: 'site_unknown', message: 'No se puede determinar el sitio del rack.' };
+          }
           return { error: 'forbidden', message: `No tienes permisos para gestionar mantenimientos en el sitio "${site}". Solo puedes gestionar: ${req.session.sitiosAsignados.join(', ')}`, site: site };
         }
       }
@@ -2797,15 +2817,15 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
     }
 
     // Check site permission for users with assigned sites (but NOT for Administrators)
-    if (req.session.userRole !== 'Administrador' && req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
-      if (!site) {
-        return res.status(400).json({
-          success: false,
-          message: 'No se puede determinar el sitio de la chain. Información de sitio requerida para usuarios con sitios asignados.',
-          timestamp: new Date().toISOString()
-        });
-      }
-      if (!req.session.sitiosAsignados.includes(site)) {
+    if (req.session.userRole !== 'Administrador') {
+      if (!userHasAccessToSiteMaintenance(req.session.sitiosAsignados, site)) {
+        if (!site) {
+          return res.status(400).json({
+            success: false,
+            message: 'No se puede determinar el sitio de la chain. Información de sitio requerida para usuarios con sitios asignados.',
+            timestamp: new Date().toISOString()
+          });
+        }
         return res.status(403).json({
           success: false,
           message: `No tienes permisos para gestionar mantenimientos en el sitio "${site}". Solo puedes gestionar: ${req.session.sitiosAsignados.join(', ')}`,
@@ -3137,11 +3157,11 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
       const rackSite = entryResult.recordset[0].site;
 
       // Check site permission for users with assigned sites (but NOT for Administrators)
-      if (req.session.userRole !== 'Administrador' && req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
-        if (!rackSite || rackSite === 'Unknown') {
-          return { error: 'site_unknown', message: 'No se puede determinar el sitio del rack.' };
-        }
-        if (!req.session.sitiosAsignados.includes(rackSite)) {
+      if (req.session.userRole !== 'Administrador') {
+        if (!userHasAccessToSiteMaintenance(req.session.sitiosAsignados, rackSite)) {
+          if (!rackSite || rackSite === 'Unknown') {
+            return { error: 'site_unknown', message: 'No se puede determinar el sitio del rack.' };
+          }
           return { error: 'forbidden', message: `No tienes permisos para gestionar mantenimientos en el sitio "${rackSite}". Solo puedes gestionar: ${req.session.sitiosAsignados.join(', ')}`, site: rackSite };
         }
       }
@@ -3252,11 +3272,11 @@ app.delete('/api/maintenance/entry/:entryId', requireAuth, async (req, res) => {
       const entry = entryInfo.recordset[0];
 
       // Check site permission for users with assigned sites (but NOT for Administrators)
-      if (req.session.userRole !== 'Administrador' && req.session.sitiosAsignados && Array.isArray(req.session.sitiosAsignados) && req.session.sitiosAsignados.length > 0) {
-        if (!entry.site || entry.site === 'Unknown') {
-          return { error: 'site_unknown', message: 'No se puede determinar el sitio de esta entrada de mantenimiento.' };
-        }
-        if (!req.session.sitiosAsignados.includes(entry.site)) {
+      if (req.session.userRole !== 'Administrador') {
+        if (!userHasAccessToSiteMaintenance(req.session.sitiosAsignados, entry.site)) {
+          if (!entry.site || entry.site === 'Unknown') {
+            return { error: 'site_unknown', message: 'No se puede determinar el sitio de esta entrada de mantenimiento.' };
+          }
           return { error: 'forbidden', message: `No tienes permisos para gestionar mantenimientos en el sitio "${entry.site}". Solo puedes gestionar: ${req.session.sitiosAsignados.join(', ')}`, site: entry.site };
         }
       }
