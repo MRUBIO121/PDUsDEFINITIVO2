@@ -6,11 +6,19 @@ interface UseRackDataOptions {
   forceShowAllRacks?: boolean;
 }
 
+interface SonarError {
+  error: string;
+  timestamp: Date;
+  alertReason?: string;
+  type?: string;
+}
+
 interface UseRackDataReturn {
   racks: RackData[];
   groupedRacks: { [country: string]: { [site: string]: { [dc: string]: { [gwKey: string]: RackData[][] } } } };
   originalRackGroups: RackData[][];
   maintenanceRacks: Set<string>;
+  sonarErrors: { [rackId: string]: SonarError };
   loading: boolean;
   error: string | null;
   expandedCountryIds: Set<string>;
@@ -50,6 +58,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
   const [racks, setRacks] = useState<RackData[]>([]);
   const [originalRackGroups, setOriginalRackGroups] = useState<RackData[][]>([]);
   const [maintenanceRacks, setMaintenanceRacks] = useState<Set<string>>(new Set());
+  const [sonarErrors, setSonarErrors] = useState<{ [rackId: string]: SonarError }>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedCountryIds, setExpandedCountryIds] = useState<Set<string>>(new Set());
@@ -95,16 +104,23 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
       if (!data.success) {
         throw new Error(data.message || 'Failed to fetch rack data');
       }
-      
-      // Store original rack groups as they come from the API
+
+      const currentSonarErrors = data.sonarErrors || {};
+      setSonarErrors(currentSonarErrors);
+
       const rackGroups = Array.isArray(data.data) ? data.data : [];
       setOriginalRackGroups(rackGroups);
-      
-      // Transform the nested array structure into a flat array
+
       const flatRacks: RackData[] = [];
       if (Array.isArray(rackGroups)) {
         rackGroups.forEach((rackGroup: RackData[]) => {
           if (Array.isArray(rackGroup)) {
+            rackGroup.forEach(rack => {
+              const rackId = rack.rackId || rack.id;
+              if (rackId && currentSonarErrors[rackId]) {
+                rack.sonarError = currentSonarErrors[rackId].error;
+              }
+            });
             flatRacks.push(...rackGroup);
           }
         });
@@ -350,6 +366,7 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
     racks,
     originalRackGroups,
     maintenanceRacks,
+    sonarErrors,
     groupedRacks,
     loading,
     error,

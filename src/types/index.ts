@@ -22,6 +22,8 @@ export interface RackData {
   gwIp?: string;
   // Alert reasons
   reasons?: string[];
+  // SONAR error (if failed to send alert)
+  sonarError?: string;
 }
 
 export interface ThresholdData {

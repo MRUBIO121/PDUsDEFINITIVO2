@@ -181,6 +181,202 @@ async function initializeDatabaseConnection() {
 
 initializeDatabaseConnection();
 
+// SONAR API Configuration
+const SONAR_CONFIG = {
+  apiUrl: process.env.SONAR_API_URL,
+  bearerToken: process.env.SONAR_BEARER_TOKEN,
+  enabled: !!(process.env.SONAR_API_URL && process.env.SONAR_BEARER_TOKEN)
+};
+
+if (SONAR_CONFIG.enabled) {
+  logger.info('SONAR integration enabled', { url: SONAR_CONFIG.apiUrl });
+} else {
+  logger.warn('SONAR integration disabled - missing SONAR_API_URL or SONAR_BEARER_TOKEN');
+}
+
+// Store for tracking SONAR errors per rack (in-memory cache)
+const sonarErrorCache = new Map();
+
+/**
+ * Send alert to SONAR API (open or close)
+ * @param {Object} alertData - Alert data to send
+ * @param {string} state - 'OPEN' or 'CLOSED'
+ * @returns {Promise<{success: boolean, uuid?: string, error?: string}>}
+ */
+async function sendToSonar(alertData, state) {
+  if (!SONAR_CONFIG.enabled) {
+    logger.debug('SONAR disabled, skipping API call');
+    return { success: false, error: 'SONAR integration disabled' };
+  }
+
+  try {
+    const payload = {
+      ...alertData,
+      state: state
+    };
+
+    logger.info('Sending alert to SONAR', { state, pdu_id: alertData.pdu_id || alertData.PID });
+
+    const response = await fetch(SONAR_CONFIG.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SONAR_CONFIG.bearerToken}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`SONAR API error: ${response.status} - ${errorText}`);
+    }
+
+    const responseData = await response.json();
+    const uuid = responseData.reason;
+
+    if (uuid) {
+      logger.info('SONAR response received', { state, uuid, pdu_id: alertData.pdu_id || alertData.PID });
+      return { success: true, uuid };
+    } else {
+      logger.warn('SONAR response missing UUID', { responseData });
+      return { success: true, uuid: null };
+    }
+
+  } catch (error) {
+    logger.error('SONAR API call failed', {
+      error: error.message,
+      state,
+      pdu_id: alertData.pdu_id || alertData.PID
+    });
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Open alert in SONAR and save UUID to database
+ * @param {Object} pdu - PDU data
+ * @param {string} alertReason - Alert reason
+ * @param {number} alertId - Database alert ID
+ * @returns {Promise<{success: boolean, uuid?: string, error?: string}>}
+ */
+async function openSonarAlert(pdu, alertReason, alertId) {
+  const alertData = {
+    pdu_id: pdu.id,
+    rack_id: pdu.rackId || pdu.id,
+    name: pdu.name,
+    country: pdu.country,
+    site: pdu.site,
+    dc: pdu.dc,
+    phase: pdu.phase,
+    chain: pdu.chain,
+    node: pdu.node,
+    serial: pdu.serial,
+    alert_reason: alertReason,
+    current: pdu.current,
+    voltage: pdu.voltage,
+    temperature: pdu.sensorTemperature || pdu.temperature,
+    humidity: pdu.sensorHumidity
+  };
+
+  const result = await sendToSonar(alertData, 'OPEN');
+
+  if (result.success && result.uuid) {
+    try {
+      await executeQuery(async (pool) => {
+        await pool.request()
+          .input('uuid_open', sql.NVarChar, result.uuid)
+          .input('alert_id', sql.Int, alertId)
+          .query(`
+            UPDATE active_critical_alerts
+            SET uuid_open = @uuid_open
+            WHERE id = @alert_id
+          `);
+      });
+      sonarErrorCache.delete(pdu.rackId || pdu.id);
+      logger.info('UUID_OPEN saved to database', { alertId, uuid: result.uuid });
+    } catch (dbError) {
+      logger.error('Failed to save UUID_OPEN to database', { alertId, error: dbError.message });
+    }
+  } else if (!result.success) {
+    sonarErrorCache.set(pdu.rackId || pdu.id, {
+      error: result.error,
+      timestamp: new Date(),
+      alertReason
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Close alert in SONAR and save UUID to database
+ * @param {Object} alert - Alert data from database
+ * @returns {Promise<{success: boolean, uuid?: string, error?: string}>}
+ */
+async function closeSonarAlert(alert) {
+  if (!alert.uuid_open) {
+    logger.debug('No UUID_OPEN for alert, skipping SONAR close', { pdu_id: alert.pdu_id });
+    return { success: false, error: 'No UUID_OPEN to close' };
+  }
+
+  const alertData = {
+    pdu_id: alert.pdu_id,
+    rack_id: alert.rack_id,
+    name: alert.name,
+    country: alert.country,
+    site: alert.site,
+    dc: alert.dc,
+    uuid_open: alert.uuid_open,
+    alert_reason: alert.alert_reason
+  };
+
+  const result = await sendToSonar(alertData, 'CLOSED');
+
+  if (result.success && result.uuid) {
+    try {
+      await executeQuery(async (pool) => {
+        await pool.request()
+          .input('uuid_closed', sql.NVarChar, result.uuid)
+          .input('alert_id', sql.Int, alert.id)
+          .query(`
+            UPDATE active_critical_alerts
+            SET uuid_closed = @uuid_closed
+            WHERE id = @alert_id
+          `);
+      });
+      sonarErrorCache.delete(alert.rack_id);
+      logger.info('UUID_CLOSED saved to database', { alertId: alert.id, uuid: result.uuid });
+    } catch (dbError) {
+      logger.error('Failed to save UUID_CLOSED to database', { alertId: alert.id, error: dbError.message });
+    }
+  } else if (!result.success) {
+    sonarErrorCache.set(alert.rack_id, {
+      error: result.error,
+      timestamp: new Date(),
+      type: 'close_failed'
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Get SONAR error for a specific rack
+ * @param {string} rackId - Rack ID
+ * @returns {Object|null} Error info or null
+ */
+function getSonarError(rackId) {
+  return sonarErrorCache.get(rackId) || null;
+}
+
+/**
+ * Get all SONAR errors
+ * @returns {Object} Map of rack IDs to error info
+ */
+function getAllSonarErrors() {
+  return Object.fromEntries(sonarErrorCache);
+}
+
 // Middleware Configuration
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -1038,8 +1234,8 @@ async function processCriticalAlert(pdu, reason, thresholds) {
             WHERE pdu_id = @pdu_id AND metric_type = @metric_type AND alert_reason = @alert_reason
           `);
       } else {
-        // Insert new alert
-        await pool.request()
+        // Insert new alert and get the inserted ID
+        const insertResult = await pool.request()
           .input('pdu_id', sql.NVarChar, pdu.id)
           .input('rack_id', sql.NVarChar, pdu.rackId || pdu.id)
           .input('name', sql.NVarChar, pdu.name)
@@ -1059,10 +1255,20 @@ async function processCriticalAlert(pdu, reason, thresholds) {
             INSERT INTO active_critical_alerts
             (pdu_id, rack_id, name, country, site, dc, phase, chain, node, serial,
              metric_type, alert_reason, alert_value, alert_field, threshold_exceeded)
+            OUTPUT INSERTED.id
             VALUES
             (@pdu_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial,
              @metric_type, @alert_reason, @alert_value, @alert_field, @threshold_exceeded)
           `);
+
+        const insertedAlertId = insertResult.recordset[0]?.id;
+
+        // Send to SONAR API (async, don't block the main flow)
+        if (insertedAlertId && SONAR_CONFIG.enabled) {
+          openSonarAlert(pdu, reason, insertedAlertId).catch(err => {
+            logger.error('Failed to send alert to SONAR', { error: err.message, pdu_id: pdu.id });
+          });
+        }
 
         // Guardar en historial de alertas
         await saveAlertToHistory({
@@ -1194,12 +1400,18 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
       const currentCriticalPduIds = currentCriticalPdus.map(pdu => pdu.id);
 
       if (currentCriticalPduIds.length === 0) {
-        // Marcar todas las alertas como resueltas en el historial antes de eliminar
         const alertsToResolve = await pool.request().query(`
-          SELECT pdu_id, metric_type, alert_reason FROM active_critical_alerts
+          SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open
+          FROM active_critical_alerts
         `);
 
         for (const alert of alertsToResolve.recordset) {
+          if (SONAR_CONFIG.enabled && alert.uuid_open) {
+            await closeSonarAlert(alert).catch(err => {
+              logger.error('Failed to close alert in SONAR', { error: err.message, pdu_id: alert.pdu_id });
+            });
+          }
+
           await pool.request()
             .input('pdu_id', sql.NVarChar, alert.pdu_id)
             .input('metric_type', sql.NVarChar, alert.metric_type)
@@ -1224,16 +1436,21 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
         return deleteResult;
       }
 
-      // Create a string of PDU IDs for the NOT IN clause
       const pduIdsList = currentCriticalPduIds.map(id => `'${id.replace("'", "''")}'`).join(',');
 
-      // Obtener alertas que se van a eliminar para marcarlas como resueltas
       const alertsToResolve = await pool.request().query(`
-        SELECT pdu_id, metric_type, alert_reason FROM active_critical_alerts
+        SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open
+        FROM active_critical_alerts
         WHERE pdu_id NOT IN (${pduIdsList})
       `);
 
       for (const alert of alertsToResolve.recordset) {
+        if (SONAR_CONFIG.enabled && alert.uuid_open) {
+          await closeSonarAlert(alert).catch(err => {
+            logger.error('Failed to close alert in SONAR', { error: err.message, pdu_id: alert.pdu_id });
+          });
+        }
+
         await pool.request()
           .input('pdu_id', sql.NVarChar, alert.pdu_id)
           .input('metric_type', sql.NVarChar, alert.metric_type)
@@ -1252,28 +1469,32 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
           `);
       }
 
-      // Delete alerts for PDUs that are no longer critical
       const deleteResult = await pool.request().query(`
         DELETE FROM active_critical_alerts
         WHERE pdu_id NOT IN (${pduIdsList})
       `);
 
-      // Also clean up alerts for PDUs that are still critical but no longer have the specific reason
       for (const criticalPdu of currentCriticalPdus) {
         const currentReasons = criticalPdu.reasons.filter(r => r.startsWith('critical_'));
 
         if (currentReasons.length > 0) {
           const reasonsList = currentReasons.map(reason => `'${reason.replace("'", "''")}'`).join(',');
 
-          // Obtener alertas que se van a eliminar por cambio de razon
           const alertsToResolveByReason = await pool.request()
             .input('pdu_id', sql.NVarChar, criticalPdu.id)
             .query(`
-              SELECT pdu_id, metric_type, alert_reason FROM active_critical_alerts
+              SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open
+              FROM active_critical_alerts
               WHERE pdu_id = @pdu_id AND alert_reason NOT IN (${reasonsList})
             `);
 
           for (const alert of alertsToResolveByReason.recordset) {
+            if (SONAR_CONFIG.enabled && alert.uuid_open) {
+              await closeSonarAlert(alert).catch(err => {
+                logger.error('Failed to close alert in SONAR', { error: err.message, pdu_id: alert.pdu_id });
+              });
+            }
+
             await pool.request()
               .input('pdu_id', sql.NVarChar, alert.pdu_id)
               .input('metric_type', sql.NVarChar, alert.metric_type)
@@ -1305,7 +1526,7 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
     });
 
   } catch (error) {
-    console.error('❌ Error cleaning up resolved alerts:', error);
+    console.error('Error cleaning up resolved alerts:', error);
   }
 }
 
@@ -1770,6 +1991,7 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
       return res.json({
         success: true,
         data: racksCache.data,
+        sonarErrors: getAllSonarErrors(),
         message: 'Rack data retrieved successfully (cached)',
         count: racksCache.data ? racksCache.data.flat().length : 0,
         timestamp: new Date().toISOString()
@@ -2070,15 +2292,16 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
     // Update cache
     racksCache.data = rackGroups;
     racksCache.timestamp = Date.now();
-    
+
     const response = {
       success: true,
       data: rackGroups,
+      sonarErrors: getAllSonarErrors(),
       message: 'Rack data retrieved successfully',
       count: processedData.length,
       timestamp: new Date().toISOString()
     };
-    
+
     res.json(response);
     
   } catch (error) {
@@ -3827,6 +4050,27 @@ app.get('/api/health', (req, res) => {
     version: process.env.APP_VERSION || '1.0.0',
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
+  });
+});
+
+// SONAR errors endpoint
+app.get('/api/sonar/errors', requireAuth, (req, res) => {
+  res.json({
+    success: true,
+    data: getAllSonarErrors(),
+    enabled: SONAR_CONFIG.enabled,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// SONAR status endpoint
+app.get('/api/sonar/status', requireAuth, (req, res) => {
+  res.json({
+    success: true,
+    enabled: SONAR_CONFIG.enabled,
+    configured: !!(SONAR_CONFIG.apiUrl && SONAR_CONFIG.bearerToken),
+    errorCount: sonarErrorCache.size,
+    timestamp: new Date().toISOString()
   });
 });
 
