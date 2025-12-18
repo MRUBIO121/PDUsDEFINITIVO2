@@ -218,7 +218,8 @@ async function sendToSonar(alertData, state) {
     if (state === 'CLOSED') {
       payload = {
         pid: alertIdentifier,
-        state: 'CLOSED'
+        state: 'CLOSED',
+        origin: 'NGEN_ALERT'
       };
     } else {
       payload = {
