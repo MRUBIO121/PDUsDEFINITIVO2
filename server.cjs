@@ -1209,7 +1209,7 @@ async function saveAlertToHistory(alertData, resolvedBy = null, resolutionType =
     await executeQuery(async (pool) => {
       if (resolvedBy) {
         await pool.request()
-          .input('pdu_id', sql.NVarChar, alertData.pdu_id)
+          .input('pdu_id', sql.NVarChar, String(alertData.pdu_id))
           .input('metric_type', sql.NVarChar, alertData.metric_type)
           .input('alert_reason', sql.NVarChar, alertData.alert_reason)
           .input('resolved_at', sql.DateTime, new Date())
@@ -1228,8 +1228,8 @@ async function saveAlertToHistory(alertData, resolvedBy = null, resolutionType =
           `);
       } else {
         await pool.request()
-          .input('pdu_id', sql.NVarChar, alertData.pdu_id)
-          .input('rack_id', sql.NVarChar, alertData.rack_id)
+          .input('pdu_id', sql.NVarChar, String(alertData.pdu_id))
+          .input('rack_id', sql.NVarChar, String(alertData.rack_id))
           .input('name', sql.NVarChar, alertData.name)
           .input('country', sql.NVarChar, alertData.country)
           .input('site', sql.NVarChar, alertData.site)
@@ -1292,7 +1292,7 @@ async function saveMaintenanceToHistory(pool, entryId, endedBy) {
       await pool.request()
         .input('original_entry_id', sql.UniqueIdentifier, row.original_entry_id)
         .input('entry_type', sql.NVarChar, row.entry_type)
-        .input('rack_id', sql.NVarChar, row.rack_id)
+        .input('rack_id', sql.NVarChar, String(row.rack_id))
         .input('rack_name', sql.NVarChar, row.rack_name)
         .input('country', sql.NVarChar, row.country)
         .input('site', sql.NVarChar, row.site)
@@ -1357,7 +1357,7 @@ async function saveRackMaintenanceToHistory(pool, rackId, endedBy) {
       await pool.request()
         .input('original_entry_id', sql.UniqueIdentifier, row.original_entry_id)
         .input('entry_type', sql.NVarChar, row.entry_type)
-        .input('rack_id', sql.NVarChar, row.rack_id)
+        .input('rack_id', sql.NVarChar, String(row.rack_id))
         .input('rack_name', sql.NVarChar, row.rack_name)
         .input('country', sql.NVarChar, row.country)
         .input('site', sql.NVarChar, row.site)
@@ -1667,7 +1667,7 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
           }
 
           await pool.request()
-            .input('pdu_id', sql.NVarChar, alert.pdu_id)
+            .input('pdu_id', sql.NVarChar, String(alert.pdu_id))
             .input('metric_type', sql.NVarChar, alert.metric_type)
             .input('alert_reason', sql.NVarChar, alert.alert_reason)
             .input('resolved_at', sql.DateTime, new Date())
@@ -1706,7 +1706,7 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
         }
 
         await pool.request()
-          .input('pdu_id', sql.NVarChar, alert.pdu_id)
+          .input('pdu_id', sql.NVarChar, String(alert.pdu_id))
           .input('metric_type', sql.NVarChar, alert.metric_type)
           .input('alert_reason', sql.NVarChar, alert.alert_reason)
           .input('resolved_at', sql.DateTime, new Date())
@@ -1735,7 +1735,7 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
           const reasonsList = currentReasons.map(reason => `'${reason.replace("'", "''")}'`).join(',');
 
           const alertsToResolveByReason = await pool.request()
-            .input('pdu_id', sql.NVarChar, criticalPdu.id)
+            .input('pdu_id', sql.NVarChar, String(criticalPdu.id))
             .query(`
               SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open
               FROM active_critical_alerts
@@ -1750,7 +1750,7 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
             }
 
             await pool.request()
-              .input('pdu_id', sql.NVarChar, alert.pdu_id)
+              .input('pdu_id', sql.NVarChar, String(alert.pdu_id))
               .input('metric_type', sql.NVarChar, alert.metric_type)
               .input('alert_reason', sql.NVarChar, alert.alert_reason)
               .input('resolved_at', sql.DateTime, new Date())
@@ -1768,7 +1768,7 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
           }
 
           await pool.request()
-            .input('pdu_id', sql.NVarChar, criticalPdu.id)
+            .input('pdu_id', sql.NVarChar, String(criticalPdu.id))
             .query(`
               DELETE FROM active_critical_alerts
               WHERE pdu_id = @pdu_id AND alert_reason NOT IN (${reasonsList})
@@ -2915,7 +2915,7 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
 
             try {
               await pool.request()
-                .input('rack_id', sql.NVarChar, detail.rack_id)
+                .input('rack_id', sql.NVarChar, String(detail.rack_id))
                 .input('maintenance_entry_id', sql.UniqueIdentifier, detail.maintenance_entry_id)
                 .input('gwName', sql.NVarChar, apiData.gwName)
                 .input('gwIp', sql.NVarChar, apiData.gwIp)
@@ -3926,7 +3926,7 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       for (const rack of racks) {
         try {
           const existingCheck = await pool.request()
-            .input('rack_id', sql.NVarChar, rack.rack_id)
+            .input('rack_id', sql.NVarChar, String(rack.rack_id))
             .query(`
               SELECT COUNT(*) as count
               FROM maintenance_rack_details
@@ -3974,7 +3974,7 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
             .input('entry_type', sql.NVarChar, 'individual_rack')
-            .input('rack_id', sql.NVarChar, rackInfo.rack_id)
+            .input('rack_id', sql.NVarChar, String(rackInfo.rack_id))
             .input('chain', sql.NVarChar, rackInfo.chain)
             .input('site', sql.NVarChar, rackInfo.site)
             .input('dc', sql.NVarChar, rackInfo.dc)
@@ -3990,7 +3990,7 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
 
           await pool.request()
             .input('entry_id', sql.UniqueIdentifier, entryId)
-            .input('rack_id', sql.NVarChar, rackInfo.rack_id)
+            .input('rack_id', sql.NVarChar, String(rackInfo.rack_id))
             .input('name', sql.NVarChar, rackInfo.name)
             .input('country', sql.NVarChar, rackInfo.country)
             .input('site', sql.NVarChar, rackInfo.site)
