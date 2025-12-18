@@ -185,8 +185,62 @@ initializeDatabaseConnection();
 const SONAR_CONFIG = {
   apiUrl: process.env.SONAR_API_URL,
   bearerToken: process.env.SONAR_BEARER_TOKEN,
-  enabled: !!(process.env.SONAR_API_URL && process.env.SONAR_BEARER_TOKEN)
+  enabled: !!(process.env.SONAR_API_URL && process.env.SONAR_BEARER_TOKEN),
+  skipSslVerify: process.env.SONAR_SKIP_SSL_VERIFY === 'true'
 };
+
+const https = require('https');
+const http = require('http');
+
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: !SONAR_CONFIG.skipSslVerify
+});
+
+function makeHttpsRequest(url, options, body) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const isHttps = parsedUrl.protocol === 'https:';
+    const requestModule = isHttps ? https : http;
+
+    const requestOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (isHttps ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      agent: isHttps ? httpsAgent : undefined,
+      timeout: 30000
+    };
+
+    const req = requestModule.request(requestOptions, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        resolve({
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          statusText: res.statusMessage,
+          text: async () => data,
+          json: async () => JSON.parse(data)
+        });
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(error);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+
+    if (body) {
+      req.write(body);
+    }
+    req.end();
+  });
+}
 
 if (SONAR_CONFIG.enabled) {
   const tokenPreview = SONAR_CONFIG.bearerToken ?
@@ -195,8 +249,12 @@ if (SONAR_CONFIG.enabled) {
   logger.info('SONAR integration enabled', {
     url: SONAR_CONFIG.apiUrl,
     tokenPreview: tokenPreview,
-    tokenLength: SONAR_CONFIG.bearerToken?.length || 0
+    tokenLength: SONAR_CONFIG.bearerToken?.length || 0,
+    skipSslVerify: SONAR_CONFIG.skipSslVerify
   });
+  if (SONAR_CONFIG.skipSslVerify) {
+    logger.warn('SONAR SSL verification disabled - accepting self-signed certificates');
+  }
 } else {
   logger.warn('SONAR integration disabled - missing SONAR_API_URL or SONAR_BEARER_TOKEN', {
     hasUrl: !!process.env.SONAR_API_URL,
@@ -278,14 +336,17 @@ async function sendToSonar(alertData, state) {
 
     logger.debug('[SONAR] Full payload', { payload: JSON.stringify(payload) });
 
-    const response = await fetch(SONAR_CONFIG.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SONAR_CONFIG.bearerToken}`
+    const response = await makeHttpsRequest(
+      SONAR_CONFIG.apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SONAR_CONFIG.bearerToken}`
+        }
       },
-      body: JSON.stringify(payload)
-    });
+      JSON.stringify(payload)
+    );
 
     logger.info('[SONAR] Response received', {
       status: response.status,
