@@ -3536,7 +3536,8 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       });
     }
 
-    const { user = 'Sistema', defaultReason = 'Mantenimiento' } = req.body;
+    const { defaultReason = 'Mantenimiento' } = req.body;
+    const user = req.session.usuario || 'Sistema';
 
     console.log(`[${requestId}] 📄 File received: ${req.file.originalname} (${req.file.size} bytes)`);
 
