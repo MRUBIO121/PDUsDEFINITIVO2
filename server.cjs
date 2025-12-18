@@ -97,7 +97,7 @@ async function getPool() {
   // Create new connection
   isConnecting = true;
   try {
-    logger.info('Establishing database connection');
+    logger.debug('Establishing database connection');
     globalPool = await sql.connect(sqlConfig);
 
     // Set up connection event handlers
@@ -107,7 +107,7 @@ async function getPool() {
       globalPool = null;
     });
 
-    logger.info('Database connection established');
+    logger.debug('Database connection established');
     reconnectAttempts = 0;
     isConnecting = false;
     return globalPool;
@@ -172,7 +172,7 @@ async function executeQuery(queryFn, retries = 2) {
 async function initializeDatabaseConnection() {
   try {
     await getPool();
-    logger.info('Database initialization complete');
+    logger.debug('Database initialization complete');
   } catch (error) {
     // Database initialization failed logged by winston
     logger.error('Database initialization failed', { error: error.message });
@@ -212,10 +212,26 @@ function makeHttpsRequest(url, options, body) {
       timeout: 30000
     };
 
+    logger.info('[SONAR] HTTP Request starting', {
+      url,
+      method: requestOptions.method,
+      hostname: requestOptions.hostname,
+      port: requestOptions.port,
+      path: requestOptions.path,
+      isHttps,
+      bodyLength: body?.length || 0
+    });
+
     const req = requestModule.request(requestOptions, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
+        logger.info('[SONAR] HTTP Response received', {
+          statusCode: res.statusCode,
+          statusMessage: res.statusMessage,
+          responseLength: data.length,
+          responsePreview: data.substring(0, 500)
+        });
         resolve({
           ok: res.statusCode >= 200 && res.statusCode < 300,
           status: res.statusCode,
@@ -227,10 +243,17 @@ function makeHttpsRequest(url, options, body) {
     });
 
     req.on('error', (error) => {
+      logger.error('[SONAR] HTTP Request error', {
+        url,
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       reject(error);
     });
 
     req.on('timeout', () => {
+      logger.error('[SONAR] HTTP Request timeout', { url });
       req.destroy();
       reject(new Error('Request timeout'));
     });
@@ -334,7 +357,7 @@ async function sendToSonar(alertData, state) {
       payloadSize: JSON.stringify(payload).length
     });
 
-    logger.debug('[SONAR] Full payload', { payload: JSON.stringify(payload) });
+    logger.info('[SONAR] Full payload being sent', { payload: JSON.stringify(payload) });
 
     const response = await makeHttpsRequest(
       SONAR_CONFIG.apiUrl,
@@ -653,14 +676,14 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Serve static files from 'dist' folder in production
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
-  logger.info('Serving static files from dist folder');
+  logger.debug('Serving static files from dist folder');
   app.use(express.static(distPath));
 }
 
-// Morgan logging middleware
+// Morgan logging middleware (debug level to reduce noise)
 app.use(morgan('combined', {
   stream: {
-    write: (message) => logger.info(message.trim())
+    write: (message) => logger.debug(message.trim())
   }
 }));
 
@@ -806,7 +829,7 @@ async function fetchThresholdsFromDatabase() {
     // Check for voltage thresholds
     const voltageThresholds = thresholds.filter(t => t.key && t.key.includes('voltage'));
     if (voltageThresholds.length > 0) {
-      logger.info('Voltage thresholds loaded from database', { count: voltageThresholds.length });
+      logger.debug('Voltage thresholds loaded from database', { count: voltageThresholds.length });
     } else {
       logger.error('No voltage thresholds found in database');
     }
@@ -1132,7 +1155,7 @@ async function processRackData(racks, thresholds) {
 
   // Log voltage evaluation summary only if there are alerts
   if (voltageStats.criticalLow > 0 || voltageStats.criticalHigh > 0 || voltageStats.warningLow > 0 || voltageStats.warningHigh > 0) {
-    logger.info('Voltage alerts detected', {
+    logger.debug('Voltage alerts detected', {
       total: voltageStats.total,
       withVoltage: voltageStats.withVoltage,
       normal: voltageStats.normal,
@@ -1405,6 +1428,15 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
       return pdu.status === 'critical' && pdu.reasons && pdu.reasons.length > 0 && !isInMaintenance;
     });
 
+    logger.info('[SONAR] === ALERT PROCESSING CYCLE START ===', {
+      totalPdus: allPdus.length,
+      criticalPdus: currentCriticalPdus.length,
+      maintenanceRacks: maintenanceRackIds.size,
+      SONAR_ENABLED: SONAR_CONFIG.enabled,
+      SONAR_URL: SONAR_CONFIG.apiUrl || 'NOT_SET',
+      SONAR_TOKEN_LENGTH: SONAR_CONFIG.bearerToken?.length || 0
+    });
+
     // Process PDUs in batches to avoid connection timeout issues
     const BATCH_SIZE = 10;
     let processedCount = 0;
@@ -1434,7 +1466,7 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
       }
     }
 
-    logger.info('Alerts processed', { count: processedCount, errors: errorCount });
+    logger.debug('Alerts processed', { count: processedCount, errors: errorCount });
 
     // Clean up resolved alerts
     try {
@@ -1459,7 +1491,7 @@ async function processCriticalAlert(pdu, reason, thresholds) {
     const metricInfo = extractMetricInfo(reason, pdu, thresholds);
 
     if (!metricInfo) {
-      logger.warn('Could not extract metric from reason', { reason });
+      logger.debug('Could not extract metric from reason', { reason });
       return;
     }
 
@@ -1476,6 +1508,13 @@ async function processCriticalAlert(pdu, reason, thresholds) {
         `);
 
       if (existingAlert.recordset.length > 0) {
+        logger.info('[SONAR] Alert already exists, updating values only', {
+          pdu_id: pduIdStr,
+          rack_id: rackIdStr,
+          name: pdu.name,
+          reason,
+          existing_alert_id: existingAlert.recordset[0].id
+        });
         await pool.request()
           .input('pdu_id', sql.NVarChar, pduIdStr)
           .input('metric_type', sql.NVarChar, metricType)
@@ -1518,10 +1557,28 @@ async function processCriticalAlert(pdu, reason, thresholds) {
 
         const insertedAlertId = insertResult.recordset[0]?.id;
 
-        // Send to SONAR API (async, don't block the main flow)
+        logger.info('[SONAR] NEW ALERT INSERTED - checking if should send to SONAR', {
+          insertedAlertId,
+          pdu_id: pduIdStr,
+          rack_id: rackIdStr,
+          name: pdu.name,
+          reason,
+          SONAR_ENABLED: SONAR_CONFIG.enabled,
+          SONAR_URL: SONAR_CONFIG.apiUrl || 'NOT_SET',
+          SONAR_TOKEN_SET: !!SONAR_CONFIG.bearerToken,
+          willCallSonar: !!(insertedAlertId && SONAR_CONFIG.enabled)
+        });
+
         if (insertedAlertId && SONAR_CONFIG.enabled) {
+          logger.info('[SONAR] CALLING openSonarAlert NOW', { insertedAlertId, pdu_id: pduIdStr, reason });
           openSonarAlert(pdu, reason, insertedAlertId).catch(err => {
             logger.error('[SONAR] Failed to send alert to SONAR', { error: err.message, pdu_id: pduIdStr });
+          });
+        } else {
+          logger.warn('[SONAR] NOT calling SONAR', {
+            reason: !insertedAlertId ? 'NO_INSERTED_ID' : 'SONAR_DISABLED',
+            insertedAlertId,
+            SONAR_ENABLED: SONAR_CONFIG.enabled
           });
         }
 
@@ -2316,7 +2373,7 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
           );
 
           if (!sensorsResponse.success || !sensorsResponse.data) {
-            logger.warn('Sensor page failed, stopping pagination');
+            logger.debug('Sensor page failed, stopping pagination');
             hasMoreSensorData = false;
             break;
           }
@@ -2336,10 +2393,10 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
           }
         }
       } catch (sensorError) {
-        logger.warn('Sensors API failed, continuing without sensor data', { error: sensorError.message });
+        logger.debug('Sensors API failed, continuing without sensor data', { error: sensorError.message });
       }
     } else {
-      logger.info('NENG_SENSORS_API_URL not configured', { requestId });
+      logger.debug('NENG_SENSORS_API_URL not configured', { requestId });
     }
 
     // Map and combine power and sensor data, filtering out items without valid rackName
@@ -2402,7 +2459,7 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
 
     // Simplified log
     if (itemsWithoutRackName.length > 0) {
-      logger.info('PDUs without rack name filtered', { count: itemsWithoutRackName.length });
+      logger.debug('PDUs without rack name filtered', { count: itemsWithoutRackName.length });
     }
     
     if (combinedData.length === 0) {
@@ -2465,7 +2522,7 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
     });
 
     if (addedFromSensorsBeforeProcessing.length > 0) {
-      logger.info('Added racks from sensors without power data', { count: addedFromSensorsBeforeProcessing.length });
+      logger.debug('Added racks from sensors without power data', { count: addedFromSensorsBeforeProcessing.length });
     }
 
     // Process data with thresholds evaluation (includes sensor-only racks now)
@@ -2474,7 +2531,7 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
     // DO NOT filter out maintenance racks - send them to frontend for visual indication
     const filteredData = processedData;
     const uniqueRacks = new Set(filteredData.map(pdu => pdu.rackId)).size;
-    logger.info('Data processed', { pdus: filteredData.length, racks: uniqueRacks, maintenance: maintenanceRackIds.size });
+    logger.debug('Data processed', { pdus: filteredData.length, racks: uniqueRacks, maintenance: maintenanceRackIds.size });
 
     // Manage active critical alerts in database (excluding maintenance racks from alerts)
     const nonMaintenanceData = processedData.filter(pdu => {
@@ -2497,7 +2554,7 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
       // Check for duplicate PDU IDs across different racks or datacenters
       if (pduTracker.has(pduId)) {
         const existing = pduTracker.get(pduId);
-        logger.warn('Duplicate PDU detected', {
+        logger.debug('Duplicate PDU detected', {
           pdu_id: pduId,
           existing: { rack: existing.rackId, dc: existing.dc, site: existing.site },
           current: { rack: rackId, dc: pdu.dc, site: pdu.site }
@@ -2524,7 +2581,7 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
       const dcs = new Set(rackGroup.map(pdu => pdu.dc));
 
       if (dcs.size > 1) {
-        logger.warn('Rack appears in multiple datacenters', { rack_id: rackId, datacenters: Array.from(dcs) });
+        logger.debug('Rack appears in multiple datacenters', { rack_id: rackId, datacenters: Array.from(dcs) });
       }
     });
 
@@ -2863,7 +2920,7 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
 
     const { entries, details } = results;
 
-    logger.info('Maintenance data retrieved', { entries: entries.length, racks: details.length });
+    logger.debug('Maintenance data retrieved', { entries: entries.length, racks: details.length });
 
     // Enrich details with API data if gwName or gwIp are missing
     const detailsWithMissingGateway = details.filter(d => {
@@ -2929,7 +2986,7 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
 
         await pool.close();
         if (enrichedCount > 0) {
-          logger.info('Enriched racks with gateway data', { count: enrichedCount });
+          logger.debug('Enriched racks with gateway data', { count: enrichedCount });
         }
       } catch (apiError) {
         logger.warn('Failed to enrich gateway data from API', { error: apiError.message });
@@ -3255,7 +3312,7 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
 
     const filteredOutCount = beforeRackNameFilter - chainRacks.length;
     if (filteredOutCount > 0) {
-      logger.info('PDUs filtered out due to missing rackName', { filtered: filteredOutCount, remaining: chainRacks.length });
+      logger.debug('PDUs filtered out due to missing rackName', { filtered: filteredOutCount, remaining: chainRacks.length });
     }
 
     if (chainRacks.length === 0) {
