@@ -569,6 +569,159 @@ function getAllSonarErrors() {
 }
 
 /**
+ * Send existing alerts without uuid_open to SONAR on startup
+ * This ensures all active critical alerts are registered in SONAR
+ * @returns {Promise<{sent: number, errors: number, skipped: number}>}
+ */
+async function sendExistingAlertsToSonar() {
+  if (!SONAR_CONFIG.enabled) {
+    logger.info('[SONAR] STARTUP: Integration disabled, skipping existing alerts sync');
+    return { sent: 0, errors: 0, skipped: 0 };
+  }
+
+  logger.info('[SONAR] STARTUP: Checking for existing alerts without uuid_open');
+
+  try {
+    const alertsResult = await executeQuery(async (pool) => {
+      return await pool.request().query(`
+        SELECT id, pdu_id, rack_id, name, country, site, dc, phase, chain, node, serial,
+               metric_type, alert_reason, alert_value, alert_field, threshold_exceeded,
+               created_at
+        FROM active_critical_alerts
+        WHERE uuid_open IS NULL
+        ORDER BY created_at ASC
+      `);
+    });
+
+    const alerts = alertsResult.recordset;
+
+    if (alerts.length === 0) {
+      logger.info('[SONAR] STARTUP: No existing alerts without uuid_open found');
+      return { sent: 0, errors: 0, skipped: 0 };
+    }
+
+    logger.info('[SONAR] STARTUP: Found alerts to send to SONAR', {
+      count: alerts.length,
+      alerts: alerts.map(a => ({ id: a.id, name: a.name, reason: a.alert_reason }))
+    });
+
+    let sent = 0;
+    let errors = 0;
+    let skipped = 0;
+
+    for (const alert of alerts) {
+      try {
+        const pduData = {
+          id: alert.pdu_id,
+          rackId: alert.rack_id,
+          name: alert.name,
+          country: alert.country,
+          site: alert.site,
+          dc: alert.dc,
+          phase: alert.phase,
+          chain: alert.chain,
+          node: alert.node,
+          serial: alert.serial,
+          current: alert.alert_field === 'current' ? alert.alert_value : 0,
+          voltage: alert.alert_field === 'voltage' ? alert.alert_value : 0,
+          sensorTemperature: alert.alert_field === 'temperature' ? alert.alert_value : null,
+          sensorHumidity: alert.alert_field === 'humidity' ? alert.alert_value : null,
+          gwName: 'N/A',
+          gwIp: 'N/A'
+        };
+
+        logger.info('[SONAR] STARTUP: Sending existing alert to SONAR', {
+          alertId: alert.id,
+          name: alert.name,
+          reason: alert.alert_reason,
+          pdu_id: alert.pdu_id
+        });
+
+        const result = await sendToSonar({
+          pdu_id: alert.pdu_id,
+          rack_id: alert.rack_id,
+          name: alert.name,
+          country: alert.country,
+          site: alert.site,
+          dc: alert.dc,
+          phase: alert.phase,
+          chain: alert.chain,
+          node: alert.node,
+          serial: alert.serial,
+          alert_reason: alert.alert_reason,
+          current: pduData.current,
+          voltage: pduData.voltage,
+          temperature: pduData.sensorTemperature,
+          humidity: pduData.sensorHumidity,
+          gwName: pduData.gwName,
+          gwIp: pduData.gwIp
+        }, 'OPEN');
+
+        if (result.success && result.uuid) {
+          await executeQuery(async (pool) => {
+            await pool.request()
+              .input('uuid_open', sql.NVarChar, result.uuid)
+              .input('alert_id', sql.Int, alert.id)
+              .query(`
+                UPDATE active_critical_alerts
+                SET uuid_open = @uuid_open
+                WHERE id = @alert_id
+              `);
+          });
+          sonarErrorCache.delete(alert.rack_id);
+          logger.info('[SONAR] STARTUP: Alert sent and uuid_open saved', {
+            alertId: alert.id,
+            uuid: result.uuid,
+            name: alert.name
+          });
+          sent++;
+        } else if (result.success) {
+          logger.warn('[SONAR] STARTUP: Alert sent but no UUID received', {
+            alertId: alert.id,
+            name: alert.name
+          });
+          skipped++;
+        } else {
+          sonarErrorCache.set(alert.rack_id, {
+            error: result.error,
+            timestamp: new Date(),
+            alertReason: alert.alert_reason
+          });
+          logger.error('[SONAR] STARTUP: Failed to send alert', {
+            alertId: alert.id,
+            name: alert.name,
+            error: result.error
+          });
+          errors++;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 200));
+      } catch (err) {
+        logger.error('[SONAR] STARTUP: Error processing alert', {
+          alertId: alert.id,
+          error: err.message
+        });
+        errors++;
+      }
+    }
+
+    logger.info('[SONAR] STARTUP: Completed sending existing alerts', {
+      sent,
+      errors,
+      skipped,
+      total: alerts.length
+    });
+
+    return { sent, errors, skipped };
+  } catch (error) {
+    logger.error('[SONAR] STARTUP: Failed to query existing alerts', {
+      error: error.message
+    });
+    return { sent: 0, errors: 0, skipped: 0 };
+  }
+}
+
+/**
  * Close SONAR alerts for a rack when it enters maintenance
  * @param {string} rackId - Rack ID
  * @returns {Promise<{closed: number, errors: number}>}
@@ -4492,13 +4645,25 @@ app.get('*', (req, res) => {
 });
 
 // Start server
-const server = app.listen(port, () => {
+const server = app.listen(port, async () => {
   logger.info('Server started', {
     port,
     environment: process.env.NODE_ENV || 'development',
     frontend: process.env.FRONTEND_URL || 'http://localhost:5173',
     sonar: SONAR_CONFIG.enabled ? 'enabled' : 'disabled'
   });
+
+  if (SONAR_CONFIG.enabled) {
+    setTimeout(async () => {
+      try {
+        logger.info('[SONAR] STARTUP: Beginning sync of existing alerts');
+        const result = await sendExistingAlertsToSonar();
+        logger.info('[SONAR] STARTUP: Sync completed', result);
+      } catch (err) {
+        logger.error('[SONAR] STARTUP: Failed to sync existing alerts', { error: err.message });
+      }
+    }, 3000);
+  }
 });
 
 // Set server timeout to 5 minutes (for long-running operations like chain maintenance)
