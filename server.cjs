@@ -866,7 +866,7 @@ async function loadAllRackSpecificThresholds(rackIds) {
 
     const result = await executeQuery(async (pool) => {
       // Create a table-valued parameter or use IN clause
-      const rackIdsList = rackIds.map(id => `'${id.replace("'", "''")}'`).join(',');
+      const rackIdsList = rackIds.map(id => `'${String(id).replace("'", "''")}'`).join(',');
 
       return await pool.request().query(`
         SELECT rack_id, threshold_key, value, unit
@@ -1690,7 +1690,7 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
         return deleteResult;
       }
 
-      const pduIdsList = currentCriticalPduIds.map(id => `'${id.replace("'", "''")}'`).join(',');
+      const pduIdsList = currentCriticalPduIds.map(id => `'${String(id).replace("'", "''")}'`).join(',');
 
       const alertsToResolve = await pool.request().query(`
         SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open
