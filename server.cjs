@@ -3167,7 +3167,7 @@ app.delete('/api/maintenance/rack/:rackId', requireAuth, async (req, res) => {
       }
 
       // Guardar en historial antes de eliminar
-      const endedBy = req.session.userName || req.session.userId || 'Sistema';
+      const endedBy = req.session.usuario || 'Sistema';
       await saveRackMaintenanceToHistory(pool, sanitizedRackId, endedBy);
 
       // Delete the rack detail
@@ -3282,7 +3282,7 @@ app.delete('/api/maintenance/entry/:entryId', requireAuth, async (req, res) => {
       }
 
       // Guardar en historial antes de eliminar
-      const endedBy = req.session.userName || req.session.userId || 'Sistema';
+      const endedBy = req.session.usuario || 'Sistema';
       await saveMaintenanceToHistory(pool, entryId, endedBy);
 
       // Delete the maintenance entry (CASCADE will delete all related rack details)
@@ -3395,7 +3395,7 @@ app.delete('/api/maintenance/all', requireAuth, async (req, res) => {
       }
 
       // Obtener todos los entry IDs para guardar en historial
-      const endedBy = req.session.userName || req.session.userId || 'Sistema';
+      const endedBy = req.session.usuario || 'Sistema';
       let entriesQuery = `SELECT id FROM maintenance_entries ${whereClause}`;
       const entriesResult = await pool.request().query(entriesQuery);
 
