@@ -152,7 +152,7 @@ function App() {
     // Debug: Check which maintenance racks are not in power data
     const powerRackIds = new Set<string>();
     rackGroups.forEach(rackGroup => {
-      const rackId = String(rackGroup[0].rackId || '').trim();
+      const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
       if (rackId) {
         powerRackIds.add(rackId);
       }
