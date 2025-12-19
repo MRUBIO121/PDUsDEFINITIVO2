@@ -1,8 +1,8 @@
 -- ============================================================================================================
 -- ARCHIVO: complete_database_setup.sql
 -- PROPOSITO: Setup completo consolidado de toda la base de datos del sistema de monitoreo de energia
--- FECHA: 2025-12-18
--- VERSION: 4.0 - Consolidacion final con tablas de historico
+-- FECHA: 2025-12-19
+-- VERSION: 5.0 - Archivo unificado con todos los indices y campos UUID
 -- ============================================================================================================
 --
 -- Este script consolidado incluye:
@@ -489,6 +489,22 @@ GO
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_alerts_history_pdu_metric')
     CREATE INDEX IX_alerts_history_pdu_metric ON alerts_history(pdu_id, metric_type);
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_alerts_history_uuid_open')
+    CREATE INDEX IX_alerts_history_uuid_open ON alerts_history(uuid_open);
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_alerts_history_uuid_closed')
+    CREATE INDEX IX_alerts_history_uuid_closed ON alerts_history(uuid_closed);
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_active_critical_alerts_uuid_open')
+    CREATE INDEX IX_active_critical_alerts_uuid_open ON active_critical_alerts(uuid_open);
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_active_critical_alerts_uuid_closed')
+    CREATE INDEX IX_active_critical_alerts_uuid_closed ON active_critical_alerts(uuid_closed);
 GO
 
 -- ============================================================================================================
