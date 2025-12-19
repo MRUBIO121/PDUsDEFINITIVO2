@@ -586,10 +586,10 @@ async function sendExistingAlertsToSonar() {
       return await pool.request().query(`
         SELECT id, pdu_id, rack_id, name, country, site, dc, phase, chain, node, serial,
                metric_type, alert_reason, alert_value, alert_field, threshold_exceeded,
-               created_at
+               alert_started_at
         FROM active_critical_alerts
         WHERE uuid_open IS NULL
-        ORDER BY created_at ASC
+        ORDER BY alert_started_at ASC
       `);
     });
 
