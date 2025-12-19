@@ -1865,20 +1865,15 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
 
       if (currentCriticalPduIds.length === 0) {
         const alertsToResolve = await pool.request().query(`
-          SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open, uuid_closed
+          SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open
           FROM active_critical_alerts
         `);
 
         for (const alert of alertsToResolve.recordset) {
-          let uuidClosed = alert.uuid_closed;
           if (SONAR_CONFIG.enabled && alert.uuid_open) {
-            const sonarResult = await closeSonarAlert(alert).catch(err => {
+            await closeSonarAlert(alert).catch(err => {
               logger.error('Failed to close alert in SONAR', { error: err.message, pdu_id: alert.pdu_id });
-              return { success: false };
             });
-            if (sonarResult && sonarResult.uuid) {
-              uuidClosed = sonarResult.uuid;
-            }
           }
 
           await pool.request()
@@ -1886,16 +1881,12 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
             .input('metric_type', sql.NVarChar, alert.metric_type)
             .input('alert_reason', sql.NVarChar, alert.alert_reason)
             .input('resolved_at', sql.DateTime, new Date())
-            .input('uuid_open', sql.NVarChar, alert.uuid_open || null)
-            .input('uuid_closed', sql.NVarChar, uuidClosed || null)
             .query(`
               UPDATE alerts_history
               SET resolved_at = @resolved_at,
                   resolved_by = 'Sistema',
                   resolution_type = 'auto',
-                  duration_minutes = DATEDIFF(MINUTE, created_at, @resolved_at),
-                  uuid_open = @uuid_open,
-                  uuid_closed = @uuid_closed
+                  duration_minutes = DATEDIFF(MINUTE, created_at, @resolved_at)
               WHERE pdu_id = @pdu_id
                 AND metric_type = @metric_type
                 AND alert_reason = @alert_reason
@@ -1912,21 +1903,16 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
       const pduIdsList = currentCriticalPduIds.map(id => `'${String(id).replace("'", "''")}'`).join(',');
 
       const alertsToResolve = await pool.request().query(`
-        SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open, uuid_closed
+        SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open
         FROM active_critical_alerts
         WHERE pdu_id NOT IN (${pduIdsList})
       `);
 
       for (const alert of alertsToResolve.recordset) {
-        let uuidClosed = alert.uuid_closed;
         if (SONAR_CONFIG.enabled && alert.uuid_open) {
-          const sonarResult = await closeSonarAlert(alert).catch(err => {
+          await closeSonarAlert(alert).catch(err => {
             logger.error('Failed to close alert in SONAR', { error: err.message, pdu_id: alert.pdu_id });
-            return { success: false };
           });
-          if (sonarResult && sonarResult.uuid) {
-            uuidClosed = sonarResult.uuid;
-          }
         }
 
         await pool.request()
@@ -1934,16 +1920,12 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
           .input('metric_type', sql.NVarChar, alert.metric_type)
           .input('alert_reason', sql.NVarChar, alert.alert_reason)
           .input('resolved_at', sql.DateTime, new Date())
-          .input('uuid_open', sql.NVarChar, alert.uuid_open || null)
-          .input('uuid_closed', sql.NVarChar, uuidClosed || null)
           .query(`
             UPDATE alerts_history
             SET resolved_at = @resolved_at,
                 resolved_by = 'Sistema',
                 resolution_type = 'auto',
-                duration_minutes = DATEDIFF(MINUTE, created_at, @resolved_at),
-                uuid_open = @uuid_open,
-                uuid_closed = @uuid_closed
+                duration_minutes = DATEDIFF(MINUTE, created_at, @resolved_at)
             WHERE pdu_id = @pdu_id
               AND metric_type = @metric_type
               AND alert_reason = @alert_reason
@@ -1965,21 +1947,16 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
           const alertsToResolveByReason = await pool.request()
             .input('pdu_id', sql.NVarChar, String(criticalPdu.id))
             .query(`
-              SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open, uuid_closed
+              SELECT id, pdu_id, rack_id, name, country, site, dc, metric_type, alert_reason, uuid_open
               FROM active_critical_alerts
               WHERE pdu_id = @pdu_id AND alert_reason NOT IN (${reasonsList})
             `);
 
           for (const alert of alertsToResolveByReason.recordset) {
-            let uuidClosed = alert.uuid_closed;
             if (SONAR_CONFIG.enabled && alert.uuid_open) {
-              const sonarResult = await closeSonarAlert(alert).catch(err => {
+              await closeSonarAlert(alert).catch(err => {
                 logger.error('Failed to close alert in SONAR', { error: err.message, pdu_id: alert.pdu_id });
-                return { success: false };
               });
-              if (sonarResult && sonarResult.uuid) {
-                uuidClosed = sonarResult.uuid;
-              }
             }
 
             await pool.request()
@@ -1987,16 +1964,12 @@ async function cleanupResolvedAlerts(currentCriticalPdus) {
               .input('metric_type', sql.NVarChar, alert.metric_type)
               .input('alert_reason', sql.NVarChar, alert.alert_reason)
               .input('resolved_at', sql.DateTime, new Date())
-              .input('uuid_open', sql.NVarChar, alert.uuid_open || null)
-              .input('uuid_closed', sql.NVarChar, uuidClosed || null)
               .query(`
                 UPDATE alerts_history
                 SET resolved_at = @resolved_at,
                     resolved_by = 'Sistema',
                     resolution_type = 'auto',
-                    duration_minutes = DATEDIFF(MINUTE, created_at, @resolved_at),
-                    uuid_open = @uuid_open,
-                    uuid_closed = @uuid_closed
+                    duration_minutes = DATEDIFF(MINUTE, created_at, @resolved_at)
                 WHERE pdu_id = @pdu_id
                   AND metric_type = @metric_type
                   AND alert_reason = @alert_reason
