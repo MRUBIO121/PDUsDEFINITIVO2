@@ -131,8 +131,8 @@ export default function CombinedRackCard({
   const rackId = String(commonInfo.rackId || commonInfo.id || '').trim();
   const isInMaintenance = rackId && maintenanceRacks.has(rackId);
   const sonarError = racks.find(r => r.sonarError)?.sonarError;
-  const hasActiveAlerts = overallStatus !== 'normal';
-  const sonarSent = hasActiveAlerts && racks.some(r => r.sonarSent);
+  const hasCriticalAlerts = overallStatus === 'critical';
+  const sonarSent = hasCriticalAlerts && racks.some(r => r.sonarSent);
 
   return (
     <div className={`rounded-lg shadow hover:shadow-md transition-all bg-white ${
