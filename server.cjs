@@ -339,10 +339,10 @@ async function sendToSonar(alertData, state) {
           node: alertData.node || '',
           serial: alertData.serial || '',
           alert_reason: alertData.alert_reason || '',
-          amperaje: alertData.current || 0,
-          voltage: alertData.voltage || 0,
-          temperature: alertData.temperature || 0,
-          humidity: alertData.humidity || 0,
+          amperaje: alertData.current != null ? alertData.current : 0,
+          voltage: alertData.voltage != null ? alertData.voltage : 0,
+          temperature: alertData.temperature != null ? alertData.temperature : 'N/A',
+          humidity: alertData.humidity != null ? alertData.humidity : 'N/A',
           gwName: alertData.gwName || 'N/A',
           gwIp: alertData.gwIp || 'N/A'
         }
@@ -431,12 +431,31 @@ async function openSonarAlert(pdu, alertReason, alertId) {
   const pduIdStr = String(pdu.id);
   const rackIdStr = String(pdu.rackId || pdu.id);
 
+  const currentValue = parseFloat(pdu.current) || 0;
+  const voltageValue = parseFloat(pdu.voltage) || 0;
+  const tempValue = (pdu.sensorTemperature !== 'N/A' && pdu.sensorTemperature != null)
+    ? parseFloat(pdu.sensorTemperature)
+    : ((pdu.temperature != null) ? parseFloat(pdu.temperature) : null);
+  const humidityValue = (pdu.sensorHumidity !== 'N/A' && pdu.sensorHumidity != null)
+    ? parseFloat(pdu.sensorHumidity)
+    : null;
+
   logger.info('[SONAR] openSonarAlert called', {
     pdu_id: pduIdStr,
     rack_id: rackIdStr,
     name: pdu.name,
     alertReason,
-    alertId
+    alertId,
+    pdu_current: pdu.current,
+    pdu_voltage: pdu.voltage,
+    pdu_sensorTemperature: pdu.sensorTemperature,
+    pdu_sensorHumidity: pdu.sensorHumidity,
+    pdu_gwName: pdu.gwName,
+    pdu_gwIp: pdu.gwIp,
+    parsed_current: currentValue,
+    parsed_voltage: voltageValue,
+    parsed_temperature: tempValue,
+    parsed_humidity: humidityValue
   });
 
   const alertData = {
@@ -451,12 +470,12 @@ async function openSonarAlert(pdu, alertReason, alertId) {
     node: pdu.node,
     serial: pdu.serial,
     alert_reason: alertReason,
-    current: pdu.current,
-    voltage: pdu.voltage,
-    temperature: pdu.sensorTemperature || pdu.temperature,
-    humidity: pdu.sensorHumidity,
-    gwName: pdu.gwName || 'N/A',
-    gwIp: pdu.gwIp || 'N/A'
+    current: currentValue,
+    voltage: voltageValue,
+    temperature: tempValue,
+    humidity: humidityValue,
+    gwName: pdu.gwName && pdu.gwName !== '' ? pdu.gwName : 'N/A',
+    gwIp: pdu.gwIp && pdu.gwIp !== '' ? pdu.gwIp : 'N/A'
   };
 
   const result = await sendToSonar(alertData, 'OPEN');
@@ -2520,10 +2539,20 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
       if (pageData.length === 0) {
         hasMorePowerData = false;
       } else {
+        if (powerSkip === 0 && pageData.length > 0) {
+          const sampleItem = pageData[0];
+          logger.info('[API DEBUG] Sample power data item from NENG API', {
+            availableFields: Object.keys(sampleItem),
+            gwName: sampleItem.gwName,
+            gwIp: sampleItem.gwIp,
+            totalAmps: sampleItem.totalAmps,
+            totalVolts: sampleItem.totalVolts,
+            rackName: sampleItem.rackName
+          });
+        }
         allPowerData = allPowerData.concat(pageData);
         powerSkip += pageSize;
 
-        // Stop if we got less than pageSize (last page)
         if (pageData.length < pageSize) {
           hasMorePowerData = false;
         }
