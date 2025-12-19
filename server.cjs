@@ -466,7 +466,7 @@ async function openSonarAlert(pdu, alertReason, alertId) {
       await executeQuery(async (pool) => {
         await pool.request()
           .input('uuid_open', sql.NVarChar, result.uuid)
-          .input('alert_id', sql.Int, alertId)
+          .input('alert_id', sql.UniqueIdentifier, alertId)
           .query(`
             UPDATE active_critical_alerts
             SET uuid_open = @uuid_open
@@ -527,7 +527,7 @@ async function closeSonarAlert(alert) {
       await executeQuery(async (pool) => {
         await pool.request()
           .input('uuid_closed', sql.NVarChar, result.uuid)
-          .input('alert_id', sql.Int, alert.id)
+          .input('alert_id', sql.UniqueIdentifier, alert.id)
           .query(`
             UPDATE active_critical_alerts
             SET uuid_closed = @uuid_closed
@@ -661,7 +661,7 @@ async function sendExistingAlertsToSonar() {
           await executeQuery(async (pool) => {
             await pool.request()
               .input('uuid_open', sql.NVarChar, result.uuid)
-              .input('alert_id', sql.Int, alert.id)
+              .input('alert_id', sql.UniqueIdentifier, alert.id)
               .query(`
                 UPDATE active_critical_alerts
                 SET uuid_open = @uuid_open
