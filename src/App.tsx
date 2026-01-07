@@ -136,6 +136,13 @@ function App() {
   const getThresholdValueWrapper = (key: string) => getThresholdValue(thresholds, key);
   const getAmperageStatusColorWrapper = (rack: any) => getAmperageStatusColor(rack, thresholds);
 
+  // Filter originalRackGroups by user site access for consistent counting
+  const userFilteredRackGroups = React.useMemo(() => {
+    return (originalRackGroups || []).filter(rackGroup => {
+      return userHasAccessToSite(rackGroup[0]?.site);
+    });
+  }, [originalRackGroups, user]);
+
   const filteredRackGroups = React.useMemo(() => {
     const rackGroups: RackData[][] = [];
 
@@ -444,17 +451,12 @@ function App() {
       voltage: new Set()
     };
 
-    originalRackGroups.forEach(rackGroup => {
+    userFilteredRackGroups.forEach(rackGroup => {
       const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
       const isInMaintenance = rackId && maintenanceRacks.has(rackId);
 
       // Skip racks in maintenance - they shouldn't count in alerts
       if (isInMaintenance) {
-        return;
-      }
-
-      // Skip racks from sites the user doesn't have access to
-      if (!userHasAccessToSite(rackGroup[0].site)) {
         return;
       }
 
@@ -524,15 +526,12 @@ function App() {
     rackSummary.warning.voltage = warningRacksByMetric.voltage.size;
 
     // Calculate total racks accessible by user (INCLUDING maintenance for consistency with group counts)
-    const totalUserRacks = originalRackGroups.filter(rackGroup => {
-      return userHasAccessToSite(rackGroup[0].site);
-    }).length;
+    const totalUserRacks = userFilteredRackGroups.length;
 
     // Calculate racks in maintenance that user has access to
-    const userMaintenanceRacks = originalRackGroups.filter(rackGroup => {
+    const userMaintenanceRacks = userFilteredRackGroups.filter(rackGroup => {
       const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
-      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
-      return isInMaintenance && userHasAccessToSite(rackGroup[0].site);
+      return rackId && maintenanceRacks.has(rackId);
     }).length;
 
     return {
@@ -543,7 +542,7 @@ function App() {
       totalUserRacks,
       userMaintenanceRacks
     };
-  }, [originalRackGroups, racks, maintenanceRacks, user]);
+  }, [userFilteredRackGroups, racks, maintenanceRacks, user]);
 
   const handleThresholdSaveSuccess = () => {
     refreshThresholds();
@@ -1610,7 +1609,7 @@ function App() {
                       key={country}
                       country={country}
                       siteGroups={siteGroups}
-                      originalRackGroups={originalRackGroups}
+                      originalRackGroups={userFilteredRackGroups}
                       activeView={activeView}
                       isExpanded={expandedCountryIds.has(country)}
                       onToggleExpand={toggleCountryExpansion}
