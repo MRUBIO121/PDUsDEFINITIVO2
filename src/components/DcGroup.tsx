@@ -128,22 +128,24 @@ export default function DcGroup({
 
             if (status === 'maintenance') {
               if (activeView === 'alertas') return null;
-              // Count unique racks in maintenance (not individual PDUs)
-              const uniqueMaintenanceRacks = new Set<string>();
-              Object.values(gwGroups).flat().forEach(rackGroup => {
-                const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                if (rackId && maintenanceRacks.has(rackId)) {
-                  uniqueMaintenanceRacks.add(rackId);
-                }
-              });
-              count = uniqueMaintenanceRacks.size;
+              count = (originalRackGroups || []).filter(rackGroup => {
+                const firstRack = rackGroup[0];
+                if ((firstRack.country || 'N/A') !== country) return false;
+                if ((firstRack.site || 'N/A') !== site) return false;
+                if ((firstRack.dc || 'N/A') !== dc) return false;
+                const rackId = String(firstRack.rackId || firstRack.id || '').trim();
+                return rackId && maintenanceRacks.has(rackId);
+              }).length;
             } else {
-              count = Object.values(gwGroups).flat()
-                .filter(rackGroup => {
-                  const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                  if (maintenanceRacks.has(rackId)) return false;
-                  return rackGroup.some(rack => rack.status === status);
-                }).length;
+              count = (originalRackGroups || []).filter(rackGroup => {
+                const firstRack = rackGroup[0];
+                if ((firstRack.country || 'N/A') !== country) return false;
+                if ((firstRack.site || 'N/A') !== site) return false;
+                if ((firstRack.dc || 'N/A') !== dc) return false;
+                const rackId = String(firstRack.rackId || firstRack.id || '').trim();
+                if (rackId && maintenanceRacks.has(rackId)) return false;
+                return rackGroup.some(rack => rack.status === status);
+              }).length;
             }
 
             if (count === 0 || (activeView === 'alertas' && status === 'normal')) return null;

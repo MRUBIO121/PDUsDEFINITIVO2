@@ -123,19 +123,26 @@ export default function GatewayGroup({
 
             if (status === 'maintenance') {
               if (activeView === 'alertas') return null;
-              // Count unique racks in maintenance (not individual PDUs)
-              const uniqueMaintenanceRacks = new Set<string>();
-              rackGroups.forEach(rackGroup => {
-                const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                if (rackId && maintenanceRacks.has(rackId)) {
-                  uniqueMaintenanceRacks.add(rackId);
-                }
-              });
-              count = uniqueMaintenanceRacks.size;
+              count = (originalRackGroups || []).filter(rackGroup => {
+                const firstRack = rackGroup[0];
+                if ((firstRack.country || 'N/A') !== country) return false;
+                if ((firstRack.site || 'N/A') !== site) return false;
+                if ((firstRack.dc || 'N/A') !== dc) return false;
+                if ((firstRack.gwName || 'N/A') !== gwName) return false;
+                if ((firstRack.gwIp || 'N/A') !== gwIp) return false;
+                const rackId = String(firstRack.rackId || firstRack.id || '').trim();
+                return rackId && maintenanceRacks.has(rackId);
+              }).length;
             } else {
-              count = rackGroups.filter(rackGroup => {
-                const rackId = rackGroup[0]?.rackId || rackGroup[0]?.id;
-                if (maintenanceRacks.has(rackId)) return false;
+              count = (originalRackGroups || []).filter(rackGroup => {
+                const firstRack = rackGroup[0];
+                if ((firstRack.country || 'N/A') !== country) return false;
+                if ((firstRack.site || 'N/A') !== site) return false;
+                if ((firstRack.dc || 'N/A') !== dc) return false;
+                if ((firstRack.gwName || 'N/A') !== gwName) return false;
+                if ((firstRack.gwIp || 'N/A') !== gwIp) return false;
+                const rackId = String(firstRack.rackId || firstRack.id || '').trim();
+                if (rackId && maintenanceRacks.has(rackId)) return false;
                 return rackGroup.some(rack => rack.status === status);
               }).length;
             }
