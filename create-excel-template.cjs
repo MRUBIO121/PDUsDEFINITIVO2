@@ -13,15 +13,15 @@ async function createTemplate() {
   instructionsSheet.getCell('A3').font = { bold: true, size: 12 };
   
   const instructions = [
-    '1. Ve a la pestaña "Datos" para rellenar la información de los racks',
-    '2. Rellena OBLIGATORIAMENTE la columna: rack_id (nombre del rack)',
+    '1. Ve a la pestana "Datos" para rellenar la informacion de los racks',
+    '2. Rellena OBLIGATORIAMENTE la columna: rackName (nombre del rack)',
     '3. La columna reason es opcional para especificar el motivo del mantenimiento',
-    '4. El sistema buscará automáticamente los datos del rack en la API',
-    '5. Si no encuentra el rack, lo agregará solo con el nombre proporcionado',
+    '4. El sistema buscara automaticamente los datos del rack en la API',
+    '5. Si no encuentra el rack, lo agregara solo con el nombre proporcionado',
     '6. No modifiques el nombre de la columna (primera fila)',
-    '7. No dejes filas vacías entre racks',
-    '8. Máximo 1000 racks por archivo',
-    '9. Guarda el archivo y súbelo en la aplicación',
+    '7. No dejes filas vacias entre racks',
+    '8. Maximo 1000 racks por archivo',
+    '9. Guarda el archivo y subelo en la aplicacion',
   ];
   
   instructions.forEach((instruction, index) => {
@@ -32,8 +32,8 @@ async function createTemplate() {
   instructionsSheet.getCell('A14').font = { bold: true, size: 12 };
   
   const columns = [
-    ['rack_id', 'OBLIGATORIO', 'Nombre del rack (el sistema buscará automáticamente el resto de datos)', 'RACK-001'],
-    ['reason', 'Opcional', 'Razón del mantenimiento', 'Mantenimiento preventivo'],
+    ['rackName', 'OBLIGATORIO', 'Nombre del rack (el sistema buscara automaticamente el resto de datos)', 'RACK-001'],
+    ['reason', 'Opcional', 'Razon del mantenimiento', 'Mantenimiento preventivo'],
   ];
   
   instructionsSheet.getCell('A16').value = 'Columna';
@@ -61,11 +61,10 @@ async function createTemplate() {
   const dataSheet = workbook.addWorksheet('Datos');
 
   dataSheet.columns = [
-    { header: 'rack_id', key: 'rack_id', width: 30 },
+    { header: 'rackName', key: 'rackName', width: 30 },
     { header: 'reason', key: 'reason', width: 50 }
   ];
-  
-  // Style header row
+
   dataSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
   dataSheet.getRow(1).fill = {
     type: 'pattern',
@@ -73,21 +72,20 @@ async function createTemplate() {
     fgColor: { argb: 'FF0066CC' }
   };
   dataSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-  
-  // Add example rows
+
   dataSheet.addRow({
-    rack_id: 'RACK-001',
+    rackName: 'RACK-001',
     reason: 'Mantenimiento preventivo'
   });
 
   dataSheet.addRow({
-    rack_id: 'RACK-002',
+    rackName: 'RACK-002',
     reason: 'Mantenimiento preventivo'
   });
 
   dataSheet.addRow({
-    rack_id: 'RACK-003',
-    reason: 'Reparación urgente'
+    rackName: 'RACK-003',
+    reason: 'Reparacion urgente'
   });
   
   // Style example rows with light yellow

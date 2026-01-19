@@ -9,7 +9,7 @@ interface ImportSummary {
   failed: number;
   errors: Array<{
     row?: number;
-    rack_id?: string;
+    rackName?: string;
     error: string;
     type: string;
   }>;
@@ -158,10 +158,10 @@ export default function ImportMaintenanceModal({ isOpen, onClose, onImportComple
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                   <h3 className="font-semibold text-blue-900 mb-2">Instrucciones:</h3>
                   <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
-                    <li>Descarga la plantilla Excel haciendo clic en el botón de abajo</li>
-                    <li>Rellena los datos de los racks (rack_id y dc son obligatorios)</li>
-                    <li>Guarda el archivo y súbelo aquí</li>
-                    <li>Los racks se añadirán automáticamente a mantenimiento</li>
+                    <li>Descarga la plantilla Excel haciendo clic en el boton de abajo</li>
+                    <li>Rellena los datos de los racks (rackName es obligatorio)</li>
+                    <li>Guarda el archivo y subelo aqui</li>
+                    <li>Los racks se anadiran automaticamente a mantenimiento</li>
                   </ol>
                 </div>
 
@@ -339,9 +339,9 @@ export default function ImportMaintenanceModal({ isOpen, onClose, onImportComple
                               </span>
                               <span className="text-amber-700">{err.error}</span>
                             </div>
-                            {err.rack_id && (
+                            {err.rackName && (
                               <div className="text-xs text-amber-600 mt-1">
-                                Rack ID: {err.rack_id}
+                                Rack: {err.rackName}
                               </div>
                             )}
                           </div>

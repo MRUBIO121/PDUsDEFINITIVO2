@@ -4086,7 +4086,7 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
     const racks = [];
     const errors = [];
     const duplicatesInFile = new Set();
-    const rackIdsInFile = [];
+    const rackNamesInFile = [];
 
     let rowIndex = 0;
     worksheet.eachRow((row, rowNumber) => {
@@ -4095,25 +4095,25 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       rowIndex++;
 
       const rackData = {
-        rack_id: row.getCell(1).value?.toString().trim() || '',
+        rackName: row.getCell(1).value?.toString().trim() || '',
         reason: row.getCell(2).value?.toString().trim() || defaultReason
       };
 
-      if (!rackData.rack_id) {
+      if (!rackData.rackName) {
         return;
       }
 
-      if (rackIdsInFile.includes(rackData.rack_id)) {
-        duplicatesInFile.add(rackData.rack_id);
+      if (rackNamesInFile.includes(rackData.rackName)) {
+        duplicatesInFile.add(rackData.rackName);
         errors.push({
           row: rowNumber,
-          error: `Duplicate rack_id in Excel: ${rackData.rack_id}`,
-          data: rackData
+          error: `Duplicate rackName in Excel: ${rackData.rackName}`,
+          rackName: rackData.rackName
         });
         return;
       }
 
-      rackIdsInFile.push(rackData.rack_id);
+      rackNamesInFile.push(rackData.rackName);
       racks.push({ ...rackData, rowNumber });
     });
 
@@ -4192,7 +4192,7 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       for (const rack of racks) {
         try {
           const existingCheck = await pool.request()
-            .input('rack_id', sql.NVarChar, String(rack.rack_id))
+            .input('rack_id', sql.NVarChar, String(rack.rackName))
             .query(`
               SELECT COUNT(*) as count
               FROM maintenance_rack_details
@@ -4202,27 +4202,26 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
           if (existingCheck.recordset[0].count > 0) {
             alreadyInMaintenance.push({
               row: rack.rowNumber,
-              rack_id: rack.rack_id,
+              rackName: rack.rackName,
               message: 'Already in maintenance'
             });
             continue;
           }
 
-          // Try to find rack data in the API data
-          const foundRackData = rackDataMap.get(rack.rack_id);
+          const foundRackData = rackDataMap.get(rack.rackName);
 
           let rackInfo;
           if (foundRackData) {
             rackInfo = {
               ...foundRackData,
-              rack_id: rack.rack_id,
+              rack_id: rack.rackName,
               reason: rack.reason
             };
           } else {
-            notFoundInAPI.push(rack.rack_id);
+            notFoundInAPI.push(rack.rackName);
             rackInfo = {
-              rack_id: rack.rack_id,
-              name: rack.rack_id,
+              rack_id: rack.rackName,
+              name: rack.rackName,
               country: 'Unknown',
               site: 'Unknown',
               dc: 'Unknown',
@@ -4275,7 +4274,7 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
 
           successfulInserts.push({
             row: rack.rowNumber,
-            rack_id: rackInfo.rack_id,
+            rackName: rackInfo.rack_id,
             dc: rackInfo.dc,
             foundInAPI: !!foundRackData
           });
@@ -4283,7 +4282,7 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
         } catch (error) {
           failedInserts.push({
             row: rack.rowNumber,
-            rack_id: rack.rack_id,
+            rackName: rack.rackName,
             error: error.message
           });
         }
@@ -4314,7 +4313,7 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       ]
     };
 
-    const rackIdsForSonar = result.successfulInserts.map(r => r.rack_id).filter(Boolean);
+    const rackIdsForSonar = result.successfulInserts.map(r => r.rackName).filter(Boolean);
     if (rackIdsForSonar.length > 0) {
       closeSonarAlertsForMaintenanceBatch(rackIdsForSonar).catch(err => {
         logger.error('Failed to close SONAR alerts for Excel import maintenance', { error: err.message });
