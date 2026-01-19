@@ -23,7 +23,7 @@ if %errorlevel% neq 0 (
 echo EXITO: Herramientas verificadas
 echo.
 
-echo [2/4] Instalando dependencias...
+echo [2/5] Instalando dependencias...
 call npm install
 if %errorlevel% neq 0 (
     echo ERROR: Fallo al instalar dependencias
@@ -33,7 +33,12 @@ if %errorlevel% neq 0 (
 echo EXITO: Dependencias instaladas
 echo.
 
-echo [3/4] Construyendo la aplicacion...
+echo [3/5] Corrigiendo vulnerabilidades...
+call npm audit fix
+echo EXITO: Vulnerabilidades corregidas
+echo.
+
+echo [4/5] Construyendo la aplicacion...
 call npm run build
 if %errorlevel% neq 0 (
     echo ERROR: Fallo al construir la aplicacion
@@ -43,7 +48,7 @@ if %errorlevel% neq 0 (
 echo EXITO: Aplicacion construida
 echo.
 
-echo [4/4] Desplegando con PM2...
+echo [5/5] Desplegando con PM2...
 call pm2 delete energy-monitoring-api 2>nul
 call pm2 start ecosystem.config.cjs --env production
 if %errorlevel% neq 0 (
@@ -63,7 +68,6 @@ echo La aplicacion esta ejecutandose en modo produccion
 echo.
 echo Comandos utiles:
 echo   pm2 status              - Ver estado de la aplicacion
-echo   pm2 logs                - Ver logs en tiempo real
 echo   pm2 restart energy-monitoring-api - Reiniciar aplicacion
 echo   pm2 stop energy-monitoring-api    - Detener aplicacion
 echo.
