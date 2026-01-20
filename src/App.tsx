@@ -247,10 +247,10 @@ function App() {
     };
 
     filteredRackGroups.forEach(rackGroup => {
+      const rackName = String(rackGroup[0].name || '').trim();
       const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
-      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+      const isInMaintenance = (rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId));
 
-      // Skip racks in maintenance - they shouldn't count in alerts
       if (isInMaintenance) {
         return;
       }
@@ -363,12 +363,11 @@ function App() {
       }
     };
 
-    // Count individual PDUs with alerts (for header display) - EXCLUDE maintenance racks and filter by site
     racks.forEach(pdu => {
+      const rackName = String(pdu.name || '').trim();
       const rackId = String(pdu.rackId || pdu.id || '').trim();
-      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+      const isInMaintenance = (rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId));
 
-      // Skip PDUs that are in maintenance
       if (isInMaintenance) {
         return;
       }
@@ -452,10 +451,10 @@ function App() {
     };
 
     userFilteredRackGroups.forEach(rackGroup => {
+      const rackName = String(rackGroup[0].name || '').trim();
       const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
-      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+      const isInMaintenance = (rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId));
 
-      // Skip racks in maintenance - they shouldn't count in alerts
       if (isInMaintenance) {
         return;
       }
@@ -528,10 +527,10 @@ function App() {
     // Calculate total racks accessible by user (INCLUDING maintenance for consistency with group counts)
     const totalUserRacks = userFilteredRackGroups.length;
 
-    // Calculate racks in maintenance that user has access to
     const userMaintenanceRacks = userFilteredRackGroups.filter(rackGroup => {
+      const rackName = String(rackGroup[0].name || '').trim();
       const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
-      return rackId && maintenanceRacks.has(rackId);
+      return (rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId));
     }).length;
 
     return {

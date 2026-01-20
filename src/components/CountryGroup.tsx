@@ -143,15 +143,17 @@ export default function CountryGroup({
                   count = (originalRackGroups || []).filter(rackGroup => {
                     const firstRack = rackGroup[0];
                     if ((firstRack.country || 'N/A') !== country) return false;
+                    const rackName = String(firstRack.name || '').trim();
                     const rackId = String(firstRack.rackId || firstRack.id || '').trim();
-                    return rackId && maintenanceRacks.has(rackId);
+                    return (rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId));
                   }).length;
                 } else {
                   count = (originalRackGroups || []).filter(rackGroup => {
                     const firstRack = rackGroup[0];
                     if ((firstRack.country || 'N/A') !== country) return false;
+                    const rackName = String(firstRack.name || '').trim();
                     const rackId = String(firstRack.rackId || firstRack.id || '').trim();
-                    if (rackId && maintenanceRacks.has(rackId)) return false;
+                    if ((rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId))) return false;
                     return rackGroup.some(rack => rack.status === status);
                   }).length;
                 }

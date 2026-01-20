@@ -277,53 +277,34 @@ export function filterRacks(
     });
   }
 
-  // Filter by status
+  const isRackInMaintenance = (rack: RackData): boolean => {
+    const rackName = String(rack.name || '').trim();
+    const rackId = String(rack.rackId || rack.id || '').trim();
+    return (rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId));
+  };
+
   if (showAllRacks) {
-    // In "Principal" mode: show all racks regardless of status
-    // Apply status filter only if a specific status is selected
     if (statusFilter !== 'all') {
       if (statusFilter === 'maintenance') {
-        // Filter to show only racks in maintenance
-        filteredRacks = filteredRacks.filter(rack => {
-          const rackId = String(rack.rackId || rack.id || '').trim();
-          return rackId && maintenanceRacks.has(rackId);
-        });
+        filteredRacks = filteredRacks.filter(rack => isRackInMaintenance(rack));
       } else {
-        // Filter by normal status (exclude maintenance racks)
         filteredRacks = filteredRacks.filter(rack => {
-          const rackId = String(rack.rackId || rack.id || '').trim();
-          const isInMaintenance = rackId && maintenanceRacks.has(rackId);
-          return !isInMaintenance && rack.status === statusFilter;
+          return !isRackInMaintenance(rack) && rack.status === statusFilter;
         });
       }
     }
-    // If statusFilter is 'all', show all racks (no status filtering)
   } else {
-    // In "Alertas" mode: show ONLY PDUs with alerts, EXCLUDING maintenance
-    let maintenanceExcludedCount = 0;
-    let alertCount = 0;
-
     filteredRacks = filteredRacks.filter(rack => {
-      const rackId = String(rack.rackId || rack.id || '').trim();
-      const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+      const isInMaintenance = isRackInMaintenance(rack);
       const hasAlert = rack.status === 'critical' || rack.status === 'warning';
 
       if (isInMaintenance) {
-        maintenanceExcludedCount++;
-        // NEVER show maintenance racks in alerts view
         return false;
       }
 
-      if (hasAlert) {
-        alertCount++;
-      }
-
-      // Show ONLY if has alerts and NOT in maintenance
       return hasAlert;
     });
 
-    // Apply additional status filter if specified
-    // No need to check maintenance here since they're already excluded
     if (statusFilter !== 'all') {
       filteredRacks = filteredRacks.filter(rack => {
         return rack.status === statusFilter;

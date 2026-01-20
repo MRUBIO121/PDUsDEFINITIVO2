@@ -128,8 +128,9 @@ export default function CombinedRackCard({
   };
 
   const commonInfo = racks[0];
+  const rackName = String(commonInfo.name || '').trim();
   const rackId = String(commonInfo.rackId || commonInfo.id || '').trim();
-  const isInMaintenance = rackId && maintenanceRacks.has(rackId);
+  const isInMaintenance = (rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId));
   const sonarError = racks.find(r => r.sonarError)?.sonarError;
   const hasCriticalAlerts = overallStatus === 'critical';
   const sonarSent = hasCriticalAlerts && racks.some(r => r.sonarSent);
