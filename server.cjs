@@ -4071,6 +4071,12 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
     const { defaultReason = 'Mantenimiento' } = req.body;
     const user = req.session.usuario || 'Sistema';
 
+    logger.info('Excel import started', {
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      user
+    });
+
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(req.file.buffer);
 
@@ -4086,96 +4092,124 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
     const racks = [];
     const errors = [];
     const duplicatesInFile = new Set();
-    const rackNamesInFile = [];
-    const exampleRackNames = ['RACK-001', 'RACK-002', 'RACK-003'];
+    const rackNamesInFile = new Set();
+    const exampleRackNames = new Set(['RACK-001', 'RACK-002', 'RACK-003']);
 
     const getCellValue = (cell) => {
-      if (!cell || cell.value === null || cell.value === undefined) {
-        return '';
+      if (!cell) return '';
+      const value = cell.value;
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string') return value.trim();
+      if (typeof value === 'number') return String(value).trim();
+      if (typeof value === 'boolean') return String(value);
+      if (value instanceof Date) return value.toISOString();
+      if (typeof value === 'object') {
+        if (value.richText && Array.isArray(value.richText)) {
+          return value.richText.map(rt => rt.text || '').join('').trim();
+        }
+        if (value.text !== undefined) return String(value.text).trim();
+        if (value.result !== undefined) return String(value.result).trim();
+        if (value.hyperlink) return String(value.text || value.hyperlink).trim();
+        if (value.formula && value.result !== undefined) return String(value.result).trim();
       }
-      if (typeof cell.value === 'object') {
-        if (cell.value.richText) {
-          return cell.value.richText.map(rt => rt.text).join('').trim();
-        }
-        if (cell.value.text) {
-          return String(cell.value.text).trim();
-        }
-        if (cell.value.result !== undefined) {
-          return String(cell.value.result).trim();
-        }
-        return '';
-      }
-      return String(cell.value).trim();
+      return String(value).trim();
     };
 
-    let rowIndex = 0;
-    let totalRowsRead = 0;
-    worksheet.eachRow((row, rowNumber) => {
-      totalRowsRead++;
-      if (rowNumber === 1) return;
-
-      rowIndex++;
-
-      const rackNameValue = getCellValue(row.getCell(1));
-      const reasonValue = getCellValue(row.getCell(2));
-
-      const rackData = {
-        rackName: rackNameValue,
-        reason: reasonValue || defaultReason
-      };
-
-      if (!rackData.rackName) {
-        return;
-      }
-
-      if (rackData.rackName.startsWith('NOTA:') || rackData.rackName.startsWith('NOTE:')) {
-        return;
-      }
-
-      if (exampleRackNames.includes(rackData.rackName)) {
-        return;
-      }
-
-      if (rackNamesInFile.includes(rackData.rackName)) {
-        duplicatesInFile.add(rackData.rackName);
-        errors.push({
-          row: rowNumber,
-          error: `Duplicate rackName in Excel: ${rackData.rackName}`,
-          rackName: rackData.rackName
-        });
-        return;
-      }
-
-      rackNamesInFile.push(rackData.rackName);
-      racks.push({ ...rackData, rowNumber });
+    const rowCount = worksheet.rowCount;
+    logger.info('Excel worksheet info', {
+      rowCount,
+      columnCount: worksheet.columnCount,
+      actualRowCount: worksheet.actualRowCount
     });
 
+    let skippedEmpty = 0;
+    let skippedExample = 0;
+    let skippedNote = 0;
+    let skippedDuplicate = 0;
+
+    for (let rowNumber = 2; rowNumber <= rowCount; rowNumber++) {
+      const row = worksheet.getRow(rowNumber);
+
+      const cell1 = row.getCell(1);
+      const cell2 = row.getCell(2);
+
+      const rackNameValue = getCellValue(cell1);
+      const reasonValue = getCellValue(cell2);
+
+      if (!rackNameValue || rackNameValue === '') {
+        skippedEmpty++;
+        continue;
+      }
+
+      if (rackNameValue.toUpperCase().startsWith('NOTA:') ||
+          rackNameValue.toUpperCase().startsWith('NOTE:') ||
+          rackNameValue.toUpperCase().startsWith('EJEMPLO') ||
+          rackNameValue.toUpperCase().startsWith('EXAMPLE')) {
+        skippedNote++;
+        continue;
+      }
+
+      if (exampleRackNames.has(rackNameValue)) {
+        skippedExample++;
+        continue;
+      }
+
+      if (rackNamesInFile.has(rackNameValue)) {
+        duplicatesInFile.add(rackNameValue);
+        skippedDuplicate++;
+        errors.push({
+          row: rowNumber,
+          error: `Duplicado en Excel: ${rackNameValue}`,
+          rackName: rackNameValue
+        });
+        continue;
+      }
+
+      rackNamesInFile.add(rackNameValue);
+      racks.push({
+        rackName: rackNameValue,
+        reason: reasonValue || defaultReason,
+        rowNumber
+      });
+    }
+
     logger.info('Excel import: rows parsed', {
-      totalRowsRead,
+      totalRows: rowCount - 1,
       validRacksFound: racks.length,
-      duplicatesSkipped: duplicatesInFile.size,
-      user
+      skippedEmpty,
+      skippedExample,
+      skippedNote,
+      skippedDuplicate,
+      user,
+      firstFewRacks: racks.slice(0, 5).map(r => r.rackName)
     });
 
     if (racks.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No valid racks found in Excel file',
+        message: 'No se encontraron racks validos en el archivo Excel',
+        summary: {
+          totalRows: rowCount - 1,
+          skippedEmpty,
+          skippedExample,
+          skippedNote,
+          skippedDuplicate
+        },
         errors,
         timestamp: new Date().toISOString()
       });
     }
 
-    // Fetch all rack data from API to enrich the Excel data
     let allRackData = [];
-
     try {
       if (process.env.NENG_API_URL && process.env.NENG_API_KEY) {
         let skip = 0;
-        const limit = 100;
+        const limit = 500;
         let hasMore = true;
+        let apiPages = 0;
 
         while (hasMore) {
+          apiPages++;
           const response = await fetchFromNengApi(
             `${process.env.NENG_API_URL}?skip=${skip}&limit=${limit}`,
             {
@@ -4198,12 +4232,15 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
             hasMore = false;
           }
         }
+        logger.info('API data fetched for Excel import', {
+          totalRecords: allRackData.length,
+          pages: apiPages
+        });
       }
     } catch (error) {
       logger.warn('Could not fetch rack data from API for Excel import', { error: error.message });
     }
 
-    // Create a lookup map for fast rack search by rack name
     const rackDataMap = new Map();
     allRackData.forEach(pdu => {
       const rackName = String(pdu.rackName || '').trim();
@@ -4223,118 +4260,173 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       }
     });
 
-    const result = await executeQuery(async (pool) => {
-      const alreadyInMaintenance = [];
-      const successfulInserts = [];
-      const failedInserts = [];
-      const notFoundInAPI = [];
+    logger.info('Rack data map created', {
+      uniqueRacks: rackDataMap.size,
+      sampleKeys: Array.from(rackDataMap.keys()).slice(0, 5)
+    });
 
-      for (const rack of racks) {
-        try {
-          const existingCheck = await pool.request()
-            .input('rack_id', sql.NVarChar, String(rack.rackName))
-            .query(`
-              SELECT COUNT(*) as count
-              FROM maintenance_rack_details
-              WHERE rack_id = @rack_id
-            `);
+    const alreadyInMaintenance = [];
+    const successfulInserts = [];
+    const failedInserts = [];
+    const notFoundInAPI = [];
 
-          if (existingCheck.recordset[0].count > 0) {
-            alreadyInMaintenance.push({
-              row: rack.rowNumber,
-              rackName: rack.rackName,
-              message: 'Already in maintenance'
-            });
-            continue;
-          }
+    const existingRacksResult = await executeQuery(async (pool) => {
+      return await pool.request().query(`
+        SELECT DISTINCT rack_id FROM maintenance_rack_details
+      `);
+    });
+    const existingRackIds = new Set(existingRacksResult.recordset.map(r => r.rack_id));
 
-          const foundRackData = rackDataMap.get(rack.rackName);
+    logger.info('Existing maintenance racks loaded', { count: existingRackIds.size });
 
-          let rackInfo;
-          if (foundRackData) {
-            rackInfo = {
-              ...foundRackData,
-              rack_id: rack.rackName,
-              reason: rack.reason
-            };
-          } else {
-            notFoundInAPI.push(rack.rackName);
-            rackInfo = {
-              rack_id: rack.rackName,
-              name: rack.rackName,
-              country: 'Unknown',
-              site: 'Unknown',
-              dc: 'Unknown',
-              phase: 'Unknown',
-              chain: 'Unknown',
-              node: 'Unknown',
-              gwName: 'N/A',
-              gwIp: 'N/A',
-              reason: rack.reason
-            };
-          }
-
-          const entryId = crypto.randomUUID();
-
-          await pool.request()
-            .input('entry_id', sql.UniqueIdentifier, entryId)
-            .input('entry_type', sql.NVarChar, 'individual_rack')
-            .input('rack_id', sql.NVarChar, String(rackInfo.rack_id))
-            .input('chain', sql.NVarChar, rackInfo.chain)
-            .input('site', sql.NVarChar, rackInfo.site)
-            .input('dc', sql.NVarChar, rackInfo.dc)
-            .input('reason', sql.NVarChar, rackInfo.reason)
-            .input('user', sql.NVarChar, user)
-            .input('started_by', sql.NVarChar, user)
-            .query(`
-              INSERT INTO maintenance_entries
-              (id, entry_type, rack_id, chain, site, dc, reason, [user], started_by)
-              VALUES
-              (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @user, @started_by)
-            `);
-
-          await pool.request()
-            .input('entry_id', sql.UniqueIdentifier, entryId)
-            .input('rack_id', sql.NVarChar, String(rackInfo.rack_id))
-            .input('name', sql.NVarChar, rackInfo.name)
-            .input('country', sql.NVarChar, rackInfo.country)
-            .input('site', sql.NVarChar, rackInfo.site)
-            .input('dc', sql.NVarChar, rackInfo.dc)
-            .input('phase', sql.NVarChar, rackInfo.phase)
-            .input('chain', sql.NVarChar, rackInfo.chain)
-            .input('node', sql.NVarChar, rackInfo.node)
-            .input('gwName', sql.NVarChar, rackInfo.gwName)
-            .input('gwIp', sql.NVarChar, rackInfo.gwIp)
-            .query(`
-              INSERT INTO maintenance_rack_details
-              (maintenance_entry_id, rack_id, name, country, site, dc, phase, chain, node, gwName, gwIp)
-              VALUES
-              (@entry_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @gwName, @gwIp)
-            `);
-
-          successfulInserts.push({
-            row: rack.rowNumber,
-            rackName: rackInfo.rack_id,
-            dc: rackInfo.dc,
-            foundInAPI: !!foundRackData
-          });
-
-        } catch (error) {
-          failedInserts.push({
-            row: rack.rowNumber,
-            rackName: rack.rackName,
-            error: error.message
-          });
-        }
+    const racksToInsert = [];
+    for (const rack of racks) {
+      if (existingRackIds.has(rack.rackName)) {
+        alreadyInMaintenance.push({
+          row: rack.rowNumber,
+          rackName: rack.rackName,
+          message: 'Already in maintenance'
+        });
+        continue;
       }
 
-      return {
-        successfulInserts,
-        alreadyInMaintenance,
-        failedInserts,
-        notFoundInAPI
-      };
+      const foundRackData = rackDataMap.get(rack.rackName);
+      let rackInfo;
+
+      if (foundRackData) {
+        rackInfo = {
+          ...foundRackData,
+          rack_id: rack.rackName,
+          reason: rack.reason,
+          rowNumber: rack.rowNumber,
+          foundInAPI: true
+        };
+      } else {
+        notFoundInAPI.push(rack.rackName);
+        rackInfo = {
+          rack_id: rack.rackName,
+          name: rack.rackName,
+          country: 'Unknown',
+          site: 'Unknown',
+          dc: 'Unknown',
+          phase: 'Unknown',
+          chain: 'Unknown',
+          node: 'Unknown',
+          gwName: 'N/A',
+          gwIp: 'N/A',
+          reason: rack.reason,
+          rowNumber: rack.rowNumber,
+          foundInAPI: false
+        };
+      }
+
+      racksToInsert.push(rackInfo);
+    }
+
+    logger.info('Racks prepared for insertion', {
+      toInsert: racksToInsert.length,
+      alreadyInMaintenance: alreadyInMaintenance.length,
+      notFoundInAPI: notFoundInAPI.length
     });
+
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < racksToInsert.length; i += BATCH_SIZE) {
+      const batch = racksToInsert.slice(i, i + BATCH_SIZE);
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(racksToInsert.length / BATCH_SIZE);
+
+      logger.info(`Processing batch ${batchNum}/${totalBatches}`, {
+        batchSize: batch.length,
+        startIndex: i
+      });
+
+      try {
+        await executeQuery(async (pool) => {
+          for (const rackInfo of batch) {
+            try {
+              const entryId = crypto.randomUUID();
+
+              await pool.request()
+                .input('entry_id', sql.UniqueIdentifier, entryId)
+                .input('entry_type', sql.NVarChar, 'individual_rack')
+                .input('rack_id', sql.NVarChar, String(rackInfo.rack_id))
+                .input('chain', sql.NVarChar, rackInfo.chain)
+                .input('site', sql.NVarChar, rackInfo.site)
+                .input('dc', sql.NVarChar, rackInfo.dc)
+                .input('reason', sql.NVarChar, rackInfo.reason)
+                .input('user', sql.NVarChar, user)
+                .input('started_by', sql.NVarChar, user)
+                .query(`
+                  INSERT INTO maintenance_entries
+                  (id, entry_type, rack_id, chain, site, dc, reason, [user], started_by)
+                  VALUES
+                  (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @user, @started_by)
+                `);
+
+              await pool.request()
+                .input('entry_id', sql.UniqueIdentifier, entryId)
+                .input('rack_id', sql.NVarChar, String(rackInfo.rack_id))
+                .input('name', sql.NVarChar, rackInfo.name)
+                .input('country', sql.NVarChar, rackInfo.country)
+                .input('site', sql.NVarChar, rackInfo.site)
+                .input('dc', sql.NVarChar, rackInfo.dc)
+                .input('phase', sql.NVarChar, rackInfo.phase)
+                .input('chain', sql.NVarChar, rackInfo.chain)
+                .input('node', sql.NVarChar, rackInfo.node)
+                .input('gwName', sql.NVarChar, rackInfo.gwName)
+                .input('gwIp', sql.NVarChar, rackInfo.gwIp)
+                .query(`
+                  INSERT INTO maintenance_rack_details
+                  (maintenance_entry_id, rack_id, name, country, site, dc, phase, chain, node, gwName, gwIp)
+                  VALUES
+                  (@entry_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @gwName, @gwIp)
+                `);
+
+              successfulInserts.push({
+                row: rackInfo.rowNumber,
+                rackName: rackInfo.rack_id,
+                dc: rackInfo.dc,
+                foundInAPI: rackInfo.foundInAPI
+              });
+
+            } catch (insertError) {
+              logger.error('Failed to insert rack', {
+                rackName: rackInfo.rack_id,
+                error: insertError.message
+              });
+              failedInserts.push({
+                row: rackInfo.rowNumber,
+                rackName: rackInfo.rack_id,
+                error: insertError.message
+              });
+            }
+          }
+        });
+
+        logger.info(`Batch ${batchNum} completed`, {
+          successfulInBatch: batch.length - failedInserts.filter(f => batch.some(b => b.rack_id === f.rackName)).length
+        });
+
+      } catch (batchError) {
+        logger.error(`Batch ${batchNum} failed entirely`, { error: batchError.message });
+        for (const rackInfo of batch) {
+          if (!successfulInserts.some(s => s.rackName === rackInfo.rack_id)) {
+            failedInserts.push({
+              row: rackInfo.rowNumber,
+              rackName: rackInfo.rack_id,
+              error: `Batch error: ${batchError.message}`
+            });
+          }
+        }
+      }
+    }
+
+    const result = {
+      successfulInserts,
+      alreadyInMaintenance,
+      failedInserts,
+      notFoundInAPI
+    };
 
     const racksFoundInAPI = result.successfulInserts.filter(r => r.foundInAPI).length;
     const racksNotFoundInAPI = result.successfulInserts.filter(r => !r.foundInAPI).length;
