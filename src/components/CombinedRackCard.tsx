@@ -229,7 +229,9 @@ export default function CombinedRackCard({
                             phase: commonInfo.phase,
                             chain: commonInfo.chain,
                             node: commonInfo.node,
-                            serial: commonInfo.serial
+                            serial: commonInfo.serial,
+                            gwName: commonInfo.gwName,
+                            gwIp: commonInfo.gwIp
                           }
                         );
                         }}
@@ -258,7 +260,9 @@ export default function CombinedRackCard({
                             phase: commonInfo.phase,
                             chain: commonInfo.chain,
                             node: commonInfo.node,
-                            serial: commonInfo.serial
+                            serial: commonInfo.serial,
+                            gwName: commonInfo.gwName,
+                            gwIp: commonInfo.gwIp
                           }
                         );
                         }}

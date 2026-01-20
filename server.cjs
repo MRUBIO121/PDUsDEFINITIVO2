@@ -3312,9 +3312,7 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
     let rack = rackData || {};
     let chain = rackData?.chain;
 
-    const needsEnrichment = !rack.site || rack.site === 'Unknown' || !rack.dc || rack.dc === 'Unknown' || !rack.gwName;
-
-    if (needsEnrichment && process.env.NENG_API_URL && process.env.NENG_API_KEY) {
+    if (process.env.NENG_API_URL && process.env.NENG_API_KEY) {
       try {
         logger.info('Fetching rack data from NENG API for maintenance', { rackName: sanitizedRackId });
         let skip = 0;
@@ -3333,20 +3331,26 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
               const pduRackName = String(pdu.rackName || '').trim();
               if (pduRackName.toLowerCase() === sanitizedRackId.toLowerCase()) {
                 rack = {
-                  ...rack,
-                  name: pdu.rackName || rack.name || sanitizedRackId,
-                  site: pdu.site || rack.site,
-                  dc: pdu.dc || rack.dc,
-                  phase: pdu.phase || rack.phase,
-                  chain: pdu.chain !== undefined && pdu.chain !== null ? String(pdu.chain) : rack.chain,
-                  node: pdu.node !== undefined && pdu.node !== null ? String(pdu.node) : rack.node,
-                  gwName: pdu.gwName || rack.gwName,
-                  gwIp: pdu.gwIp || rack.gwIp,
+                  name: pdu.rackName || sanitizedRackId,
+                  site: pdu.site || 'Unknown',
+                  dc: pdu.dc || 'Unknown',
+                  phase: pdu.phase || 'Unknown',
+                  chain: pdu.chain !== undefined && pdu.chain !== null ? String(pdu.chain) : 'Unknown',
+                  node: pdu.node !== undefined && pdu.node !== null ? String(pdu.node) : 'Unknown',
+                  gwName: pdu.gwName || 'N/A',
+                  gwIp: pdu.gwIp || 'N/A',
                   country: 'Spain'
                 };
                 chain = rack.chain;
                 found = true;
-                logger.info('Found rack data from NENG API', { rackName: sanitizedRackId, site: rack.site, dc: rack.dc });
+                logger.info('Found rack data from NENG API', {
+                  rackName: sanitizedRackId,
+                  site: rack.site,
+                  dc: rack.dc,
+                  chain: rack.chain,
+                  gwName: rack.gwName,
+                  gwIp: rack.gwIp
+                });
                 break;
               }
             }
