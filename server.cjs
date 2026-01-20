@@ -3300,7 +3300,6 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       });
     }
 
-    // Validate rackId is a non-empty string
     const sanitizedRackId = String(rackId || '').trim();
     if (!sanitizedRackId) {
       return res.status(400).json({
@@ -3310,11 +3309,63 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
       });
     }
 
-    // Extract site from rackData if provided, otherwise will be fetched from DB
-    const providedSite = rackData?.site;
+    let rack = rackData || {};
+    let chain = rackData?.chain;
+
+    const needsEnrichment = !rack.site || rack.site === 'Unknown' || !rack.dc || rack.dc === 'Unknown' || !rack.gwName;
+
+    if (needsEnrichment && process.env.NENG_API_URL && process.env.NENG_API_KEY) {
+      try {
+        logger.info('Fetching rack data from NENG API for maintenance', { rackName: sanitizedRackId });
+        let skip = 0;
+        const limit = 500;
+        let hasMore = true;
+        let found = false;
+
+        while (hasMore && !found) {
+          const response = await fetchFromNengApi(
+            `${process.env.NENG_API_URL}?skip=${skip}&limit=${limit}`,
+            { method: 'GET' }
+          );
+
+          if (response.success && Array.isArray(response.data)) {
+            for (const pdu of response.data) {
+              const pduRackName = String(pdu.rackName || '').trim();
+              if (pduRackName.toLowerCase() === sanitizedRackId.toLowerCase()) {
+                rack = {
+                  ...rack,
+                  name: pdu.rackName || rack.name || sanitizedRackId,
+                  site: pdu.site || rack.site,
+                  dc: pdu.dc || rack.dc,
+                  phase: pdu.phase || rack.phase,
+                  chain: pdu.chain !== undefined && pdu.chain !== null ? String(pdu.chain) : rack.chain,
+                  node: pdu.node !== undefined && pdu.node !== null ? String(pdu.node) : rack.node,
+                  gwName: pdu.gwName || rack.gwName,
+                  gwIp: pdu.gwIp || rack.gwIp,
+                  country: 'Spain'
+                };
+                chain = rack.chain;
+                found = true;
+                logger.info('Found rack data from NENG API', { rackName: sanitizedRackId, site: rack.site, dc: rack.dc });
+                break;
+              }
+            }
+            hasMore = response.data.length >= limit;
+            skip += limit;
+          } else {
+            hasMore = false;
+          }
+        }
+
+        if (!found) {
+          logger.warn('Rack not found in NENG API', { rackName: sanitizedRackId });
+        }
+      } catch (apiError) {
+        logger.warn('Failed to fetch rack data from NENG API', { error: apiError.message, rackName: sanitizedRackId });
+      }
+    }
 
     const result = await executeQuery(async (pool) => {
-      // Check if rack is already in maintenance
       const existingCheck = await pool.request()
         .input('rack_id', sql.NVarChar, sanitizedRackId)
         .query(`
@@ -3327,36 +3378,30 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         return { error: 'already_exists' };
       }
 
-      // Use rack data from request body if provided, otherwise try to find it
-      let rack = rackData;
-      let chain = rackData?.chain;
-
-      // If rack data not provided, try to find it in alerts table
-      if (!rack) {
+      if ((!rack.site || rack.site === 'Unknown') && (!rack.dc || rack.dc === 'Unknown')) {
         const rackDbData = await pool.request()
           .input('rack_id', sql.NVarChar, sanitizedRackId)
           .query(`
             SELECT TOP 1
-              pdu_id,
-              rack_id,
-              name,
-              country,
-              site,
-              dc,
-              phase,
-              chain,
-              node,
-              serial
+              pdu_id, rack_id, name, country, site, dc, phase, chain, node, serial
             FROM active_critical_alerts
-            WHERE rack_id = @rack_id OR pdu_id = @rack_id
+            WHERE rack_id = @rack_id OR name = @rack_id
           `);
 
-        if (rackDbData.recordset.length === 0) {
-          return { error: 'not_found' };
+        if (rackDbData.recordset.length > 0) {
+          const dbRack = rackDbData.recordset[0];
+          rack = {
+            ...rack,
+            name: rack.name || dbRack.name || sanitizedRackId,
+            site: rack.site || dbRack.site,
+            dc: rack.dc || dbRack.dc,
+            phase: rack.phase || dbRack.phase,
+            chain: rack.chain || dbRack.chain,
+            node: rack.node || dbRack.node,
+            country: rack.country || dbRack.country
+          };
+          chain = rack.chain;
         }
-
-        rack = rackDbData.recordset[0];
-        chain = rack.chain;
       }
 
       const dc = rack.dc || 'Unknown';
