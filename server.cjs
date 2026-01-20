@@ -3131,18 +3131,18 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
 
     logger.debug('Maintenance data retrieved', { entries: entries.length, racks: details.length });
 
-    // Enrich details with API data if gwName or gwIp are missing
-    const detailsWithMissingGateway = details.filter(d => {
+    const detailsNeedingEnrichment = details.filter(d => {
+      const site = String(d.site || '').trim();
+      const dc = String(d.dc || '').trim();
       const gwName = String(d.gwName || '').trim();
-      const gwIp = String(d.gwIp || '').trim();
-      return !gwName || gwName === 'N/A' || !gwIp || gwIp === 'N/A';
+      return site === 'Unknown' || dc === 'Unknown' || !gwName || gwName === 'N/A';
     });
 
-    if (detailsWithMissingGateway.length > 0 && process.env.NENG_API_URL && process.env.NENG_API_KEY) {
+    if (detailsNeedingEnrichment.length > 0 && process.env.NENG_API_URL && process.env.NENG_API_KEY) {
       try {
         let allPowerData = [];
         let skip = 0;
-        const limit = 100;
+        const limit = 500;
         let hasMore = true;
 
         while (hasMore) {
@@ -3161,44 +3161,99 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
         }
 
         const rackApiDataMap = new Map();
+        const rackApiDataMapLower = new Map();
         allPowerData.forEach(pdu => {
           const rackName = String(pdu.rackName || '').trim();
           if (rackName) {
-            rackApiDataMap.set(rackName, { gwName: pdu.gwName || 'N/A', gwIp: pdu.gwIp || 'N/A' });
+            const apiData = {
+              site: pdu.site || null,
+              dc: pdu.dc || null,
+              phase: pdu.phase || null,
+              chain: pdu.chain !== undefined && pdu.chain !== null ? String(pdu.chain) : null,
+              node: pdu.node !== undefined && pdu.node !== null ? String(pdu.node) : null,
+              gwName: pdu.gwName || null,
+              gwIp: pdu.gwIp || null
+            };
+            rackApiDataMap.set(rackName, apiData);
+            rackApiDataMapLower.set(rackName.toLowerCase(), apiData);
           }
         });
 
         let enrichedCount = 0;
-        const pool = await sql.connect(sqlConfig);
+        const pool = await getPool();
 
-        for (const detail of detailsWithMissingGateway) {
+        for (const detail of detailsNeedingEnrichment) {
           const rackName = String(detail.name || detail.rack_id || '').trim();
-          const apiData = rackApiDataMap.get(rackName);
+          let apiData = rackApiDataMap.get(rackName);
+          if (!apiData) {
+            apiData = rackApiDataMapLower.get(rackName.toLowerCase());
+          }
 
-          if (apiData && apiData.gwName && apiData.gwName !== 'N/A') {
-            detail.gwName = apiData.gwName;
-            detail.gwIp = apiData.gwIp;
+          if (apiData) {
+            let needsUpdate = false;
+            const updates = {};
 
-            try {
-              await pool.request()
-                .input('rack_id', sql.NVarChar, String(detail.rack_id))
-                .input('maintenance_entry_id', sql.UniqueIdentifier, detail.maintenance_entry_id)
-                .input('gwName', sql.NVarChar, apiData.gwName)
-                .input('gwIp', sql.NVarChar, apiData.gwIp)
-                .query(`UPDATE maintenance_rack_details SET gwName = @gwName, gwIp = @gwIp WHERE rack_id = @rack_id AND maintenance_entry_id = @maintenance_entry_id`);
-              enrichedCount++;
-            } catch (updateError) {
-              logger.warn('Failed to update gateway data', { rack: rackName, error: updateError.message });
+            if (apiData.site && (detail.site === 'Unknown' || !detail.site)) {
+              detail.site = apiData.site;
+              updates.site = apiData.site;
+              needsUpdate = true;
+            }
+            if (apiData.dc && (detail.dc === 'Unknown' || !detail.dc)) {
+              detail.dc = apiData.dc;
+              updates.dc = apiData.dc;
+              needsUpdate = true;
+            }
+            if (apiData.phase && (detail.phase === 'Unknown' || !detail.phase)) {
+              detail.phase = apiData.phase;
+              updates.phase = apiData.phase;
+              needsUpdate = true;
+            }
+            if (apiData.chain && (detail.chain === 'Unknown' || !detail.chain)) {
+              detail.chain = apiData.chain;
+              updates.chain = apiData.chain;
+              needsUpdate = true;
+            }
+            if (apiData.node && (detail.node === 'Unknown' || !detail.node)) {
+              detail.node = apiData.node;
+              updates.node = apiData.node;
+              needsUpdate = true;
+            }
+            if (apiData.gwName && (!detail.gwName || detail.gwName === 'N/A')) {
+              detail.gwName = apiData.gwName;
+              updates.gwName = apiData.gwName;
+              needsUpdate = true;
+            }
+            if (apiData.gwIp && (!detail.gwIp || detail.gwIp === 'N/A')) {
+              detail.gwIp = apiData.gwIp;
+              updates.gwIp = apiData.gwIp;
+              needsUpdate = true;
+            }
+
+            if (needsUpdate) {
+              try {
+                const setClauses = Object.keys(updates).map(k => `${k} = @${k}`).join(', ');
+                const request = pool.request()
+                  .input('rack_id', sql.NVarChar, String(detail.rack_id))
+                  .input('maintenance_entry_id', sql.UniqueIdentifier, detail.maintenance_entry_id);
+
+                Object.entries(updates).forEach(([key, value]) => {
+                  request.input(key, sql.NVarChar, String(value));
+                });
+
+                await request.query(`UPDATE maintenance_rack_details SET ${setClauses} WHERE rack_id = @rack_id AND maintenance_entry_id = @maintenance_entry_id`);
+                enrichedCount++;
+              } catch (updateError) {
+                logger.warn('Failed to update rack data', { rack: rackName, error: updateError.message });
+              }
             }
           }
         }
 
-        await pool.close();
         if (enrichedCount > 0) {
-          logger.debug('Enriched racks with gateway data', { count: enrichedCount });
+          logger.info('Enriched racks with API data', { count: enrichedCount, total: detailsNeedingEnrichment.length });
         }
       } catch (apiError) {
-        logger.warn('Failed to enrich gateway data from API', { error: apiError.message });
+        logger.warn('Failed to enrich rack data from API', { error: apiError.message });
       }
     }
 
@@ -4242,27 +4297,35 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
     }
 
     const rackDataMap = new Map();
+    const rackDataMapLower = new Map();
     allRackData.forEach(pdu => {
       const rackName = String(pdu.rackName || '').trim();
-      if (rackName && !rackDataMap.has(rackName)) {
-        rackDataMap.set(rackName, {
+      if (rackName) {
+        const rackData = {
           name: rackName,
           rackName: rackName,
-          country: pdu.country || 'Unknown',
+          country: 'España',
           site: pdu.site || 'Unknown',
           dc: pdu.dc || 'Unknown',
           phase: pdu.phase || 'Unknown',
-          chain: pdu.chain || 'Unknown',
-          node: pdu.node || 'Unknown',
+          chain: pdu.chain !== undefined && pdu.chain !== null ? String(pdu.chain) : 'Unknown',
+          node: pdu.node !== undefined && pdu.node !== null ? String(pdu.node) : 'Unknown',
           gwName: pdu.gwName || 'N/A',
           gwIp: pdu.gwIp || 'N/A'
-        });
+        };
+        if (!rackDataMap.has(rackName)) {
+          rackDataMap.set(rackName, rackData);
+        }
+        const rackNameLower = rackName.toLowerCase();
+        if (!rackDataMapLower.has(rackNameLower)) {
+          rackDataMapLower.set(rackNameLower, rackData);
+        }
       }
     });
 
     logger.info('Rack data map created', {
       uniqueRacks: rackDataMap.size,
-      sampleKeys: Array.from(rackDataMap.keys()).slice(0, 5)
+      sampleKeys: Array.from(rackDataMap.keys()).slice(0, 10)
     });
 
     const alreadyInMaintenance = [];
@@ -4290,9 +4353,12 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
         continue;
       }
 
-      const foundRackData = rackDataMap.get(rack.rackName);
-      let rackInfo;
+      let foundRackData = rackDataMap.get(rack.rackName);
+      if (!foundRackData) {
+        foundRackData = rackDataMapLower.get(rack.rackName.toLowerCase());
+      }
 
+      let rackInfo;
       if (foundRackData) {
         rackInfo = {
           ...foundRackData,
@@ -4301,12 +4367,18 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
           rowNumber: rack.rowNumber,
           foundInAPI: true
         };
+        logger.debug('Rack found in API', {
+          rackName: rack.rackName,
+          site: foundRackData.site,
+          dc: foundRackData.dc,
+          chain: foundRackData.chain
+        });
       } else {
         notFoundInAPI.push(rack.rackName);
         rackInfo = {
           rack_id: rack.rackName,
           name: rack.rackName,
-          country: 'Unknown',
+          country: 'España',
           site: 'Unknown',
           dc: 'Unknown',
           phase: 'Unknown',
