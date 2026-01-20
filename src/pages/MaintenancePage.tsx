@@ -521,18 +521,28 @@ export default function MaintenancePage() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                          {entry.site && (
-                            <div className="flex items-center gap-2 text-slate-700">
-                              <MapPin className={`w-4 h-4 ${iconColor}`} />
-                              <span className="font-medium">Sitio:</span>
-                              <span>{entry.site}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2 text-slate-700">
-                            <Server className={`w-4 h-4 ${iconColor}`} />
-                            <span className="font-medium">Sala:</span>
-                            <span>{entry.dc}</span>
-                          </div>
+                          {(() => {
+                            const displaySite = entry.site || (entry.racks.length > 0 ? entry.racks[0].site : null);
+                            const displayDc = entry.dc || (entry.racks.length > 0 ? entry.racks[0].dc : null);
+                            return (
+                              <>
+                                {displaySite && (
+                                  <div className="flex items-center gap-2 text-slate-700">
+                                    <MapPin className={`w-4 h-4 ${iconColor}`} />
+                                    <span className="font-medium">Sitio:</span>
+                                    <span>{displaySite}</span>
+                                  </div>
+                                )}
+                                {displayDc && (
+                                  <div className="flex items-center gap-2 text-slate-700">
+                                    <Server className={`w-4 h-4 ${iconColor}`} />
+                                    <span className="font-medium">Sala:</span>
+                                    <span>{displayDc}</span>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                           {isChainEntry && (
                             <div className="flex items-center gap-2 text-slate-700">
                               <Server className={`w-4 h-4 ${iconColor}`} />
