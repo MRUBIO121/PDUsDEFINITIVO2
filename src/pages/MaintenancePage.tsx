@@ -522,8 +522,10 @@ export default function MaintenancePage() {
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                           {(() => {
-                            const displaySite = entry.site || (entry.racks.length > 0 ? entry.racks[0].site : null);
-                            const displayDc = entry.dc || (entry.racks.length > 0 ? entry.racks[0].dc : null);
+                            const rackData = entry.racks.length > 0 ? entry.racks[0] : null;
+                            const isValidValue = (val: string | null | undefined) => val && val !== 'unknown' && val !== 'Unknown' && val.trim() !== '';
+                            const displaySite = isValidValue(rackData?.site) ? rackData?.site : (isValidValue(entry.site) ? entry.site : null);
+                            const displayDc = isValidValue(rackData?.dc) ? rackData?.dc : (isValidValue(entry.dc) ? entry.dc : null);
                             return (
                               <>
                                 {displaySite && (
