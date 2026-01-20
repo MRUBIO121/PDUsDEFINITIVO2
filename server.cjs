@@ -212,26 +212,10 @@ function makeHttpsRequest(url, options, body) {
       timeout: 30000
     };
 
-    logger.info('[SONAR] HTTP Request starting', {
-      url,
-      method: requestOptions.method,
-      hostname: requestOptions.hostname,
-      port: requestOptions.port,
-      path: requestOptions.path,
-      isHttps,
-      bodyLength: body?.length || 0
-    });
-
     const req = requestModule.request(requestOptions, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        logger.info('[SONAR] HTTP Response received', {
-          statusCode: res.statusCode,
-          statusMessage: res.statusMessage,
-          responseLength: data.length,
-          responsePreview: data.substring(0, 500)
-        });
         resolve({
           ok: res.statusCode >= 200 && res.statusCode < 300,
           status: res.statusCode,
@@ -243,17 +227,10 @@ function makeHttpsRequest(url, options, body) {
     });
 
     req.on('error', (error) => {
-      logger.error('[SONAR] HTTP Request error', {
-        url,
-        error: error.message,
-        code: error.code,
-        stack: error.stack
-      });
       reject(error);
     });
 
     req.on('timeout', () => {
-      logger.error('[SONAR] HTTP Request timeout', { url });
       req.destroy();
       reject(new Error('Request timeout'));
     });
@@ -265,25 +242,6 @@ function makeHttpsRequest(url, options, body) {
   });
 }
 
-if (SONAR_CONFIG.enabled) {
-  const tokenPreview = SONAR_CONFIG.bearerToken ?
-    `${SONAR_CONFIG.bearerToken.substring(0, 10)}...${SONAR_CONFIG.bearerToken.substring(SONAR_CONFIG.bearerToken.length - 5)}` :
-    'NOT SET';
-  logger.info('SONAR integration enabled', {
-    url: SONAR_CONFIG.apiUrl,
-    tokenPreview: tokenPreview,
-    tokenLength: SONAR_CONFIG.bearerToken?.length || 0,
-    skipSslVerify: SONAR_CONFIG.skipSslVerify
-  });
-  if (SONAR_CONFIG.skipSslVerify) {
-    logger.warn('SONAR SSL verification disabled - accepting self-signed certificates');
-  }
-} else {
-  logger.warn('SONAR integration disabled - missing SONAR_API_URL or SONAR_BEARER_TOKEN', {
-    hasUrl: !!process.env.SONAR_API_URL,
-    hasToken: !!process.env.SONAR_BEARER_TOKEN
-  });
-}
 
 // Store for tracking SONAR errors per rack (in-memory cache)
 const sonarErrorCache = new Map();
@@ -295,14 +253,7 @@ const sonarErrorCache = new Map();
  * @returns {Promise<{success: boolean, uuid?: string, error?: string}>}
  */
 async function sendToSonar(alertData, state) {
-  logger.info('[SONAR] Starting sendToSonar', {
-    state,
-    pdu_id: alertData.pdu_id || alertData.PID,
-    rack_name: alertData.name || alertData.rack_id
-  });
-
   if (!SONAR_CONFIG.enabled) {
-    logger.warn('[SONAR] Integration disabled, skipping API call');
     return { success: false, error: 'SONAR integration disabled' };
   }
 
@@ -349,16 +300,6 @@ async function sendToSonar(alertData, state) {
       };
     }
 
-    logger.info('[SONAR] Preparing request', {
-      url: SONAR_CONFIG.apiUrl,
-      method: 'POST',
-      state,
-      pid: alertIdentifier,
-      payloadSize: JSON.stringify(payload).length
-    });
-
-    logger.info('[SONAR] Full payload being sent', { payload: JSON.stringify(payload) });
-
     const response = await makeHttpsRequest(
       SONAR_CONFIG.apiUrl,
       {
@@ -371,51 +312,17 @@ async function sendToSonar(alertData, state) {
       JSON.stringify(payload)
     );
 
-    logger.info('[SONAR] Response received', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok
-    });
-
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error('[SONAR] API returned error', {
-        status: response.status,
-        statusText: response.statusText,
-        errorBody: errorText
-      });
       throw new Error(`SONAR API error: ${response.status} - ${errorText}`);
     }
 
     const responseData = await response.json();
     const uuid = responseData.reason;
 
-    logger.info('[SONAR] Response parsed', {
-      responseData: JSON.stringify(responseData),
-      uuid: uuid || 'NO_UUID'
-    });
-
-    if (uuid) {
-      logger.info('[SONAR] SUCCESS - Alert sent', {
-        state,
-        uuid,
-        pid: alertIdentifier,
-        pdu_id: alertData.pdu_id || alertData.PID
-      });
-      return { success: true, uuid };
-    } else {
-      logger.warn('[SONAR] Response missing UUID in reason field', { responseData });
-      return { success: true, uuid: null };
-    }
+    return { success: true, uuid: uuid || null };
 
   } catch (error) {
-    logger.error('[SONAR] FAILED - API call error', {
-      error: error.message,
-      stack: error.stack,
-      state,
-      pdu_id: alertData.pdu_id || alertData.PID,
-      url: SONAR_CONFIG.apiUrl
-    });
     return { success: false, error: error.message };
   }
 }
@@ -439,24 +346,6 @@ async function openSonarAlert(pdu, alertReason, alertId) {
   const humidityValue = (pdu.sensorHumidity !== 'N/A' && pdu.sensorHumidity != null)
     ? parseFloat(pdu.sensorHumidity)
     : null;
-
-  logger.info('[SONAR] openSonarAlert called', {
-    pdu_id: pduIdStr,
-    rack_id: rackIdStr,
-    name: pdu.name,
-    alertReason,
-    alertId,
-    pdu_current: pdu.current,
-    pdu_voltage: pdu.voltage,
-    pdu_sensorTemperature: pdu.sensorTemperature,
-    pdu_sensorHumidity: pdu.sensorHumidity,
-    pdu_gwName: pdu.gwName,
-    pdu_gwIp: pdu.gwIp,
-    parsed_current: currentValue,
-    parsed_voltage: voltageValue,
-    parsed_temperature: tempValue,
-    parsed_humidity: humidityValue
-  });
 
   const alertData = {
     pdu_id: pduIdStr,
@@ -493,17 +382,13 @@ async function openSonarAlert(pdu, alertReason, alertId) {
           `);
       });
       sonarErrorCache.delete(rackIdStr);
-      logger.info('[SONAR] UUID_OPEN saved to database', { alertId, uuid: result.uuid, pdu_id: pduIdStr });
-    } catch (dbError) {
-      logger.error('[SONAR] Failed to save UUID_OPEN to database', { alertId, error: dbError.message });
-    }
+    } catch (dbError) {}
   } else if (!result.success) {
     sonarErrorCache.set(rackIdStr, {
       error: result.error,
       timestamp: new Date(),
       alertReason
     });
-    logger.warn('[SONAR] Alert open failed, cached error', { pdu_id: pduIdStr, error: result.error });
   }
 
   return result;
@@ -515,16 +400,7 @@ async function openSonarAlert(pdu, alertReason, alertId) {
  * @returns {Promise<{success: boolean, uuid?: string, error?: string}>}
  */
 async function closeSonarAlert(alert) {
-  logger.info('[SONAR] closeSonarAlert called', {
-    pdu_id: alert.pdu_id,
-    rack_id: alert.rack_id,
-    name: alert.name,
-    uuid_open: alert.uuid_open,
-    alert_id: alert.id
-  });
-
   if (!alert.uuid_open) {
-    logger.warn('[SONAR] No UUID_OPEN for alert, skipping SONAR close', { pdu_id: alert.pdu_id, alert_id: alert.id });
     return { success: false, error: 'No UUID_OPEN to close' };
   }
 
@@ -554,17 +430,13 @@ async function closeSonarAlert(alert) {
           `);
       });
       sonarErrorCache.delete(alert.rack_id);
-      logger.info('[SONAR] UUID_CLOSED saved to database', { alertId: alert.id, uuid: result.uuid, pdu_id: alert.pdu_id });
-    } catch (dbError) {
-      logger.error('[SONAR] Failed to save UUID_CLOSED to database', { alertId: alert.id, error: dbError.message });
-    }
+    } catch (dbError) {}
   } else if (!result.success) {
     sonarErrorCache.set(alert.rack_id, {
       error: result.error,
       timestamp: new Date(),
       type: 'close_failed'
     });
-    logger.warn('[SONAR] Alert close failed, cached error', { pdu_id: alert.pdu_id, error: result.error });
   }
 
   return result;
@@ -594,11 +466,8 @@ function getAllSonarErrors() {
  */
 async function sendExistingAlertsToSonar() {
   if (!SONAR_CONFIG.enabled) {
-    logger.info('[SONAR] STARTUP: Integration disabled, skipping existing alerts sync');
     return { sent: 0, errors: 0, skipped: 0 };
   }
-
-  logger.info('[SONAR] STARTUP: Checking for existing alerts without uuid_open');
 
   try {
     const alertsResult = await executeQuery(async (pool) => {
@@ -615,14 +484,8 @@ async function sendExistingAlertsToSonar() {
     const alerts = alertsResult.recordset;
 
     if (alerts.length === 0) {
-      logger.info('[SONAR] STARTUP: No existing alerts without uuid_open found');
       return { sent: 0, errors: 0, skipped: 0 };
     }
-
-    logger.info('[SONAR] STARTUP: Found alerts to send to SONAR', {
-      count: alerts.length,
-      alerts: alerts.map(a => ({ id: a.id, name: a.name, reason: a.alert_reason }))
-    });
 
     let sent = 0;
     let errors = 0;
@@ -648,13 +511,6 @@ async function sendExistingAlertsToSonar() {
           gwName: 'N/A',
           gwIp: 'N/A'
         };
-
-        logger.info('[SONAR] STARTUP: Sending existing alert to SONAR', {
-          alertId: alert.id,
-          name: alert.name,
-          reason: alert.alert_reason,
-          pdu_id: alert.pdu_id
-        });
 
         const result = await sendToSonar({
           pdu_id: alert.pdu_id,
@@ -688,17 +544,8 @@ async function sendExistingAlertsToSonar() {
               `);
           });
           sonarErrorCache.delete(alert.rack_id);
-          logger.info('[SONAR] STARTUP: Alert sent and uuid_open saved', {
-            alertId: alert.id,
-            uuid: result.uuid,
-            name: alert.name
-          });
           sent++;
         } else if (result.success) {
-          logger.warn('[SONAR] STARTUP: Alert sent but no UUID received', {
-            alertId: alert.id,
-            name: alert.name
-          });
           skipped++;
         } else {
           sonarErrorCache.set(alert.rack_id, {
@@ -706,36 +553,17 @@ async function sendExistingAlertsToSonar() {
             timestamp: new Date(),
             alertReason: alert.alert_reason
           });
-          logger.error('[SONAR] STARTUP: Failed to send alert', {
-            alertId: alert.id,
-            name: alert.name,
-            error: result.error
-          });
           errors++;
         }
 
         await new Promise(resolve => setTimeout(resolve, 200));
       } catch (err) {
-        logger.error('[SONAR] STARTUP: Error processing alert', {
-          alertId: alert.id,
-          error: err.message
-        });
         errors++;
       }
     }
 
-    logger.info('[SONAR] STARTUP: Completed sending existing alerts', {
-      sent,
-      errors,
-      skipped,
-      total: alerts.length
-    });
-
     return { sent, errors, skipped };
   } catch (error) {
-    logger.error('[SONAR] STARTUP: Failed to query existing alerts', {
-      error: error.message
-    });
     return { sent: 0, errors: 0, skipped: 0 };
   }
 }
@@ -773,13 +601,8 @@ async function closeSonarAlertsForMaintenance(rackId) {
           errors++;
         }
       } catch (err) {
-        logger.error('Failed to close SONAR alert for maintenance', { rackId, alertId: alert.id, error: err.message });
         errors++;
       }
-    }
-
-    if (closed > 0) {
-      logger.info(`Closed ${closed} SONAR alerts for rack entering maintenance`, { rackId });
     }
 
     return { closed, errors };
@@ -3326,11 +3149,11 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
 
     if (process.env.NENG_API_URL && process.env.NENG_API_KEY) {
       try {
-        logger.info('Fetching rack data from NENG API for maintenance', { rackName: sanitizedRackId });
         let skip = 0;
         const limit = 500;
         let hasMore = true;
         let found = false;
+        let totalRecords = 0;
 
         while (hasMore && !found) {
           const response = await fetchFromNengApi(
@@ -3339,9 +3162,42 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
           );
 
           if (response.success && Array.isArray(response.data)) {
+            totalRecords += response.data.length;
+
+            if (skip === 0 && response.data.length > 0) {
+              const sample = response.data[0];
+              logger.info('[MAINT-DEBUG] API NENG sample PDU structure', {
+                rackName: sample.rackName,
+                rackId: sample.rackId,
+                id: sample.id,
+                site: sample.site,
+                dc: sample.dc,
+                phase: sample.phase,
+                chain: sample.chain,
+                node: sample.node,
+                gwName: sample.gwName,
+                gwIp: sample.gwIp,
+                allKeys: Object.keys(sample)
+              });
+            }
+
             for (const pdu of response.data) {
               const pduRackName = String(pdu.rackName || '').trim();
               if (pduRackName.toLowerCase() === sanitizedRackId.toLowerCase()) {
+                logger.info('[MAINT-DEBUG] MATCH FOUND - Raw PDU data from API', {
+                  searchedFor: sanitizedRackId,
+                  pdu_rackName: pdu.rackName,
+                  pdu_rackId: pdu.rackId,
+                  pdu_id: pdu.id,
+                  pdu_site: pdu.site,
+                  pdu_dc: pdu.dc,
+                  pdu_phase: pdu.phase,
+                  pdu_chain: pdu.chain,
+                  pdu_node: pdu.node,
+                  pdu_gwName: pdu.gwName,
+                  pdu_gwIp: pdu.gwIp
+                });
+
                 rack = {
                   name: pdu.rackName || sanitizedRackId,
                   rackId: pdu.rackId || pdu.id || sanitizedRackId,
@@ -3356,14 +3212,17 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
                 };
                 chain = rack.chain;
                 found = true;
-                logger.info('Found rack data from NENG API', {
-                  rackName: sanitizedRackId,
-                  rackId: rack.rackId,
-                  site: rack.site,
-                  dc: rack.dc,
-                  chain: rack.chain,
-                  gwName: rack.gwName,
-                  gwIp: rack.gwIp
+
+                logger.info('[MAINT-DEBUG] Processed rack object', {
+                  rack_name: rack.name,
+                  rack_rackId: rack.rackId,
+                  rack_site: rack.site,
+                  rack_dc: rack.dc,
+                  rack_phase: rack.phase,
+                  rack_chain: rack.chain,
+                  rack_node: rack.node,
+                  rack_gwName: rack.gwName,
+                  rack_gwIp: rack.gwIp
                 });
                 break;
               }
@@ -3376,11 +3235,19 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         }
 
         if (!found) {
-          logger.warn('Rack not found in NENG API', { rackName: sanitizedRackId });
+          logger.warn('[MAINT-DEBUG] Rack NOT FOUND in NENG API', {
+            rackName: sanitizedRackId,
+            totalRecordsSearched: totalRecords
+          });
         }
       } catch (apiError) {
-        logger.warn('Failed to fetch rack data from NENG API', { error: apiError.message, rackName: sanitizedRackId });
+        logger.error('[MAINT-DEBUG] API NENG error', { error: apiError.message, rackName: sanitizedRackId });
       }
+    } else {
+      logger.warn('[MAINT-DEBUG] NENG API not configured', {
+        hasUrl: !!process.env.NENG_API_URL,
+        hasKey: !!process.env.NENG_API_KEY
+      });
     }
 
     const result = await executeQuery(async (pool) => {
@@ -3456,6 +3323,20 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
         `);
 
       const actualRackId = String(rack.rackId || sanitizedRackId);
+
+      logger.info('[MAINT-DEBUG] INSERTING to maintenance_rack_details', {
+        entry_id: entryId,
+        rack_id: actualRackId,
+        name: String(rack.name || sanitizedRackId),
+        country: String(rack.country || 'Unknown'),
+        site: site,
+        dc: dc,
+        phase: String(rack.phase || 'Unknown'),
+        chain: String(chain || 'Unknown'),
+        node: String(rack.node || 'Unknown'),
+        gwName: String(rack.gwName || 'N/A'),
+        gwIp: String(rack.gwIp || 'N/A')
+      });
 
       // Insert rack details
       await pool.request()
@@ -4389,10 +4270,26 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       }
     });
 
-    logger.info('Rack data map created', {
-      uniqueRacks: rackDataMap.size,
-      sampleKeys: Array.from(rackDataMap.keys()).slice(0, 10)
-    });
+    if (rackDataMap.size > 0) {
+      const sampleEntry = rackDataMap.values().next().value;
+      logger.info('[EXCEL-DEBUG] API NENG data map created', {
+        uniqueRacks: rackDataMap.size,
+        sampleKeys: Array.from(rackDataMap.keys()).slice(0, 5),
+        sampleData: sampleEntry ? {
+          name: sampleEntry.name,
+          rackId: sampleEntry.rackId,
+          site: sampleEntry.site,
+          dc: sampleEntry.dc,
+          phase: sampleEntry.phase,
+          chain: sampleEntry.chain,
+          node: sampleEntry.node,
+          gwName: sampleEntry.gwName,
+          gwIp: sampleEntry.gwIp
+        } : null
+      });
+    } else {
+      logger.warn('[EXCEL-DEBUG] API NENG data map is EMPTY - no rack data from API');
+    }
 
     const alreadyInMaintenance = [];
     const successfulInserts = [];
@@ -4406,7 +4303,6 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
     });
     const existingRackIds = new Set(existingRacksResult.recordset.map(r => r.rack_id));
 
-    logger.info('Existing maintenance racks loaded', { count: existingRackIds.size });
 
     const racksToInsert = [];
     for (const rack of racks) {
@@ -4435,12 +4331,16 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
           rowNumber: rack.rowNumber,
           foundInAPI: true
         };
-        logger.debug('Rack found in API', {
-          rackName: rack.rackName,
-          rackId: rackInfo.rack_id,
-          site: foundRackData.site,
-          dc: foundRackData.dc,
-          chain: foundRackData.chain
+        logger.info('[EXCEL-DEBUG] Rack FOUND in API map', {
+          excelRackName: rack.rackName,
+          mapped_rack_id: rackInfo.rack_id,
+          mapped_site: foundRackData.site,
+          mapped_dc: foundRackData.dc,
+          mapped_phase: foundRackData.phase,
+          mapped_chain: foundRackData.chain,
+          mapped_node: foundRackData.node,
+          mapped_gwName: foundRackData.gwName,
+          mapped_gwIp: foundRackData.gwIp
         });
       } else {
         notFoundInAPI.push(rack.rackName);
@@ -4464,10 +4364,11 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       racksToInsert.push(rackInfo);
     }
 
-    logger.info('Racks prepared for insertion', {
+    logger.info('[EXCEL-DEBUG] Import summary', {
       toInsert: racksToInsert.length,
       alreadyInMaintenance: alreadyInMaintenance.length,
-      notFoundInAPI: notFoundInAPI.length
+      notFoundInAPI: notFoundInAPI.length,
+      notFoundList: notFoundInAPI.slice(0, 10)
     });
 
     const BATCH_SIZE = 50;
@@ -4475,11 +4376,6 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       const batch = racksToInsert.slice(i, i + BATCH_SIZE);
       const batchNum = Math.floor(i / BATCH_SIZE) + 1;
       const totalBatches = Math.ceil(racksToInsert.length / BATCH_SIZE);
-
-      logger.info(`Processing batch ${batchNum}/${totalBatches}`, {
-        batchSize: batch.length,
-        startIndex: i
-      });
 
       try {
         await executeQuery(async (pool) => {
@@ -4531,10 +4427,6 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
               });
 
             } catch (insertError) {
-              logger.error('Failed to insert rack', {
-                rackName: rackInfo.rack_id,
-                error: insertError.message
-              });
               failedInserts.push({
                 row: rackInfo.rowNumber,
                 rackName: rackInfo.rack_id,
@@ -4544,12 +4436,7 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
           }
         });
 
-        logger.info(`Batch ${batchNum} completed`, {
-          successfulInBatch: batch.length - failedInserts.filter(f => batch.some(b => b.rack_id === f.rackName)).length
-        });
-
       } catch (batchError) {
-        logger.error(`Batch ${batchNum} failed entirely`, { error: batchError.message });
         for (const rackInfo of batch) {
           if (!successfulInserts.some(s => s.rackName === rackInfo.rack_id)) {
             failedInserts.push({
@@ -4588,12 +4475,10 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
 
     const rackIdsForSonar = result.successfulInserts.map(r => r.rackName).filter(Boolean);
     if (rackIdsForSonar.length > 0) {
-      closeSonarAlertsForMaintenanceBatch(rackIdsForSonar).catch(err => {
-        logger.error('Failed to close SONAR alerts for Excel import maintenance', { error: err.message });
-      });
+      closeSonarAlertsForMaintenanceBatch(rackIdsForSonar).catch(() => {});
     }
 
-    logger.info('Excel import completed', {
+    logger.info('[EXCEL-DEBUG] Import COMPLETED', {
       fileName: req.file.originalname,
       successful: summary.successful,
       total: summary.total,
