@@ -2952,25 +2952,38 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
 
     const { entries, details } = results;
 
-    logger.info('Maintenance data retrieved', {
-      entries: entries.length,
-      racks: details.length,
-      sampleDetails: details.slice(0, 3).map(d => ({
+    const detailsNeedingEnrichment = details.filter(d => {
+      const site = String(d.site || '').trim();
+      const dc = String(d.dc || '').trim();
+      const chain = String(d.chain || '').trim();
+      const phase = String(d.phase || '').trim();
+      const node = String(d.node || '').trim();
+      const gwName = String(d.gwName || '').trim();
+      const gwIp = String(d.gwIp || '').trim();
+      return site === 'Unknown' || site === '' ||
+             dc === 'Unknown' || dc === '' ||
+             chain === 'Unknown' || chain === '' ||
+             phase === 'Unknown' || phase === '' ||
+             node === 'Unknown' || node === '' ||
+             !gwName || gwName === 'N/A' ||
+             !gwIp || gwIp === 'N/A';
+    });
+
+    logger.info('[MAINT-READ-DEBUG] Racks in maintenance', {
+      totalEntries: entries.length,
+      totalRacks: details.length,
+      needingEnrichment: detailsNeedingEnrichment.length,
+      sampleWithUnknown: detailsNeedingEnrichment.slice(0, 3).map(d => ({
         rack_id: d.rack_id,
         name: d.name,
         site: d.site,
         dc: d.dc,
         chain: d.chain,
         phase: d.phase,
-        node: d.node
+        node: d.node,
+        gwName: d.gwName,
+        gwIp: d.gwIp
       }))
-    });
-
-    const detailsNeedingEnrichment = details.filter(d => {
-      const site = String(d.site || '').trim();
-      const dc = String(d.dc || '').trim();
-      const gwName = String(d.gwName || '').trim();
-      return site === 'Unknown' || dc === 'Unknown' || !gwName || gwName === 'N/A';
     });
 
     if (detailsNeedingEnrichment.length > 0 && process.env.NENG_API_URL && process.env.NENG_API_KEY) {
@@ -2995,6 +3008,26 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           }
         }
 
+        logger.info('[MAINT-READ-DEBUG] API NENG data fetched', {
+          totalRecords: allPowerData.length
+        });
+
+        if (allPowerData.length > 0) {
+          const sample = allPowerData[0];
+          logger.info('[MAINT-READ-DEBUG] API NENG sample PDU', {
+            rackName: sample.rackName,
+            rackId: sample.rackId,
+            site: sample.site,
+            dc: sample.dc,
+            phase: sample.phase,
+            chain: sample.chain,
+            node: sample.node,
+            gwName: sample.gwName,
+            gwIp: sample.gwIp,
+            allKeys: Object.keys(sample)
+          });
+        }
+
         const rackApiDataMap = new Map();
         const rackApiDataMapLower = new Map();
         allPowerData.forEach(pdu => {
@@ -3014,7 +3047,13 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
           }
         });
 
+        logger.info('[MAINT-READ-DEBUG] API data map created', {
+          uniqueRackNames: rackApiDataMap.size
+        });
+
         let enrichedCount = 0;
+        let notFoundCount = 0;
+        const notFoundRacks = [];
         const pool = await getPool();
 
         for (const detail of detailsNeedingEnrichment) {
@@ -3065,6 +3104,21 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
             }
 
             if (needsUpdate) {
+              logger.info('[MAINT-READ-DEBUG] ENRICHING rack', {
+                rackName: rackName,
+                beforeUpdate: {
+                  site: detail.site,
+                  dc: detail.dc,
+                  chain: detail.chain,
+                  phase: detail.phase,
+                  node: detail.node,
+                  gwName: detail.gwName,
+                  gwIp: detail.gwIp
+                },
+                apiData: apiData,
+                updates: updates
+              });
+
               try {
                 const setClauses = Object.keys(updates).map(k => `${k} = @${k}`).join(', ');
                 const request = pool.request()
@@ -3078,18 +3132,31 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
                 await request.query(`UPDATE maintenance_rack_details SET ${setClauses} WHERE rack_id = @rack_id AND maintenance_entry_id = @maintenance_entry_id`);
                 enrichedCount++;
               } catch (updateError) {
-                logger.warn('Failed to update rack data', { rack: rackName, error: updateError.message });
+                logger.error('[MAINT-READ-DEBUG] Update FAILED', { rack: rackName, error: updateError.message });
               }
+            }
+          } else {
+            notFoundCount++;
+            if (notFoundRacks.length < 10) {
+              notFoundRacks.push(rackName);
             }
           }
         }
 
-        if (enrichedCount > 0) {
-          logger.info('Enriched racks with API data', { count: enrichedCount, total: detailsNeedingEnrichment.length });
-        }
+        logger.info('[MAINT-READ-DEBUG] Enrichment summary', {
+          enrichedCount: enrichedCount,
+          notFoundInAPI: notFoundCount,
+          notFoundRacksSample: notFoundRacks
+        });
       } catch (apiError) {
-        logger.warn('Failed to enrich rack data from API', { error: apiError.message });
+        logger.error('[MAINT-READ-DEBUG] API NENG error', { error: apiError.message });
       }
+    } else if (detailsNeedingEnrichment.length > 0) {
+      logger.warn('[MAINT-READ-DEBUG] Cannot enrich - NENG API not configured', {
+        needingEnrichment: detailsNeedingEnrichment.length,
+        hasUrl: !!process.env.NENG_API_URL,
+        hasKey: !!process.env.NENG_API_KEY
+      });
     }
 
     const maintenanceData = entries.map(entry => ({
