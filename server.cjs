@@ -3129,7 +3129,19 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
 
     const { entries, details } = results;
 
-    logger.debug('Maintenance data retrieved', { entries: entries.length, racks: details.length });
+    logger.info('Maintenance data retrieved', {
+      entries: entries.length,
+      racks: details.length,
+      sampleDetails: details.slice(0, 3).map(d => ({
+        rack_id: d.rack_id,
+        name: d.name,
+        site: d.site,
+        dc: d.dc,
+        chain: d.chain,
+        phase: d.phase,
+        node: d.node
+      }))
+    });
 
     const detailsNeedingEnrichment = details.filter(d => {
       const site = String(d.site || '').trim();
@@ -3332,6 +3344,7 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
               if (pduRackName.toLowerCase() === sanitizedRackId.toLowerCase()) {
                 rack = {
                   name: pdu.rackName || sanitizedRackId,
+                  rackId: pdu.rackId || pdu.id || sanitizedRackId,
                   site: pdu.site || 'Unknown',
                   dc: pdu.dc || 'Unknown',
                   phase: pdu.phase || 'Unknown',
@@ -3345,6 +3358,7 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
                 found = true;
                 logger.info('Found rack data from NENG API', {
                   rackName: sanitizedRackId,
+                  rackId: rack.rackId,
                   site: rack.site,
                   dc: rack.dc,
                   chain: rack.chain,
@@ -3441,10 +3455,12 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
           (@entry_id, @entry_type, @rack_id, @chain, @site, @dc, @reason, @user, @started_by)
         `);
 
+      const actualRackId = String(rack.rackId || sanitizedRackId);
+
       // Insert rack details
       await pool.request()
         .input('entry_id', sql.UniqueIdentifier, entryId)
-        .input('rack_id', sql.NVarChar, sanitizedRackId)
+        .input('rack_id', sql.NVarChar, actualRackId)
         .input('name', sql.NVarChar, String(rack.name || sanitizedRackId))
         .input('country', sql.NVarChar, String(rack.country || 'Unknown'))
         .input('site', sql.NVarChar, site)
@@ -4353,6 +4369,7 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
         const rackData = {
           name: rackName,
           rackName: rackName,
+          rackId: pdu.rackId || pdu.id || rackName,
           country: 'España',
           site: pdu.site || 'Unknown',
           dc: pdu.dc || 'Unknown',
@@ -4411,13 +4428,14 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       if (foundRackData) {
         rackInfo = {
           ...foundRackData,
-          rack_id: rack.rackName,
+          rack_id: String(foundRackData.rackId || rack.rackName),
           reason: rack.reason,
           rowNumber: rack.rowNumber,
           foundInAPI: true
         };
         logger.debug('Rack found in API', {
           rackName: rack.rackName,
+          rackId: rackInfo.rack_id,
           site: foundRackData.site,
           dc: foundRackData.dc,
           chain: foundRackData.chain
