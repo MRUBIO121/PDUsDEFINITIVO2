@@ -198,6 +198,12 @@ export function useRackData(options: UseRackDataOptions = {}): UseRackDataReturn
                   maintenanceSet.add(rackIdStr);
                 }
               }
+              if (rack.name) {
+                const rackNameStr = String(rack.name).trim();
+                if (rackNameStr && rackNameStr !== rack.rack_id) {
+                  maintenanceSet.add(rackNameStr);
+                }
+              }
             });
           }
         });

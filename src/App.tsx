@@ -577,7 +577,6 @@ function App() {
   };
 
   const handleSendRackToMaintenance = async (rackId: string, chain: string, rackName: string, rackData?: any) => {
-    // Check if user has permission based on assigned sites (Administrators are exempt)
     if (user?.rol !== 'Administrador' && user?.sitios_asignados && user.sitios_asignados.length > 0) {
       if (rackData && !userHasAccessToSite(rackData.site)) {
         alert(`No tienes permisos para enviar a mantenimiento racks fuera de tus sitios asignados (${user.sitios_asignados.join(', ')})`);
@@ -601,8 +600,8 @@ function App() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          rackId,
-          rackData,
+          rackId: rackName,
+          rackData: { ...rackData, name: rackName },
           reason,
           user: user?.usuario || 'Sistema'
         })
