@@ -1148,19 +1148,6 @@ async function processRackData(racks, thresholds) {
   const voltageWarningLowValue = getThresholdValue(thresholds, 'warning_voltage_low') || 'N/A';
   const voltageWarningHighValue = getThresholdValue(thresholds, 'warning_voltage_high') || 'N/A';
 
-  // Log voltage evaluation summary only if there are alerts
-  if (voltageStats.criticalLow > 0 || voltageStats.criticalHigh > 0 || voltageStats.warningLow > 0 || voltageStats.warningHigh > 0) {
-    logger.debug('Voltage alerts detected', {
-      total: voltageStats.total,
-      withVoltage: voltageStats.withVoltage,
-      normal: voltageStats.normal,
-      criticalLow: voltageStats.criticalLow,
-      criticalHigh: voltageStats.criticalHigh,
-      warningLow: voltageStats.warningLow,
-      warningHigh: voltageStats.warningHigh
-    });
-  }
-
   return processedRacks;
 }
 
@@ -1423,15 +1410,6 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
       return pdu.status === 'critical' && pdu.reasons && pdu.reasons.length > 0 && !isInMaintenance;
     });
 
-    logger.info('[SONAR] === ALERT PROCESSING CYCLE START ===', {
-      totalPdus: allPdus.length,
-      criticalPdus: currentCriticalPdus.length,
-      maintenanceRacks: maintenanceRackIds.size,
-      SONAR_ENABLED: SONAR_CONFIG.enabled,
-      SONAR_URL: SONAR_CONFIG.apiUrl || 'NOT_SET',
-      SONAR_TOKEN_LENGTH: SONAR_CONFIG.bearerToken?.length || 0
-    });
-
     // Process PDUs in batches to avoid connection timeout issues
     const BATCH_SIZE = 10;
     let processedCount = 0;
@@ -1461,8 +1439,6 @@ async function manageActiveCriticalAlerts(allPdus, thresholds) {
       }
     }
 
-    logger.debug('Alerts processed', { count: processedCount, errors: errorCount });
-
     // Clean up resolved alerts
     try {
       await cleanupResolvedAlerts(currentCriticalPdus);
@@ -1486,7 +1462,6 @@ async function processCriticalAlert(pdu, reason, thresholds) {
     const metricInfo = extractMetricInfo(reason, pdu, thresholds);
 
     if (!metricInfo) {
-      logger.debug('Could not extract metric from reason', { reason });
       return;
     }
 
@@ -1503,13 +1478,6 @@ async function processCriticalAlert(pdu, reason, thresholds) {
         `);
 
       if (existingAlert.recordset.length > 0) {
-        logger.info('[SONAR] Alert already exists, updating values only', {
-          pdu_id: pduIdStr,
-          rack_id: rackIdStr,
-          name: pdu.name,
-          reason,
-          existing_alert_id: existingAlert.recordset[0].id
-        });
         await pool.request()
           .input('pdu_id', sql.NVarChar, pduIdStr)
           .input('metric_type', sql.NVarChar, metricType)
@@ -1552,28 +1520,9 @@ async function processCriticalAlert(pdu, reason, thresholds) {
 
         const insertedAlertId = insertResult.recordset[0]?.id;
 
-        logger.info('[SONAR] NEW ALERT INSERTED - checking if should send to SONAR', {
-          insertedAlertId,
-          pdu_id: pduIdStr,
-          rack_id: rackIdStr,
-          name: pdu.name,
-          reason,
-          SONAR_ENABLED: SONAR_CONFIG.enabled,
-          SONAR_URL: SONAR_CONFIG.apiUrl || 'NOT_SET',
-          SONAR_TOKEN_SET: !!SONAR_CONFIG.bearerToken,
-          willCallSonar: !!(insertedAlertId && SONAR_CONFIG.enabled)
-        });
-
         if (insertedAlertId && SONAR_CONFIG.enabled) {
-          logger.info('[SONAR] CALLING openSonarAlert NOW', { insertedAlertId, pdu_id: pduIdStr, reason });
           openSonarAlert(pdu, reason, insertedAlertId).catch(err => {
             logger.error('[SONAR] Failed to send alert to SONAR', { error: err.message, pdu_id: pduIdStr });
-          });
-        } else {
-          logger.warn('[SONAR] NOT calling SONAR', {
-            reason: !insertedAlertId ? 'NO_INSERTED_ID' : 'SONAR_DISABLED',
-            insertedAlertId,
-            SONAR_ENABLED: SONAR_CONFIG.enabled
           });
         }
 
@@ -2362,17 +2311,6 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
       if (pageData.length === 0) {
         hasMorePowerData = false;
       } else {
-        if (powerSkip === 0 && pageData.length > 0) {
-          const sampleItem = pageData[0];
-          logger.info('[API DEBUG] Sample power data item from NENG API', {
-            availableFields: Object.keys(sampleItem),
-            gwName: sampleItem.gwName,
-            gwIp: sampleItem.gwIp,
-            totalAmps: sampleItem.totalAmps,
-            totalVolts: sampleItem.totalVolts,
-            rackName: sampleItem.rackName
-          });
-        }
         allPowerData = allPowerData.concat(pageData);
         powerSkip += pageSize;
 
@@ -2489,11 +2427,6 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
         return mapped;
       });
 
-    // Simplified log
-    if (itemsWithoutRackName.length > 0) {
-      logger.debug('PDUs without rack name filtered', { count: itemsWithoutRackName.length });
-    }
-    
     if (combinedData.length === 0) {
       logger.warn('No data received from API', { requestId });
       return res.json({
@@ -2553,17 +2486,11 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
       }
     });
 
-    if (addedFromSensorsBeforeProcessing.length > 0) {
-      logger.debug('Added racks from sensors without power data', { count: addedFromSensorsBeforeProcessing.length });
-    }
-
     // Process data with thresholds evaluation (includes sensor-only racks now)
     const processedData = await processRackData(combinedData, thresholds);
 
     // DO NOT filter out maintenance racks - send them to frontend for visual indication
     const filteredData = processedData;
-    const uniqueRacks = new Set(filteredData.map(pdu => pdu.rackId)).size;
-    logger.debug('Data processed', { pdus: filteredData.length, racks: uniqueRacks, maintenance: maintenanceRackIds.size });
 
     // Manage active critical alerts in database (excluding maintenance racks from alerts)
     const nonMaintenanceData = processedData.filter(pdu => {
@@ -2576,45 +2503,14 @@ app.get('/api/racks/energy', requireAuth, async (req, res) => {
     const rackGroups = [];
     const rackMap = new Map();
 
-    // Track PDUs to detect duplicates
-    const pduTracker = new Map(); // pdu.id -> { rackId, dc, site, chain }
-
     filteredData.forEach(pdu => {
       const rackId = pdu.rackId || pdu.id;
-      const pduId = pdu.id;
-
-      // Check for duplicate PDU IDs across different racks or datacenters
-      if (pduTracker.has(pduId)) {
-        const existing = pduTracker.get(pduId);
-        logger.debug('Duplicate PDU detected', {
-          pdu_id: pduId,
-          existing: { rack: existing.rackId, dc: existing.dc, site: existing.site },
-          current: { rack: rackId, dc: pdu.dc, site: pdu.site }
-        });
-      } else {
-        pduTracker.set(pduId, {
-          rackId: rackId,
-          dc: pdu.dc,
-          site: pdu.site,
-          chain: pdu.chain
-        });
-      }
 
       if (!rackMap.has(rackId)) {
         rackMap.set(rackId, []);
       }
 
       rackMap.get(rackId).push(pdu);
-    });
-
-    // Check for racks appearing in multiple datacenters
-    Array.from(rackMap.values()).forEach(rackGroup => {
-      const rackId = rackGroup[0].rackId || rackGroup[0].id;
-      const dcs = new Set(rackGroup.map(pdu => pdu.dc));
-
-      if (dcs.size > 1) {
-        logger.debug('Rack appears in multiple datacenters', { rack_id: rackId, datacenters: Array.from(dcs) });
-      }
     });
 
     // Convertir el Map en arrays
@@ -3587,11 +3483,6 @@ app.post('/api/maintenance/chain', requireAuth, async (req, res) => {
       return hasValidRackName;
     });
 
-    const filteredOutCount = beforeRackNameFilter - chainRacks.length;
-    if (filteredOutCount > 0) {
-      logger.debug('PDUs filtered out due to missing rackName', { filtered: filteredOutCount, remaining: chainRacks.length });
-    }
-
     if (chainRacks.length === 0) {
       return res.status(200).json({
         success: true,
@@ -4139,12 +4030,6 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
     const { defaultReason = 'Mantenimiento' } = req.body;
     const user = req.session.usuario || 'Sistema';
 
-    logger.info('Excel import started', {
-      fileName: req.file.originalname,
-      fileSize: req.file.size,
-      user
-    });
-
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(req.file.buffer);
 
@@ -4184,11 +4069,6 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
     };
 
     const rowCount = worksheet.rowCount;
-    logger.info('Excel worksheet info', {
-      rowCount,
-      columnCount: worksheet.columnCount,
-      actualRowCount: worksheet.actualRowCount
-    });
 
     let skippedEmpty = 0;
     let skippedExample = 0;
@@ -4241,17 +4121,6 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
       });
     }
 
-    logger.info('Excel import: rows parsed', {
-      totalRows: rowCount - 1,
-      validRacksFound: racks.length,
-      skippedEmpty,
-      skippedExample,
-      skippedNote,
-      skippedDuplicate,
-      user,
-      firstFewRacks: racks.slice(0, 5).map(r => r.rackName)
-    });
-
     if (racks.length === 0) {
       return res.status(400).json({
         success: false,
@@ -4300,13 +4169,9 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
             hasMore = false;
           }
         }
-        logger.info('API data fetched for Excel import', {
-          totalRecords: allRackData.length,
-          pages: apiPages
-        });
       }
     } catch (error) {
-      logger.warn('Could not fetch rack data from API for Excel import', { error: error.message });
+      logger.warn('[MAINT-EXCEL] Could not fetch rack data from API', { error: error.message });
     }
 
     const rackDataMap = new Map();
@@ -4336,27 +4201,6 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
         }
       }
     });
-
-    if (rackDataMap.size > 0) {
-      const sampleEntry = rackDataMap.values().next().value;
-      logger.info('[EXCEL-DEBUG] API NENG data map created', {
-        uniqueRacks: rackDataMap.size,
-        sampleKeys: Array.from(rackDataMap.keys()).slice(0, 5),
-        sampleData: sampleEntry ? {
-          name: sampleEntry.name,
-          rackId: sampleEntry.rackId,
-          site: sampleEntry.site,
-          dc: sampleEntry.dc,
-          phase: sampleEntry.phase,
-          chain: sampleEntry.chain,
-          node: sampleEntry.node,
-          gwName: sampleEntry.gwName,
-          gwIp: sampleEntry.gwIp
-        } : null
-      });
-    } else {
-      logger.warn('[EXCEL-DEBUG] API NENG data map is EMPTY - no rack data from API');
-    }
 
     const alreadyInMaintenance = [];
     const successfulInserts = [];
@@ -4398,17 +4242,6 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
           rowNumber: rack.rowNumber,
           foundInAPI: true
         };
-        logger.info('[EXCEL-DEBUG] Rack FOUND in API map', {
-          excelRackName: rack.rackName,
-          mapped_rack_id: rackInfo.rack_id,
-          mapped_site: foundRackData.site,
-          mapped_dc: foundRackData.dc,
-          mapped_phase: foundRackData.phase,
-          mapped_chain: foundRackData.chain,
-          mapped_node: foundRackData.node,
-          mapped_gwName: foundRackData.gwName,
-          mapped_gwIp: foundRackData.gwIp
-        });
       } else {
         notFoundInAPI.push(rack.rackName);
         rackInfo = {
@@ -4430,13 +4263,6 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
 
       racksToInsert.push(rackInfo);
     }
-
-    logger.info('[EXCEL-DEBUG] Import summary', {
-      toInsert: racksToInsert.length,
-      alreadyInMaintenance: alreadyInMaintenance.length,
-      notFoundInAPI: notFoundInAPI.length,
-      notFoundList: notFoundInAPI.slice(0, 10)
-    });
 
     const BATCH_SIZE = 50;
     for (let i = 0; i < racksToInsert.length; i += BATCH_SIZE) {
@@ -4544,14 +4370,6 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
     if (rackIdsForSonar.length > 0) {
       closeSonarAlertsForMaintenanceBatch(rackIdsForSonar).catch(() => {});
     }
-
-    logger.info('[EXCEL-DEBUG] Import COMPLETED', {
-      fileName: req.file.originalname,
-      successful: summary.successful,
-      total: summary.total,
-      foundInAPI: racksFoundInAPI,
-      notFoundInAPI: racksNotFoundInAPI
-    });
 
     res.json({
       success: true,
@@ -4866,8 +4684,6 @@ app.post('/api/export/alerts', requireAuth, async (req, res) => {
     const timestamp = now.toISOString().replace(/[:.]/g, '-').substring(0, 19);
     const filename = `alertas_${timestamp}.xlsx`;
 
-    logger.info('Exporting alerts to Excel', { count: pdusWithAlerts.length });
-
     // Set headers to trigger download in browser
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -4936,11 +4752,9 @@ const server = app.listen(port, async () => {
   if (SONAR_CONFIG.enabled) {
     setTimeout(async () => {
       try {
-        logger.info('[SONAR] STARTUP: Beginning sync of existing alerts');
-        const result = await sendExistingAlertsToSonar();
-        logger.info('[SONAR] STARTUP: Sync completed', result);
+        await sendExistingAlertsToSonar();
       } catch (err) {
-        logger.error('[SONAR] STARTUP: Failed to sync existing alerts', { error: err.message });
+        logger.error('[SONAR] Failed to sync existing alerts at startup', { error: err.message });
       }
     }, 3000);
   }
