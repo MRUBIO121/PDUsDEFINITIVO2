@@ -62,9 +62,12 @@ async function createTemplate() {
   const dataSheet = workbook.addWorksheet('Datos');
 
   dataSheet.columns = [
-    { header: 'rackName', key: 'rackName', width: 30 },
-    { header: 'reason', key: 'reason', width: 50 }
+    { key: 'rackName', width: 30 },
+    { key: 'reason', width: 50 }
   ];
+
+  dataSheet.getCell('A1').value = 'rackName';
+  dataSheet.getCell('B1').value = 'reason';
 
   dataSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
   dataSheet.getRow(1).fill = {
@@ -74,20 +77,14 @@ async function createTemplate() {
   };
   dataSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
 
-  dataSheet.addRow({
-    rackName: 'RACK-001',
-    reason: 'Mantenimiento preventivo'
-  });
+  dataSheet.getCell('A2').value = 'RACK-001';
+  dataSheet.getCell('B2').value = 'Mantenimiento preventivo';
 
-  dataSheet.addRow({
-    rackName: 'RACK-002',
-    reason: 'Mantenimiento preventivo'
-  });
+  dataSheet.getCell('A3').value = 'RACK-002';
+  dataSheet.getCell('B3').value = 'Mantenimiento preventivo';
 
-  dataSheet.addRow({
-    rackName: 'RACK-003',
-    reason: 'Reparacion urgente'
-  });
+  dataSheet.getCell('A4').value = 'RACK-003';
+  dataSheet.getCell('B4').value = 'Reparacion urgente';
   
   // Style example rows with light yellow
   [2, 3, 4].forEach(rowNum => {
