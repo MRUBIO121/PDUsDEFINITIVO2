@@ -4410,18 +4410,20 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
 
     const racksToInsert = [];
     for (const rack of racks) {
-      if (existingRackIds.has(rack.rackName)) {
+      let foundRackData = rackDataMap.get(rack.rackName);
+      if (!foundRackData) {
+        foundRackData = rackDataMapLower.get(rack.rackName.toLowerCase());
+      }
+
+      const checkRackId = foundRackData ? String(foundRackData.rackId || rack.rackName) : rack.rackName;
+
+      if (existingRackIds.has(checkRackId) || existingRackIds.has(rack.rackName)) {
         alreadyInMaintenance.push({
           row: rack.rowNumber,
           rackName: rack.rackName,
           message: 'Already in maintenance'
         });
         continue;
-      }
-
-      let foundRackData = rackDataMap.get(rack.rackName);
-      if (!foundRackData) {
-        foundRackData = rackDataMapLower.get(rack.rackName.toLowerCase());
       }
 
       let rackInfo;
