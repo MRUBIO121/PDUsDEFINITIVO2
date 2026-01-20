@@ -4087,19 +4087,52 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
     const errors = [];
     const duplicatesInFile = new Set();
     const rackNamesInFile = [];
+    const exampleRackNames = ['RACK-001', 'RACK-002', 'RACK-003'];
+
+    const getCellValue = (cell) => {
+      if (!cell || cell.value === null || cell.value === undefined) {
+        return '';
+      }
+      if (typeof cell.value === 'object') {
+        if (cell.value.richText) {
+          return cell.value.richText.map(rt => rt.text).join('').trim();
+        }
+        if (cell.value.text) {
+          return String(cell.value.text).trim();
+        }
+        if (cell.value.result !== undefined) {
+          return String(cell.value.result).trim();
+        }
+        return '';
+      }
+      return String(cell.value).trim();
+    };
 
     let rowIndex = 0;
+    let totalRowsRead = 0;
     worksheet.eachRow((row, rowNumber) => {
+      totalRowsRead++;
       if (rowNumber === 1) return;
 
       rowIndex++;
 
+      const rackNameValue = getCellValue(row.getCell(1));
+      const reasonValue = getCellValue(row.getCell(2));
+
       const rackData = {
-        rackName: row.getCell(1).value?.toString().trim() || '',
-        reason: row.getCell(2).value?.toString().trim() || defaultReason
+        rackName: rackNameValue,
+        reason: reasonValue || defaultReason
       };
 
       if (!rackData.rackName) {
+        return;
+      }
+
+      if (rackData.rackName.startsWith('NOTA:') || rackData.rackName.startsWith('NOTE:')) {
+        return;
+      }
+
+      if (exampleRackNames.includes(rackData.rackName)) {
         return;
       }
 
@@ -4115,6 +4148,13 @@ app.post('/api/maintenance/import-excel', requireAuth, upload.single('file'), as
 
       rackNamesInFile.push(rackData.rackName);
       racks.push({ ...rackData, rowNumber });
+    });
+
+    logger.info('Excel import: rows parsed', {
+      totalRowsRead,
+      validRacksFound: racks.length,
+      duplicatesSkipped: duplicatesInFile.size,
+      user
     });
 
     if (racks.length === 0) {

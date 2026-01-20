@@ -22,6 +22,7 @@ async function createTemplate() {
     '7. No dejes filas vacias entre racks',
     '8. Maximo 1000 racks por archivo',
     '9. Guarda el archivo y subelo en la aplicacion',
+    '10. IMPORTANTE: Borra las filas de ejemplo (RACK-001, RACK-002, RACK-003) antes de agregar tus datos',
   ];
   
   instructions.forEach((instruction, index) => {
@@ -96,11 +97,6 @@ async function createTemplate() {
       fgColor: { argb: 'FFFFFACD' }
     };
   });
-  
-  // Add note
-  dataSheet.getCell('A5').value = 'NOTA: Las filas 2-4 son ejemplos. Bórralas y añade tus datos debajo.';
-  dataSheet.getCell('A5').font = { italic: true, color: { argb: 'FFFF0000' } };
-  dataSheet.mergeCells('A5:B5');
   
   await workbook.xlsx.writeFile('plantilla_mantenimiento.xlsx');
   console.log('✅ Excel template created successfully in project root!');
