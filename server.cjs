@@ -2902,22 +2902,48 @@ app.get('/api/maintenance', requireAuth, async (req, res) => {
       try {
         let allPowerData = [];
         let skip = 0;
-        const limit = 500;
+        const limit = 100;
         let hasMore = true;
+        let pageCount = 0;
+        const maxPages = 100;
 
-        while (hasMore) {
+        logger.info('[MAINT-READ] STEP 2b: Starting API pagination...', { limit, maxPages });
+
+        while (hasMore && pageCount < maxPages) {
           const response = await fetchFromNengApi(
             `${process.env.NENG_API_URL}?skip=${skip}&limit=${limit}`,
             { method: 'GET', headers: { 'Authorization': `Bearer ${process.env.NENG_API_KEY}`, 'Content-Type': 'application/json' } }
           );
 
+          pageCount++;
+
           if (response.success && Array.isArray(response.data)) {
+            const recordsInPage = response.data.length;
             allPowerData = allPowerData.concat(response.data);
-            hasMore = response.data.length >= limit;
+
+            logger.info('[MAINT-READ] API page loaded', {
+              page: pageCount,
+              skip,
+              recordsInPage,
+              totalSoFar: allPowerData.length,
+              willContinue: recordsInPage >= limit
+            });
+
+            hasMore = recordsInPage >= limit;
             skip += limit;
           } else {
+            logger.warn('[MAINT-READ] API pagination stopped - invalid response', {
+              page: pageCount,
+              skip,
+              responseSuccess: response.success,
+              isArray: Array.isArray(response.data)
+            });
             hasMore = false;
           }
+        }
+
+        if (pageCount >= maxPages) {
+          logger.warn('[MAINT-READ] Reached max pages limit', { maxPages, totalRecords: allPowerData.length });
         }
 
         logger.info('[MAINT-READ] STEP 3: Fetched data from NENG API for enrichment', {
@@ -3173,18 +3199,21 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
     if (process.env.NENG_API_URL && process.env.NENG_API_KEY) {
       try {
         let skip = 0;
-        const limit = 500;
+        const limit = 100;
         let hasMore = true;
         let found = false;
         let totalRecords = 0;
+        let pageCount = 0;
+        const maxPages = 100;
 
-        logger.info('[MAINT] Searching rack in NENG API...', { rackId: sanitizedRackId });
+        logger.info('[MAINT] Searching rack in NENG API...', { rackId: sanitizedRackId, limit });
 
-        while (hasMore && !found) {
+        while (hasMore && !found && pageCount < maxPages) {
           const response = await fetchFromNengApi(
             `${process.env.NENG_API_URL}?skip=${skip}&limit=${limit}`,
             { method: 'GET' }
           );
+          pageCount++;
 
           if (response.success && Array.isArray(response.data)) {
             totalRecords += response.data.length;
@@ -3234,6 +3263,10 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
             }
             hasMore = response.data.length >= limit;
             skip += limit;
+
+            if (pageCount % 10 === 0) {
+              logger.info('[MAINT] Search progress', { page: pageCount, totalRecordsSearched: totalRecords, found });
+            }
           } else {
             hasMore = false;
           }
@@ -3243,6 +3276,7 @@ app.post('/api/maintenance/rack', requireAuth, async (req, res) => {
           logger.warn('[MAINT] Rack NOT FOUND in NENG API after searching', {
             rackName: sanitizedRackId,
             totalRecordsSearched: totalRecords,
+            pagesSearched: pageCount,
             willUseDataFrom: rackData ? 'frontend_rackData' : 'defaults'
           });
         }
