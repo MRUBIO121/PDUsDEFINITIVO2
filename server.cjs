@@ -382,12 +382,26 @@ async function openSonarAlert(pdu, alertReason, alertId) {
           `);
       });
       sonarErrorCache.delete(rackIdStr);
-    } catch (dbError) {}
+      logger.info('[SONAR] ALERT OPENED', {
+        rack: pdu.name,
+        rackId: rackIdStr,
+        reason: alertReason,
+        uuid: result.uuid
+      });
+    } catch (dbError) {
+      logger.warn('[SONAR] Alert opened but failed to save UUID', { rackId: rackIdStr, uuid: result.uuid });
+    }
   } else if (!result.success) {
     sonarErrorCache.set(rackIdStr, {
       error: result.error,
       timestamp: new Date(),
       alertReason
+    });
+    logger.error('[SONAR] FAILED TO OPEN ALERT', {
+      rack: pdu.name,
+      rackId: rackIdStr,
+      reason: alertReason,
+      error: result.error
     });
   }
 
@@ -430,12 +444,27 @@ async function closeSonarAlert(alert) {
           `);
       });
       sonarErrorCache.delete(alert.rack_id);
-    } catch (dbError) {}
+      logger.info('[SONAR] ALERT CLOSED', {
+        rack: alert.name,
+        rackId: alert.rack_id,
+        reason: alert.alert_reason,
+        uuidOpen: alert.uuid_open,
+        uuidClosed: result.uuid
+      });
+    } catch (dbError) {
+      logger.warn('[SONAR] Alert closed but failed to save UUID', { rackId: alert.rack_id, uuid: result.uuid });
+    }
   } else if (!result.success) {
     sonarErrorCache.set(alert.rack_id, {
       error: result.error,
       timestamp: new Date(),
       type: 'close_failed'
+    });
+    logger.error('[SONAR] FAILED TO CLOSE ALERT', {
+      rack: alert.name,
+      rackId: alert.rack_id,
+      reason: alert.alert_reason,
+      error: result.error
     });
   }
 
