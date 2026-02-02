@@ -2251,6 +2251,271 @@ app.delete('/api/users/:id', requireAuth, requireRole('Administrador'), async (r
 });
 
 // ============================================================================================================
+// AUTOMATIC ALERT PROCESSING - Runs independently of frontend
+// ============================================================================================================
+
+const ALERT_PROCESSING_INTERVAL = parseInt(process.env.ALERT_PROCESSING_INTERVAL_MS) || 120000; // Default: 2 minutes
+let alertProcessingTimer = null;
+let isProcessingAlerts = false;
+
+async function processAlertsAutomatically() {
+  if (isProcessingAlerts) {
+    logger.debug('[AUTO-ALERT] Skipping - previous processing still in progress');
+    return;
+  }
+
+  isProcessingAlerts = true;
+  const startTime = Date.now();
+
+  try {
+    logger.info('[AUTO-ALERT] Starting automatic alert processing...');
+
+    if (!process.env.NENG_API_URL || !process.env.NENG_API_KEY) {
+      logger.warn('[AUTO-ALERT] NENG API not configured, skipping');
+      return;
+    }
+
+    const thresholds = await fetchThresholdsFromDatabase();
+
+    let allPowerData = [];
+    let powerSkip = 0;
+    const pageSize = 100;
+    let hasMorePowerData = true;
+
+    while (hasMorePowerData) {
+      const powerResponse = await fetchFromNengApi(
+        `${process.env.NENG_API_URL}?skip=${powerSkip}&limit=${pageSize}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!powerResponse.success || !powerResponse.data) {
+        logger.warn('[AUTO-ALERT] Invalid response from NENG Power API');
+        break;
+      }
+
+      const pageData = Array.isArray(powerResponse.data) ? powerResponse.data : [];
+
+      if (pageData.length === 0) {
+        hasMorePowerData = false;
+      } else {
+        allPowerData = allPowerData.concat(pageData);
+        powerSkip += pageSize;
+
+        if (pageData.length < pageSize) {
+          hasMorePowerData = false;
+        }
+      }
+    }
+
+    let allSensorsData = [];
+    if (process.env.NENG_SENSORS_API_URL) {
+      let sensorSkip = 0;
+      let hasMoreSensorData = true;
+
+      try {
+        while (hasMoreSensorData) {
+          const sensorsResponse = await fetchFromNengApi(
+            `${process.env.NENG_SENSORS_API_URL}?skip=${sensorSkip}&limit=${pageSize}`,
+            {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${process.env.NENG_API_KEY}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          if (!sensorsResponse.success || !sensorsResponse.data) {
+            hasMoreSensorData = false;
+            break;
+          }
+
+          const pageData = Array.isArray(sensorsResponse.data) ? sensorsResponse.data : [];
+
+          if (pageData.length === 0) {
+            hasMoreSensorData = false;
+          } else {
+            allSensorsData = allSensorsData.concat(pageData);
+            sensorSkip += pageSize;
+
+            if (pageData.length < pageSize) {
+              hasMoreSensorData = false;
+            }
+          }
+        }
+      } catch (sensorError) {
+        logger.debug('[AUTO-ALERT] Sensors API failed, continuing without sensor data');
+      }
+    }
+
+    const combinedData = allPowerData
+      .filter(powerItem => {
+        const hasValidRackName = powerItem.rackName &&
+                                  String(powerItem.rackName).trim() !== '' &&
+                                  String(powerItem.rackName).trim() !== 'null' &&
+                                  String(powerItem.rackName).trim() !== 'undefined';
+        return hasValidRackName;
+      })
+      .map(powerItem => {
+        const mapped = {
+          id: String(powerItem.id),
+          rackId: String(powerItem.rackId),
+          name: powerItem.rackName || powerItem.name,
+          country: 'España',
+          site: powerItem.site,
+          dc: powerItem.dc,
+          phase: powerItem.phase,
+          chain: String(powerItem.chain || ''),
+          node: String(powerItem.node || ''),
+          serial: powerItem.serial,
+          current: parseFloat(powerItem.totalAmps) || 0,
+          voltage: parseFloat(powerItem.totalVolts) || 0,
+          temperature: parseFloat(powerItem.avgVolts) || 0,
+          gwName: powerItem.gwName || 'N/A',
+          gwIp: powerItem.gwIp || 'N/A',
+          lastUpdated: powerItem.lastUpdate || new Date().toISOString()
+        };
+
+        const matchingSensor = allSensorsData.find(sensor =>
+          String(sensor.rackId) === String(powerItem.rackId)
+        );
+
+        if (matchingSensor) {
+          mapped.sensorTemperature = (matchingSensor.temperature === 'N/A' || matchingSensor.temperature === null || matchingSensor.temperature === undefined)
+            ? 'N/A'
+            : (parseFloat(matchingSensor.temperature) || null);
+
+          mapped.sensorHumidity = (matchingSensor.humidity === 'N/A' || matchingSensor.humidity === null || matchingSensor.humidity === undefined)
+            ? 'N/A'
+            : (parseFloat(matchingSensor.humidity) || null);
+        }
+
+        return mapped;
+      });
+
+    if (combinedData.length === 0) {
+      logger.warn('[AUTO-ALERT] No rack data available');
+      return;
+    }
+
+    const maintenanceRackIds = await getMaintenanceRackIds();
+
+    const powerRackIds = new Set(combinedData.map(pdu => pdu.rackId));
+
+    allSensorsData.forEach(sensorData => {
+      const sensorRackId = String(sensorData.rackId);
+
+      if (!powerRackIds.has(sensorRackId)) {
+        const pduFromSensor = {
+          id: sensorData.id || sensorRackId,
+          rackId: sensorRackId,
+          name: sensorData.rackName || sensorRackId,
+          country: 'España',
+          site: sensorData.site || 'Unknown',
+          dc: sensorData.dc || 'Unknown',
+          phase: sensorData.phase || 'Unknown',
+          chain: sensorData.chain || 'Unknown',
+          node: sensorData.node || 'Unknown',
+          serial: sensorData.serial || 'Unknown',
+          current: 0,
+          voltage: 0,
+          temperature: 0,
+          sensorTemperature: (sensorData.temperature === 'N/A' || sensorData.temperature === null || sensorData.temperature === undefined)
+            ? 'N/A'
+            : (parseFloat(sensorData.temperature) || null),
+          sensorHumidity: (sensorData.humidity === 'N/A' || sensorData.humidity === null || sensorData.humidity === undefined)
+            ? 'N/A'
+            : (parseFloat(sensorData.humidity) || null),
+          gwName: sensorData.gwName || 'N/A',
+          gwIp: sensorData.gwIp || 'N/A',
+          lastUpdated: sensorData.lastUpdate || new Date().toISOString()
+        };
+
+        combinedData.push(pduFromSensor);
+        powerRackIds.add(sensorRackId);
+      }
+    });
+
+    const processedData = await processRackData(combinedData, thresholds);
+
+    const nonMaintenanceData = processedData.filter(pdu => {
+      const isInMaintenance = maintenanceRackIds.has(pdu.rackId);
+      return !isInMaintenance;
+    });
+
+    await manageActiveCriticalAlerts(nonMaintenanceData, thresholds);
+
+    const rackGroups = [];
+    const rackMap = new Map();
+
+    processedData.forEach(pdu => {
+      const rackId = pdu.rackId || pdu.id;
+      if (!rackMap.has(rackId)) {
+        rackMap.set(rackId, []);
+      }
+      rackMap.get(rackId).push(pdu);
+    });
+
+    Array.from(rackMap.values()).forEach(rackGroup => {
+      rackGroups.push(rackGroup);
+    });
+
+    const sonarSentRacks = await getRacksWithSonarAlerts();
+
+    racksCache.data = rackGroups;
+    racksCache.sonarSentRacks = Array.from(sonarSentRacks);
+    racksCache.timestamp = Date.now();
+
+    const duration = Date.now() - startTime;
+    logger.info('[AUTO-ALERT] Processing completed', {
+      racksProcessed: processedData.length,
+      maintenanceRacks: maintenanceRackIds.size,
+      nonMaintenanceRacks: nonMaintenanceData.length,
+      sonarEnabled: SONAR_CONFIG.enabled,
+      durationMs: duration
+    });
+
+  } catch (error) {
+    logger.error('[AUTO-ALERT] Error during automatic processing', { error: error.message });
+  } finally {
+    isProcessingAlerts = false;
+  }
+}
+
+function startAutomaticAlertProcessing() {
+  if (alertProcessingTimer) {
+    clearInterval(alertProcessingTimer);
+  }
+
+  logger.info('[AUTO-ALERT] Starting automatic alert processing service', {
+    intervalMs: ALERT_PROCESSING_INTERVAL,
+    intervalMinutes: (ALERT_PROCESSING_INTERVAL / 60000).toFixed(1)
+  });
+
+  setTimeout(async () => {
+    await processAlertsAutomatically();
+  }, 5000);
+
+  alertProcessingTimer = setInterval(async () => {
+    await processAlertsAutomatically();
+  }, ALERT_PROCESSING_INTERVAL);
+}
+
+function stopAutomaticAlertProcessing() {
+  if (alertProcessingTimer) {
+    clearInterval(alertProcessingTimer);
+    alertProcessingTimer = null;
+    logger.info('[AUTO-ALERT] Automatic alert processing stopped');
+  }
+}
+
+// ============================================================================================================
 // PROTECTED API ENDPOINTS - Apply authentication to existing endpoints
 // ============================================================================================================
 
@@ -4850,7 +5115,8 @@ const server = app.listen(port, async () => {
     port,
     environment: process.env.NODE_ENV || 'development',
     frontend: process.env.FRONTEND_URL || 'http://localhost:5173',
-    sonar: SONAR_CONFIG.enabled ? 'enabled' : 'disabled'
+    sonar: SONAR_CONFIG.enabled ? 'enabled' : 'disabled',
+    autoAlertInterval: `${ALERT_PROCESSING_INTERVAL / 60000} minutes`
   });
 
   if (SONAR_CONFIG.enabled) {
@@ -4862,6 +5128,8 @@ const server = app.listen(port, async () => {
       }
     }, 3000);
   }
+
+  startAutomaticAlertProcessing();
 });
 
 // Set server timeout to 5 minutes (for long-running operations like chain maintenance)
@@ -4872,6 +5140,8 @@ server.headersTimeout = 66000;
 // Graceful shutdown
 async function gracefulShutdown(signal) {
   logger.info('Shutdown initiated', { signal });
+
+  stopAutomaticAlertProcessing();
 
   server.close(async () => {
     logger.info('HTTP server closed');
