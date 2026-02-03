@@ -242,6 +242,15 @@ function makeHttpsRequest(url, options, body) {
   });
 }
 
+function getGroupBySite(site) {
+  const siteLower = (site || '').toLowerCase();
+  if (siteLower.includes('cantabria')) {
+    return 'GTH_IN_ES_DCaaS_DC_H&E_Cantabria';
+  } else if (siteLower.includes('boadilla')) {
+    return 'GTH_IN_ES_DCaaS_DC_H&E_Boadilla';
+  }
+  return '';
+}
 
 // Store for tracking SONAR errors per rack (in-memory cache)
 const sonarErrorCache = new Map();
@@ -270,14 +279,6 @@ async function sendToSonar(alertData, state) {
         origin: 'NGEN_ALERT'
       };
     } else {
-      const siteLower = (alertData.site || '').toLowerCase();
-      let group = '';
-      if (siteLower.includes('cantabria')) {
-        group = 'GTH_IN_ES_DCaaS_DC_H&E_Cantabria';
-      } else if (siteLower.includes('boadilla')) {
-        group = 'GTH_IN_ES_DCaaS_DC_H&E_Boadilla';
-      }
-
       payload = {
         pid: alertIdentifier,
         state: state,
@@ -304,7 +305,7 @@ async function sendToSonar(alertData, state) {
           humidity: alertData.humidity != null ? alertData.humidity : 'N/A',
           gwName: alertData.gwName || 'N/A',
           gwIp: alertData.gwIp || 'N/A',
-          group: group
+          group: getGroupBySite(alertData.site)
         }
       };
     }
@@ -1270,6 +1271,7 @@ async function saveAlertToHistory(alertData, resolvedBy = null, resolutionType =
               AND resolved_at IS NULL
           `);
       } else {
+        const groupValue = alertData.group || getGroupBySite(alertData.site);
         await pool.request()
           .input('pdu_id', sql.NVarChar, String(alertData.pdu_id))
           .input('rack_id', sql.NVarChar, String(alertData.rack_id))
@@ -1286,13 +1288,14 @@ async function saveAlertToHistory(alertData, resolvedBy = null, resolutionType =
           .input('alert_value', sql.Decimal(18, 4), alertData.alert_value)
           .input('alert_field', sql.NVarChar, alertData.alert_field)
           .input('threshold_exceeded', sql.Decimal(18, 4), alertData.threshold_exceeded)
+          .input('group', sql.NVarChar, groupValue)
           .query(`
             INSERT INTO alerts_history
             (pdu_id, rack_id, name, country, site, dc, phase, chain, node, serial,
-             metric_type, alert_reason, alert_value, alert_field, threshold_exceeded)
+             metric_type, alert_reason, alert_value, alert_field, threshold_exceeded, [group])
             VALUES
             (@pdu_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial,
-             @metric_type, @alert_reason, @alert_value, @alert_field, @threshold_exceeded)
+             @metric_type, @alert_reason, @alert_value, @alert_field, @threshold_exceeded, @group)
           `);
       }
     });
@@ -1530,6 +1533,7 @@ async function processCriticalAlert(pdu, reason, thresholds) {
             WHERE pdu_id = @pdu_id AND metric_type = @metric_type AND alert_reason = @alert_reason
           `);
       } else {
+        const groupValue = getGroupBySite(pdu.site);
         const insertResult = await pool.request()
           .input('pdu_id', sql.NVarChar, pduIdStr)
           .input('rack_id', sql.NVarChar, rackIdStr)
@@ -1546,14 +1550,15 @@ async function processCriticalAlert(pdu, reason, thresholds) {
           .input('alert_value', sql.Decimal(18, 4), alertValue)
           .input('alert_field', sql.NVarChar, alertField)
           .input('threshold_exceeded', sql.Decimal(18, 4), thresholdExceeded)
+          .input('group', sql.NVarChar, groupValue)
           .query(`
             INSERT INTO active_critical_alerts
             (pdu_id, rack_id, name, country, site, dc, phase, chain, node, serial,
-             metric_type, alert_reason, alert_value, alert_field, threshold_exceeded)
+             metric_type, alert_reason, alert_value, alert_field, threshold_exceeded, [group])
             OUTPUT INSERTED.id
             VALUES
             (@pdu_id, @rack_id, @name, @country, @site, @dc, @phase, @chain, @node, @serial,
-             @metric_type, @alert_reason, @alert_value, @alert_field, @threshold_exceeded)
+             @metric_type, @alert_reason, @alert_value, @alert_field, @threshold_exceeded, @group)
           `);
 
         const insertedAlertId = insertResult.recordset[0]?.id;
@@ -1579,7 +1584,8 @@ async function processCriticalAlert(pdu, reason, thresholds) {
           alert_reason: reason,
           alert_value: alertValue,
           alert_field: alertField,
-          threshold_exceeded: thresholdExceeded
+          threshold_exceeded: thresholdExceeded,
+          group: groupValue
         });
       }
 
