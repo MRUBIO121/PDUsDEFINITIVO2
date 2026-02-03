@@ -270,6 +270,14 @@ async function sendToSonar(alertData, state) {
         origin: 'NGEN_ALERT'
       };
     } else {
+      const siteLower = (alertData.site || '').toLowerCase();
+      let group = '';
+      if (siteLower.includes('cantabria')) {
+        group = 'GTH_IN_ES_DCaaS_DC_H&E_Cantabria';
+      } else if (siteLower.includes('boadilla')) {
+        group = 'GTH_IN_ES_DCaaS_DC_H&E_Boadilla';
+      }
+
       payload = {
         pid: alertIdentifier,
         state: state,
@@ -295,7 +303,8 @@ async function sendToSonar(alertData, state) {
           temperature: alertData.temperature != null ? alertData.temperature : 'N/A',
           humidity: alertData.humidity != null ? alertData.humidity : 'N/A',
           gwName: alertData.gwName || 'N/A',
-          gwIp: alertData.gwIp || 'N/A'
+          gwIp: alertData.gwIp || 'N/A',
+          group: group
         }
       };
     }
