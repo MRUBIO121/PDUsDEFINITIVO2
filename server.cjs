@@ -305,7 +305,8 @@ async function sendToSonar(alertData, state) {
           humidity: alertData.humidity != null ? alertData.humidity : 'N/A',
           gwName: alertData.gwName || 'N/A',
           gwIp: alertData.gwIp || 'N/A',
-          group: getGroupBySite(alertData.site)
+          group: getGroupBySite(alertData.site),
+          alert_started: alertData.alert_started || new Date().toISOString()
         }
       };
     }
@@ -374,7 +375,8 @@ async function openSonarAlert(pdu, alertReason, alertId) {
     temperature: tempValue,
     humidity: humidityValue,
     gwName: pdu.gwName && pdu.gwName !== '' ? pdu.gwName : 'N/A',
-    gwIp: pdu.gwIp && pdu.gwIp !== '' ? pdu.gwIp : 'N/A'
+    gwIp: pdu.gwIp && pdu.gwIp !== '' ? pdu.gwIp : 'N/A',
+    alert_started: new Date().toISOString()
   };
 
   const result = await sendToSonar(alertData, 'OPEN');
@@ -568,7 +570,8 @@ async function sendExistingAlertsToSonar() {
           temperature: pduData.sensorTemperature,
           humidity: pduData.sensorHumidity,
           gwName: pduData.gwName,
-          gwIp: pduData.gwIp
+          gwIp: pduData.gwIp,
+          alert_started: alert.alert_started_at ? new Date(alert.alert_started_at).toISOString() : new Date().toISOString()
         }, 'OPEN');
 
         if (result.success && result.uuid) {
