@@ -252,6 +252,19 @@ function getGroupBySite(site) {
   return '';
 }
 
+function formatDateForSonar(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const ms = String(d.getMilliseconds()).padStart(3, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
+}
+
 // Store for tracking SONAR errors per rack (in-memory cache)
 const sonarErrorCache = new Map();
 
@@ -306,7 +319,7 @@ async function sendToSonar(alertData, state) {
           gwName: alertData.gwName || 'N/A',
           gwIp: alertData.gwIp || 'N/A',
           group: getGroupBySite(alertData.site),
-          alert_started: alertData.alert_started || new Date().toISOString()
+          alert_started: alertData.alert_started || formatDateForSonar(new Date())
         }
       };
     }
@@ -376,7 +389,7 @@ async function openSonarAlert(pdu, alertReason, alertId) {
     humidity: humidityValue,
     gwName: pdu.gwName && pdu.gwName !== '' ? pdu.gwName : 'N/A',
     gwIp: pdu.gwIp && pdu.gwIp !== '' ? pdu.gwIp : 'N/A',
-    alert_started: new Date().toISOString()
+    alert_started: formatDateForSonar(new Date())
   };
 
   const result = await sendToSonar(alertData, 'OPEN');
@@ -571,7 +584,7 @@ async function sendExistingAlertsToSonar() {
           humidity: pduData.sensorHumidity,
           gwName: pduData.gwName,
           gwIp: pduData.gwIp,
-          alert_started: alert.alert_started_at ? new Date(alert.alert_started_at).toISOString() : new Date().toISOString()
+          alert_started: formatDateForSonar(alert.alert_started_at || new Date())
         }, 'OPEN');
 
         if (result.success && result.uuid) {
