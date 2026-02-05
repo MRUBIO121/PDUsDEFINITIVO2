@@ -318,7 +318,7 @@ async function sendToSonar(alertData, state) {
           humidity: alertData.humidity != null ? alertData.humidity : 'N/A',
           gwName: alertData.gwName || 'N/A',
           gwIp: alertData.gwIp || 'N/A',
-          group: getGroupBySite(alertData.site),
+          GrupoResponsable: getGroupBySite(alertData.site),
           alert_started: alertData.alert_started || formatDateForSonar(new Date())
         }
       };
