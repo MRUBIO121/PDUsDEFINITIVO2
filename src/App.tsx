@@ -414,40 +414,41 @@ function App() {
       }
     });
 
-    // Rack-level summary (logical racks) - KEEP for group headers
-    // Rack-level summary (racks) - KEEP for group headers
     const rackSummary = {
       critical: {
         total: 0,
         amperage: 0,
         temperature: 0,
         humidity: 0,
-        voltage: 0
+        voltage: 0,
+        power: 0
       },
       warning: {
         total: 0,
         amperage: 0,
         temperature: 0,
         humidity: 0,
-        voltage: 0
+        voltage: 0,
+        power: 0
       }
     };
 
-    // Sets to track unique racks with different types of alerts
     const criticalRacks = new Set();
     const warningRacks = new Set();
-    const allAlertingRacks = new Set(); // Tracks all racks with any type of alert
+    const allAlertingRacks = new Set();
     const criticalRacksByMetric = {
       amperage: new Set(),
       temperature: new Set(),
       humidity: new Set(),
-      voltage: new Set()
+      voltage: new Set(),
+      power: new Set()
     };
     const warningRacksByMetric = {
       amperage: new Set(),
       temperature: new Set(),
       humidity: new Set(),
-      voltage: new Set()
+      voltage: new Set(),
+      power: new Set()
     };
 
     userFilteredRackGroups.forEach(rackGroup => {
@@ -463,12 +464,10 @@ function App() {
       const hasCriticalPDU = rackGroup.some(r => r.status === 'critical');
       const hasWarningPDU = rackGroup.some(r => r.status === 'warning');
 
-      // Count racks independently for each alert type they have
       if (hasCriticalPDU) {
         criticalRacks.add(rackId);
         allAlertingRacks.add(rackId);
-      }
-      if (hasWarningPDU) {
+      } else if (hasWarningPDU) {
         warningRacks.add(rackId);
         allAlertingRacks.add(rackId);
       }
@@ -477,13 +476,12 @@ function App() {
       rackGroup.forEach(pdu => {
         if (pdu.reasons && pdu.reasons.length > 0) {
           pdu.reasons.forEach(reason => {
-            // Track racks with critical alerts by metric
             if (reason.startsWith('critical_')) {
               if (reason.includes('amperage')) {
                 criticalRacksByMetric.amperage.add(rackId);
               }
               if (reason.includes('temperature')) {
-                warningRacksByMetric.temperature.add(rackId);
+                criticalRacksByMetric.temperature.add(rackId);
               }
               if (reason.includes('humidity')) {
                 criticalRacksByMetric.humidity.add(rackId);
@@ -491,8 +489,10 @@ function App() {
               if (reason.includes('voltage')) {
                 criticalRacksByMetric.voltage.add(rackId);
               }
+              if (reason.includes('power')) {
+                criticalRacksByMetric.power.add(rackId);
+              }
             }
-            // Track racks with warning alerts by metric
             else if (reason.startsWith('warning_')) {
               if (reason.includes('amperage')) {
                 warningRacksByMetric.amperage.add(rackId);
@@ -505,6 +505,9 @@ function App() {
               }
               if (reason.includes('voltage')) {
                 warningRacksByMetric.voltage.add(rackId);
+              }
+              if (reason.includes('power')) {
+                warningRacksByMetric.power.add(rackId);
               }
             }
           });
@@ -519,10 +522,12 @@ function App() {
     rackSummary.critical.temperature = criticalRacksByMetric.temperature.size;
     rackSummary.critical.humidity = criticalRacksByMetric.humidity.size;
     rackSummary.critical.voltage = criticalRacksByMetric.voltage.size;
+    rackSummary.critical.power = criticalRacksByMetric.power.size;
     rackSummary.warning.amperage = warningRacksByMetric.amperage.size;
     rackSummary.warning.temperature = warningRacksByMetric.temperature.size;
     rackSummary.warning.humidity = warningRacksByMetric.humidity.size;
     rackSummary.warning.voltage = warningRacksByMetric.voltage.size;
+    rackSummary.warning.power = warningRacksByMetric.power.size;
 
     // Calculate total racks accessible by user (INCLUDING maintenance for consistency with group counts)
     const totalUserRacks = userFilteredRackGroups.length;

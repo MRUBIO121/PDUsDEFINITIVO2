@@ -59,14 +59,7 @@ export default function GatewayGroup({
 
   const gwKey = `${gwName}-${gwIp}`;
 
-  const totalRacksForGateway = (originalRackGroups || []).filter(rackGroup => {
-    const firstRack = rackGroup[0];
-    return (firstRack.country || 'N/A') === country &&
-           (firstRack.site || 'N/A') === site &&
-           (firstRack.dc || 'N/A') === dc &&
-           (firstRack.gwName || 'N/A') === gwName &&
-           (firstRack.gwIp || 'N/A') === gwIp;
-  }).length;
+  const totalRacksForGateway = rackGroups.length;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -123,27 +116,15 @@ export default function GatewayGroup({
 
             if (status === 'maintenance') {
               if (activeView === 'alertas') return null;
-              count = (originalRackGroups || []).filter(rackGroup => {
-                const firstRack = rackGroup[0];
-                if ((firstRack.country || 'N/A') !== country) return false;
-                if ((firstRack.site || 'N/A') !== site) return false;
-                if ((firstRack.dc || 'N/A') !== dc) return false;
-                if ((firstRack.gwName || 'N/A') !== gwName) return false;
-                if ((firstRack.gwIp || 'N/A') !== gwIp) return false;
-                const rackName = String(firstRack.name || '').trim();
-                const rackId = String(firstRack.rackId || firstRack.id || '').trim();
+              count = rackGroups.filter(rackGroup => {
+                const rackName = String(rackGroup[0].name || '').trim();
+                const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
                 return (rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId));
               }).length;
             } else {
-              count = (originalRackGroups || []).filter(rackGroup => {
-                const firstRack = rackGroup[0];
-                if ((firstRack.country || 'N/A') !== country) return false;
-                if ((firstRack.site || 'N/A') !== site) return false;
-                if ((firstRack.dc || 'N/A') !== dc) return false;
-                if ((firstRack.gwName || 'N/A') !== gwName) return false;
-                if ((firstRack.gwIp || 'N/A') !== gwIp) return false;
-                const rackName = String(firstRack.name || '').trim();
-                const rackId = String(firstRack.rackId || firstRack.id || '').trim();
+              count = rackGroups.filter(rackGroup => {
+                const rackName = String(rackGroup[0].name || '').trim();
+                const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
                 if ((rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId))) return false;
                 return rackGroup.some(rack => rack.status === status);
               }).length;

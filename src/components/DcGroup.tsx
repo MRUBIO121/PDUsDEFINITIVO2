@@ -95,6 +95,14 @@ export default function DcGroup({
     }
   };
 
+  const displayedRackGroups = React.useMemo(() => {
+    const groups: RackData[][] = [];
+    Object.values(gwGroups).forEach(rackGroupList => {
+      groups.push(...rackGroupList);
+    });
+    return groups;
+  }, [gwGroups]);
+
   return (
     <div className="bg-white rounded-lg shadow space-y-4 border-2 border-blue-600 mb-4">
       {/* DC Header */}
@@ -128,23 +136,15 @@ export default function DcGroup({
 
             if (status === 'maintenance') {
               if (activeView === 'alertas') return null;
-              count = (originalRackGroups || []).filter(rackGroup => {
-                const firstRack = rackGroup[0];
-                if ((firstRack.country || 'N/A') !== country) return false;
-                if ((firstRack.site || 'N/A') !== site) return false;
-                if ((firstRack.dc || 'N/A') !== dc) return false;
-                const rackName = String(firstRack.name || '').trim();
-                const rackId = String(firstRack.rackId || firstRack.id || '').trim();
+              count = displayedRackGroups.filter(rackGroup => {
+                const rackName = String(rackGroup[0].name || '').trim();
+                const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
                 return (rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId));
               }).length;
             } else {
-              count = (originalRackGroups || []).filter(rackGroup => {
-                const firstRack = rackGroup[0];
-                if ((firstRack.country || 'N/A') !== country) return false;
-                if ((firstRack.site || 'N/A') !== site) return false;
-                if ((firstRack.dc || 'N/A') !== dc) return false;
-                const rackName = String(firstRack.name || '').trim();
-                const rackId = String(firstRack.rackId || firstRack.id || '').trim();
+              count = displayedRackGroups.filter(rackGroup => {
+                const rackName = String(rackGroup[0].name || '').trim();
+                const rackId = String(rackGroup[0].rackId || rackGroup[0].id || '').trim();
                 if ((rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId))) return false;
                 return rackGroup.some(rack => rack.status === status);
               }).length;
