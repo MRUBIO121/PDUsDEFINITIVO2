@@ -187,63 +187,53 @@ function App() {
 
   // Calculate alert summary statistics
   const filteredAlertSummary = React.useMemo(() => {
-    // Rack-level summary (racks)
     const rackSummary = {
       critical: {
         total: 0,
         amperage: 0,
         temperature: 0,
         humidity: 0,
-        voltage: 0,
-        power: 0
+        voltage: 0
       },
       warning: {
         total: 0,
         amperage: 0,
         temperature: 0,
         humidity: 0,
-        voltage: 0,
-        power: 0
+        voltage: 0
       }
     };
 
-    // PDU-level summary (individual PDUs)
     const pduSummary = {
       critical: {
         total: 0,
         amperage: 0,
         temperature: 0,
         humidity: 0,
-        voltage: 0,
-        power: 0
+        voltage: 0
       },
       warning: {
         total: 0,
         amperage: 0,
         temperature: 0,
         humidity: 0,
-        voltage: 0,
-        power: 0
+        voltage: 0
       }
     };
 
-    // Sets to track unique logical racks with alerts
-    // Sets to track unique racks with alerts
     const criticalRacks = new Set();
     const warningRacks = new Set();
     const criticalRacksByMetric = {
       amperage: new Set(),
       temperature: new Set(),
       humidity: new Set(),
-      voltage: new Set(),
-      power: new Set()
+      voltage: new Set()
     };
     const warningRacksByMetric = {
       amperage: new Set(),
       temperature: new Set(),
       humidity: new Set(),
-      voltage: new Set(),
-      power: new Set()
+      voltage: new Set()
     };
 
     filteredRackGroups.forEach(rackGroup => {
@@ -292,12 +282,7 @@ function App() {
                 pduSummary.critical.voltage++;
                 criticalRacksByMetric.voltage.add(rackId);
               }
-              if (reason.includes('power')) {
-                pduSummary.critical.power++;
-                criticalRacksByMetric.power.add(rackId);
-              }
             }
-            // Count PDUs with warning alerts and track racks with warning alerts by metric
             else if (reason.startsWith('warning_')) {
               pduSummary.warning.total++;
               if (reason.includes('amperage')) {
@@ -315,10 +300,6 @@ function App() {
               if (reason.includes('voltage')) {
                 pduSummary.warning.voltage++;
                 warningRacksByMetric.voltage.add(rackId);
-              }
-              if (reason.includes('power')) {
-                pduSummary.warning.power++;
-                warningRacksByMetric.power.add(rackId);
               }
             }
           });
@@ -343,23 +324,20 @@ function App() {
 
   // Calculate GLOBAL alert summary statistics (for header display - always unfiltered)
   const globalAlertSummary = React.useMemo(() => {
-    // PDU-level summary (individual PDUs) - NEW for header display
     const pduSummary = {
       critical: {
         total: 0,
         amperage: 0,
         temperature: 0,
         humidity: 0,
-        voltage: 0,
-        power: 0
+        voltage: 0
       },
       warning: {
         total: 0,
         amperage: 0,
         temperature: 0,
         humidity: 0,
-        voltage: 0,
-        power: 0
+        voltage: 0
       }
     };
 
@@ -420,16 +398,14 @@ function App() {
         amperage: 0,
         temperature: 0,
         humidity: 0,
-        voltage: 0,
-        power: 0
+        voltage: 0
       },
       warning: {
         total: 0,
         amperage: 0,
         temperature: 0,
         humidity: 0,
-        voltage: 0,
-        power: 0
+        voltage: 0
       }
     };
 
@@ -440,15 +416,13 @@ function App() {
       amperage: new Set(),
       temperature: new Set(),
       humidity: new Set(),
-      voltage: new Set(),
-      power: new Set()
+      voltage: new Set()
     };
     const warningRacksByMetric = {
       amperage: new Set(),
       temperature: new Set(),
       humidity: new Set(),
-      voltage: new Set(),
-      power: new Set()
+      voltage: new Set()
     };
 
     userFilteredRackGroups.forEach(rackGroup => {
@@ -489,9 +463,6 @@ function App() {
               if (reason.includes('voltage')) {
                 criticalRacksByMetric.voltage.add(rackId);
               }
-              if (reason.includes('power')) {
-                criticalRacksByMetric.power.add(rackId);
-              }
             }
             else if (reason.startsWith('warning_')) {
               if (reason.includes('amperage')) {
@@ -506,9 +477,6 @@ function App() {
               if (reason.includes('voltage')) {
                 warningRacksByMetric.voltage.add(rackId);
               }
-              if (reason.includes('power')) {
-                warningRacksByMetric.power.add(rackId);
-              }
             }
           });
         }
@@ -522,12 +490,10 @@ function App() {
     rackSummary.critical.temperature = criticalRacksByMetric.temperature.size;
     rackSummary.critical.humidity = criticalRacksByMetric.humidity.size;
     rackSummary.critical.voltage = criticalRacksByMetric.voltage.size;
-    rackSummary.critical.power = criticalRacksByMetric.power.size;
     rackSummary.warning.amperage = warningRacksByMetric.amperage.size;
     rackSummary.warning.temperature = warningRacksByMetric.temperature.size;
     rackSummary.warning.humidity = warningRacksByMetric.humidity.size;
     rackSummary.warning.voltage = warningRacksByMetric.voltage.size;
-    rackSummary.warning.power = warningRacksByMetric.power.size;
 
     // Calculate total racks accessible by user (INCLUDING maintenance for consistency with group counts)
     const totalUserRacks = userFilteredRackGroups.length;
@@ -1306,11 +1272,10 @@ function App() {
                         )}
                         {activeMetricFilter !== 'all' && (
                           <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {activeMetricFilter === 'amperage' ? 'Amperaje' : 
-                             activeMetricFilter === 'temperature' ? 'Temperatura' : 
+                            {activeMetricFilter === 'amperage' ? 'Amperaje' :
+                             activeMetricFilter === 'temperature' ? 'Temperatura' :
                              activeMetricFilter === 'humidity' ? 'Humedad' :
-                             activeMetricFilter === 'voltage' ? 'Voltaje' :
-                             activeMetricFilter === 'power' ? 'Potencia' : activeMetricFilter}
+                             activeMetricFilter === 'voltage' ? 'Voltaje' : activeMetricFilter}
                           </span>
                         )}
                       </div>
