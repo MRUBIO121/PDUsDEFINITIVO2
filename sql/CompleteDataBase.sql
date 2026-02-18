@@ -1,8 +1,7 @@
 -- ============================================================================================================
--- ARCHIVO: complete_database_setup.sql
+-- ARCHIVO: CompleteDataBase.sql
 -- PROPOSITO: Setup completo consolidado de toda la base de datos del sistema de monitoreo de energia
--- FECHA: 2025-12-19
--- VERSION: 5.0 - Archivo unificado con todos los indices y campos UUID
+-- VERSION: 6.0 - Archivo unificado con TODOS los scripts SQL del proyecto
 -- ============================================================================================================
 --
 -- Este script consolidado incluye:
@@ -12,6 +11,8 @@
 --   4. Sistema de usuarios con roles y permisos
 --   5. Tablas de historico para alertas y mantenimientos
 --   6. Datos iniciales (umbrales por defecto, usuario admin)
+--   7. Campos gateway (gwName, gwIp) en alertas e historicos
+--   8. Campo [group] en alertas e historicos
 --
 -- TABLAS INCLUIDAS:
 --   1. threshold_configs           - Umbrales globales de todas las metricas
@@ -168,6 +169,7 @@ GO
 -- ============================================================================================================
 -- TABLA 3: active_critical_alerts
 -- Almacena SOLO las alertas criticas actualmente activas
+-- Incluye campos: gwName, gwIp, [group], uuid_open, uuid_closed
 -- ============================================================================================================
 
 PRINT '';
@@ -199,6 +201,9 @@ BEGIN
         last_updated_at DATETIME DEFAULT GETDATE(),
         uuid_open NVARCHAR(255) NULL,
         uuid_closed NVARCHAR(255) NULL,
+        gwName NVARCHAR(255) NULL,
+        gwIp NVARCHAR(50) NULL,
+        [group] NVARCHAR(100) NULL,
         CONSTRAINT UK_active_critical_alerts_pdu_metric UNIQUE (pdu_id, metric_type, alert_reason)
     );
 
@@ -209,6 +214,8 @@ BEGIN
     CREATE INDEX IX_active_critical_alerts_site ON active_critical_alerts(site);
     CREATE INDEX IX_active_critical_alerts_dc ON active_critical_alerts(dc);
     CREATE INDEX IX_active_critical_alerts_last_updated ON active_critical_alerts(last_updated_at);
+    CREATE INDEX IX_active_critical_alerts_uuid_open ON active_critical_alerts(uuid_open);
+    CREATE INDEX IX_active_critical_alerts_uuid_closed ON active_critical_alerts(uuid_closed);
 
     PRINT 'Tabla active_critical_alerts creada con indices';
 END
@@ -227,7 +234,45 @@ BEGIN
         ALTER TABLE active_critical_alerts ADD uuid_closed NVARCHAR(255) NULL;
         PRINT 'Campo uuid_closed agregado a active_critical_alerts';
     END
+
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'active_critical_alerts' AND COLUMN_NAME = 'gwName')
+    BEGIN
+        ALTER TABLE dbo.active_critical_alerts ADD gwName NVARCHAR(255) NULL;
+        PRINT 'Campo gwName agregado a active_critical_alerts';
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'active_critical_alerts' AND COLUMN_NAME = 'gwIp')
+    BEGIN
+        ALTER TABLE dbo.active_critical_alerts ADD gwIp NVARCHAR(50) NULL;
+        PRINT 'Campo gwIp agregado a active_critical_alerts';
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'active_critical_alerts' AND COLUMN_NAME = 'group')
+    BEGIN
+        ALTER TABLE dbo.active_critical_alerts ADD [group] NVARCHAR(100) NULL;
+        PRINT 'Campo [group] agregado a active_critical_alerts';
+    END
 END
+GO
+
+-- Crear indices de uuid si no existen (para tablas ya existentes)
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_active_critical_alerts_uuid_open')
+    CREATE INDEX IX_active_critical_alerts_uuid_open ON active_critical_alerts(uuid_open);
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_active_critical_alerts_uuid_closed')
+    CREATE INDEX IX_active_critical_alerts_uuid_closed ON active_critical_alerts(uuid_closed);
+GO
+
+-- Actualizar registros existentes de active_critical_alerts con el campo [group] basado en site
+UPDATE dbo.active_critical_alerts
+SET [group] = CASE
+    WHEN LOWER(site) LIKE '%cantabria%' THEN 'GTH_IN_ES_DCaaS_DC_H&E_Cantabria'
+    WHEN LOWER(site) LIKE '%boadilla%' THEN 'GTH_IN_ES_DCaaS_DC_H&E_Boadilla'
+    ELSE ''
+END
+WHERE [group] IS NULL;
+PRINT 'Registros existentes actualizados en active_critical_alerts con campo [group]';
 GO
 
 -- ============================================================================================================
@@ -422,6 +467,7 @@ GO
 -- ============================================================================================================
 -- TABLA 7: alerts_history
 -- Historico permanente de todas las alertas
+-- Incluye campos: gwName, gwIp, [group], uuid_open, uuid_closed
 -- ============================================================================================================
 
 PRINT '';
@@ -460,7 +506,11 @@ BEGIN
         duration_minutes INT,
 
         uuid_open NVARCHAR(255),
-        uuid_closed NVARCHAR(255)
+        uuid_closed NVARCHAR(255),
+
+        gwName NVARCHAR(255) NULL,
+        gwIp NVARCHAR(50) NULL,
+        [group] NVARCHAR(100) NULL
     );
 
     PRINT 'Tabla alerts_history creada correctamente';
@@ -468,9 +518,28 @@ END
 ELSE
 BEGIN
     PRINT 'Tabla alerts_history ya existe';
+
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'alerts_history' AND COLUMN_NAME = 'gwName')
+    BEGIN
+        ALTER TABLE dbo.alerts_history ADD gwName NVARCHAR(255) NULL;
+        PRINT 'Campo gwName agregado a alerts_history';
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'alerts_history' AND COLUMN_NAME = 'gwIp')
+    BEGIN
+        ALTER TABLE dbo.alerts_history ADD gwIp NVARCHAR(50) NULL;
+        PRINT 'Campo gwIp agregado a alerts_history';
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'alerts_history' AND COLUMN_NAME = 'group')
+    BEGIN
+        ALTER TABLE dbo.alerts_history ADD [group] NVARCHAR(100) NULL;
+        PRINT 'Campo [group] agregado a alerts_history';
+    END
 END
 GO
 
+-- Indices para alerts_history
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_alerts_history_rack_id')
     CREATE INDEX IX_alerts_history_rack_id ON alerts_history(rack_id);
 GO
@@ -499,12 +568,15 @@ IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_alerts_history_uuid_cl
     CREATE INDEX IX_alerts_history_uuid_closed ON alerts_history(uuid_closed);
 GO
 
-IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_active_critical_alerts_uuid_open')
-    CREATE INDEX IX_active_critical_alerts_uuid_open ON active_critical_alerts(uuid_open);
-GO
-
-IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_active_critical_alerts_uuid_closed')
-    CREATE INDEX IX_active_critical_alerts_uuid_closed ON active_critical_alerts(uuid_closed);
+-- Actualizar registros existentes de alerts_history con el campo [group] basado en site
+UPDATE dbo.alerts_history
+SET [group] = CASE
+    WHEN LOWER(site) LIKE '%cantabria%' THEN 'GTH_IN_ES_DCaaS_DC_H&E_Cantabria'
+    WHEN LOWER(site) LIKE '%boadilla%' THEN 'GTH_IN_ES_DCaaS_DC_H&E_Boadilla'
+    ELSE ''
+END
+WHERE [group] IS NULL;
+PRINT 'Registros existentes actualizados en alerts_history con campo [group]';
 GO
 
 -- ============================================================================================================
@@ -557,6 +629,7 @@ BEGIN
 END
 GO
 
+-- Indices para maintenance_history
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_maintenance_history_rack_id')
     CREATE INDEX IX_maintenance_history_rack_id ON maintenance_history(rack_id);
 GO
@@ -603,11 +676,11 @@ PRINT '';
 PRINT 'TABLAS CREADAS:';
 PRINT '  - threshold_configs         : Umbrales globales';
 PRINT '  - rack_threshold_overrides  : Umbrales por rack';
-PRINT '  - active_critical_alerts    : Alertas activas (con uuid_open/uuid_closed)';
+PRINT '  - active_critical_alerts    : Alertas activas (con uuid_open/uuid_closed, gwName/gwIp, [group])';
 PRINT '  - maintenance_entries       : Entradas de mantenimiento';
 PRINT '  - maintenance_rack_details  : Detalles de mantenimiento (con gwName/gwIp)';
 PRINT '  - usersAlertado             : Sistema de usuarios';
-PRINT '  - alerts_history            : Historico de alertas';
+PRINT '  - alerts_history            : Historico de alertas (con gwName/gwIp, [group])';
 PRINT '  - maintenance_history       : Historico de mantenimientos';
 PRINT '';
 PRINT 'USUARIO ADMIN: admin / Admin123!';
