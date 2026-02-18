@@ -30,7 +30,7 @@ npm install
 Ejecutar el script SQL en SQL Server Management Studio o sqlcmd:
 
 ```bash
-sqlcmd -S localhost -U sa -P tu_password -i sql/complete_database_setup.sql
+sqlcmd -S localhost -U sa -P tu_password -i sql/CompleteDataBase.sql
 ```
 
 Este script crea:
