@@ -114,15 +114,6 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800 font-medium mb-2">
-            Credenciales por defecto:
-          </p>
-          <div className="text-xs text-blue-700 space-y-1">
-            <p>Usuario: <span className="font-mono font-semibold">admin</span></p>
-            <p>Contraseña: <span className="font-mono font-semibold">Admin123!</span></p>
-          </div>
-        </div>
       </div>
     </div>
   );
