@@ -1041,10 +1041,10 @@ async function processRackData(racks, thresholds) {
     // Amperage evaluation - ONLY evaluate MAXIMUM thresholds (not minimum)
     // Only evaluate if high thresholds are defined
     if (criticalHigh !== undefined && warningHigh !== undefined) {
-      if (current >= criticalHigh) {
+      if (current > criticalHigh) {
         reasons.push(`critical_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
         status = 'critical';
-      } else if (current >= warningHigh) {
+      } else if (current > warningHigh) {
         reasons.push(`warning_amperage_high_${isSinglePhase ? 'single_phase' : '3_phase'}`);
         if (status !== 'critical') status = 'warning';
       }
@@ -1065,15 +1065,17 @@ async function processRackData(racks, thresholds) {
 
       // Only evaluate if all thresholds are defined
       if (tempCriticalLow !== undefined && tempCriticalHigh !== undefined && tempWarningLow !== undefined && tempWarningHigh !== undefined) {
-        if (temperature <= tempCriticalLow || temperature >= tempCriticalHigh) {
-          if (temperature <= tempCriticalLow) {
+        const belowTempCritLow = tempCriticalLow === 0 ? temperature <= tempCriticalLow : temperature < tempCriticalLow;
+        const belowTempWarnLow = tempWarningLow === 0 ? temperature <= tempWarningLow : temperature < tempWarningLow;
+        if (belowTempCritLow || temperature > tempCriticalHigh) {
+          if (belowTempCritLow) {
             reasons.push('critical_temperature_low');
           } else {
             reasons.push('critical_temperature_high');
           }
           status = 'critical';
-        } else if (temperature <= tempWarningLow || temperature >= tempWarningHigh) {
-          if (temperature <= tempWarningLow) {
+        } else if (belowTempWarnLow || temperature > tempWarningHigh) {
+          if (belowTempWarnLow) {
             reasons.push('warning_temperature_low');
           } else {
             reasons.push('warning_temperature_high');
@@ -1097,15 +1099,17 @@ async function processRackData(racks, thresholds) {
 
       // Only evaluate if all thresholds are defined
       if (humidCriticalLow !== undefined && humidCriticalHigh !== undefined && humidWarningLow !== undefined && humidWarningHigh !== undefined) {
-        if (humidity <= humidCriticalLow || humidity >= humidCriticalHigh) {
-          if (humidity <= humidCriticalLow) {
+        const belowHumidCritLow = humidCriticalLow === 0 ? humidity <= humidCriticalLow : humidity < humidCriticalLow;
+        const belowHumidWarnLow = humidWarningLow === 0 ? humidity <= humidWarningLow : humidity < humidWarningLow;
+        if (belowHumidCritLow || humidity > humidCriticalHigh) {
+          if (belowHumidCritLow) {
             reasons.push('critical_humidity_low');
           } else {
             reasons.push('critical_humidity_high');
           }
           status = 'critical';
-        } else if (humidity <= humidWarningLow || humidity >= humidWarningHigh) {
-          if (humidity <= humidWarningLow) {
+        } else if (belowHumidWarnLow || humidity > humidWarningHigh) {
+          if (belowHumidWarnLow) {
             reasons.push('warning_humidity_low');
           } else {
             reasons.push('warning_humidity_high');
@@ -1117,49 +1121,42 @@ async function processRackData(racks, thresholds) {
     }
 
     // Voltage evaluation
-    // Skip evaluation if voltage is N/A or missing
-    // IMPORTANT: 0V is a valid critical condition (no power) and MUST be evaluated
-    if (rack.voltage !== 'N/A' && rack.voltage !== null && rack.voltage !== undefined) {
-      const voltage = parseFloat(rack.voltage);
+    // IMPORTANT: 0V and null/undefined voltage are critical conditions (no power)
+    const voltageRaw = rack.voltage;
+    const voltageIsNull = voltageRaw === null || voltageRaw === undefined || voltageRaw === 'N/A';
+    const voltage = voltageIsNull ? null : parseFloat(voltageRaw);
 
-      if (!isNaN(voltage) && voltage >= 0) {
+    if (voltageIsNull || (voltage !== null && isNaN(voltage))) {
+      reasons.push('critical_voltage_low');
+      status = 'critical';
+    } else if (voltage !== null && voltage >= 0) {
       const voltageCriticalLow = getThresholdValue(effectiveThresholds, 'critical_voltage_low');
       const voltageCriticalHigh = getThresholdValue(effectiveThresholds, 'critical_voltage_high');
       const voltageWarningLow = getThresholdValue(effectiveThresholds, 'warning_voltage_low');
       const voltageWarningHigh = getThresholdValue(effectiveThresholds, 'warning_voltage_high');
 
-      // Voltage evaluation (debug logging disabled)
-
-      // Only evaluate if all thresholds are defined
-      // Note: Low thresholds can be 0 (to detect no power condition)
       if (voltageCriticalLow !== undefined && voltageCriticalHigh !== undefined &&
           voltageWarningLow !== undefined && voltageWarningHigh !== undefined &&
           voltageCriticalLow >= 0 && voltageCriticalHigh > 0 &&
           voltageWarningLow >= 0 && voltageWarningHigh > 0) {
 
-        // Check critical thresholds first (values from database)
-        // Critical LOW: voltage at or below critical minimum
-        // Critical HIGH: voltage at or above critical maximum
-        if (voltage <= voltageCriticalLow || voltage >= voltageCriticalHigh) {
-          if (voltage <= voltageCriticalLow) {
+        const belowVoltCritLow = voltageCriticalLow === 0 ? voltage <= voltageCriticalLow : voltage < voltageCriticalLow;
+        const belowVoltWarnLow = voltageWarningLow === 0 ? voltage <= voltageWarningLow : voltage < voltageWarningLow;
+        if (belowVoltCritLow || voltage > voltageCriticalHigh) {
+          if (belowVoltCritLow) {
             reasons.push('critical_voltage_low');
           } else {
             reasons.push('critical_voltage_high');
           }
           status = 'critical';
-        }
-        // Check warning thresholds (only if not already critical, values from database)
-        // Warning LOW: voltage at or below warning low
-        // Warning HIGH: voltage at or above warning high
-        else if (voltage <= voltageWarningLow || voltage >= voltageWarningHigh) {
-          if (voltage <= voltageWarningLow) {
+        } else if (belowVoltWarnLow || voltage > voltageWarningHigh) {
+          if (belowVoltWarnLow) {
             reasons.push('warning_voltage_low');
           } else {
             reasons.push('warning_voltage_high');
           }
           if (status !== 'critical') status = 'warning';
         }
-      }
       }
     }
 

@@ -5,16 +5,18 @@ import { getThresholdValue } from './thresholdUtils';
  * Determines the status color for a metric based on thresholds
  */
 export function getMetricStatusColor(
-  value: number, 
-  criticalLow: number, 
-  criticalHigh: number, 
-  warningLow: number, 
+  value: number,
+  criticalLow: number,
+  criticalHigh: number,
+  warningLow: number,
   warningHigh: number
 ): string {
-  if (value <= criticalLow || value >= criticalHigh) {
+  const belowCritLow = criticalLow === 0 ? value <= criticalLow : value < criticalLow;
+  const belowWarnLow = warningLow === 0 ? value <= warningLow : value < warningLow;
+  if (belowCritLow || value > criticalHigh) {
     return 'text-red-600';
   }
-  if (value <= warningLow || value >= warningHigh) {
+  if (belowWarnLow || value > warningHigh) {
     return 'text-yellow-600';
   }
   return 'text-green-600';
