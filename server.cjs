@@ -298,16 +298,16 @@ async function sendToSonar(alertData, state) {
       let alertValue = '';
       if (alertReasonRaw.includes('voltage')) {
         alertEmoji = '\u26A1';
-        alertValue = alertData.voltage != null ? String(alertData.voltage) : '';
+        alertValue = alertData.voltage != null ? `${String(alertData.voltage)}V` : '';
       } else if (alertReasonRaw.includes('ampera') || alertReasonRaw.includes('amperage')) {
         alertEmoji = '\u26A1';
-        alertValue = alertData.current != null ? String(alertData.current) : '';
+        alertValue = alertData.current != null ? `${String(alertData.current)}A` : '';
       } else if (alertReasonRaw.includes('humid')) {
         alertEmoji = '\uD83D\uDCA6';
-        alertValue = alertData.humidity != null ? String(alertData.humidity) : '';
+        alertValue = alertData.humidity != null ? `${String(alertData.humidity)}%H` : '';
       } else if (alertReasonRaw.includes('temp')) {
         alertEmoji = '\uD83D\uDD25';
-        alertValue = alertData.temperature != null ? String(alertData.temperature) : '';
+        alertValue = alertData.temperature != null ? `${String(alertData.temperature)}\u00B0C` : '';
       }
       const alertDescription = `${rackName}${alertEmoji}${alertValue} ${alertReasonFormatted}`.replace(/\s+/g, ' ').trim();
       payload = {
@@ -330,10 +330,10 @@ async function sendToSonar(alertData, state) {
           node: alertData.node || '',
           serial: alertData.serial || '',
           alert_reason: alertData.alert_reason || '',
-          amperaje: alertData.current != null ? alertData.current : 0,
-          voltage: alertData.voltage != null ? alertData.voltage : 0,
-          temperature: alertData.temperature != null ? alertData.temperature : 'N/A',
-          humidity: alertData.humidity != null ? alertData.humidity : 'N/A',
+          amperaje: alertData.current != null ? `${alertData.current}A` : '0A',
+          voltage: alertData.voltage != null ? `${alertData.voltage}V` : '0V',
+          temperature: alertData.temperature != null ? `${alertData.temperature}\u00B0C` : 'N/A',
+          humidity: alertData.humidity != null ? `${alertData.humidity}%H` : 'N/A',
           gwName: alertData.gwName || 'N/A',
           gwIp: alertData.gwIp || 'N/A',
           GrupoResponsable: getGroupBySite(alertData.site),
