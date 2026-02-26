@@ -295,14 +295,21 @@ async function sendToSonar(alertData, state) {
       const alertReasonRaw = (alertData.alert_reason || '').toLowerCase();
       const alertReasonFormatted = alertReasonRaw.replace(/_/g, ' ');
       let alertEmoji = '';
-      if (alertReasonRaw.includes('voltage') || alertReasonRaw.includes('current') || alertReasonRaw.includes('ampera')) {
+      let alertValue = '';
+      if (alertReasonRaw.includes('voltage')) {
         alertEmoji = '\u26A1';
+        alertValue = alertData.voltage != null ? String(alertData.voltage) : '';
+      } else if (alertReasonRaw.includes('current') || alertReasonRaw.includes('ampera')) {
+        alertEmoji = '\u26A1';
+        alertValue = alertData.current != null ? String(alertData.current) : '';
       } else if (alertReasonRaw.includes('humid')) {
         alertEmoji = '\uD83D\uDCA6';
+        alertValue = alertData.humidity != null ? String(alertData.humidity) : '';
       } else if (alertReasonRaw.includes('temp')) {
         alertEmoji = '\uD83D\uDD25';
+        alertValue = alertData.temperature != null ? String(alertData.temperature) : '';
       }
-      const alertDescription = `${rackName} ${alertEmoji} ${alertReasonFormatted}`.replace(/\s+/g, ' ').trim();
+      const alertDescription = `${rackName}${alertEmoji}${alertValue} ${alertReasonFormatted}`.replace(/\s+/g, ' ').trim();
       payload = {
         pid: alertIdentifier,
         state: state,
