@@ -299,7 +299,7 @@ async function sendToSonar(alertData, state) {
       if (alertReasonRaw.includes('voltage')) {
         alertEmoji = '\u26A1';
         alertValue = alertData.voltage != null ? String(alertData.voltage) : '';
-      } else if (alertReasonRaw.includes('current') || alertReasonRaw.includes('ampera')) {
+      } else if (alertReasonRaw.includes('ampera') || alertReasonRaw.includes('amperage')) {
         alertEmoji = '\u26A1';
         alertValue = alertData.current != null ? String(alertData.current) : '';
       } else if (alertReasonRaw.includes('humid')) {
