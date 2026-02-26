@@ -292,8 +292,17 @@ async function sendToSonar(alertData, state) {
         origin: 'NGEN_ALERT'
       };
     } else {
-      const alertReasonFormatted = (alertData.alert_reason || '').replace(/_/g, ' ');
-      const alertDescription = `${rackName} ${alertReasonFormatted}`.trim();
+      const alertReasonRaw = (alertData.alert_reason || '').toLowerCase();
+      const alertReasonFormatted = alertReasonRaw.replace(/_/g, ' ');
+      let alertEmoji = '';
+      if (alertReasonRaw.includes('voltage') || alertReasonRaw.includes('current') || alertReasonRaw.includes('ampera')) {
+        alertEmoji = '\u26A1';
+      } else if (alertReasonRaw.includes('humid')) {
+        alertEmoji = '\uD83D\uDCA6';
+      } else if (alertReasonRaw.includes('temp')) {
+        alertEmoji = '\uD83D\uDD25';
+      }
+      const alertDescription = `${rackName} ${alertEmoji} ${alertReasonFormatted}`.replace(/\s+/g, ' ').trim();
       payload = {
         pid: alertIdentifier,
         state: state,
