@@ -292,6 +292,8 @@ async function sendToSonar(alertData, state) {
         origin: 'NGEN_ALERT'
       };
     } else {
+      const alertReasonFormatted = (alertData.alert_reason || '').replace(/_/g, ' ');
+      const alertDescription = `${rackName} ${alertReasonFormatted}`.trim();
       payload = {
         pid: alertIdentifier,
         state: state,
@@ -299,8 +301,8 @@ async function sendToSonar(alertData, state) {
         problemimpact: 'APPLICATION',
         origin: 'NGEN_ALERT',
         entity: 'SGT',
-        problemdetailstext: alertIdentifier,
-        problemtitle: alertIdentifier,
+        problemdetailstext: alertDescription,
+        problemtitle: alertDescription,
         problemdetailsjson: {
           rack_id: alertData.rack_id || '',
           name: alertData.name || '',
