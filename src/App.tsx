@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { Activity, AlertTriangle, Settings, BarChart3, Zap, Download, RefreshCw, Wrench, LogOut, User, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, AlertTriangle, Settings, BarChart3, Zap, Download, RefreshCw, Wrench, LogOut, User, ChevronDown, ChevronUp, Bell, BellOff } from 'lucide-react';
 import CountryGroup from './components/CountryGroup';
 import ThresholdManager from './components/ThresholdManager';
 import RackThresholdManager from './components/RackThresholdManager';
@@ -28,6 +28,9 @@ function App() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [expandedRackNames, setExpandedRackNames] = useState<Set<string>>(new Set());
+  const [alertSendingEnabled, setAlertSendingEnabled] = useState(false);
+  const [alertSendingConfigured, setAlertSendingConfigured] = useState(false);
+  const [alertSendingLoading, setAlertSendingLoading] = useState(false);
 
   // Helper function to check if user has access to a site
   // Handles Cantabria Norte/Sur unification
@@ -689,6 +692,41 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const fetchAlertSendingState = async () => {
+      try {
+        const res = await fetch('/api/alert-sending', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setAlertSendingEnabled(data.enabled);
+          setAlertSendingConfigured(data.configured);
+        }
+      } catch {
+      }
+    };
+    fetchAlertSendingState();
+  }, []);
+
+  const handleToggleAlertSending = async () => {
+    if (alertSendingLoading) return;
+    setAlertSendingLoading(true);
+    try {
+      const res = await fetch('/api/alert-sending', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !alertSendingEnabled })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAlertSendingEnabled(data.enabled);
+      }
+    } catch {
+    } finally {
+      setAlertSendingLoading(false);
+    }
+  };
+
   const handleExportAlerts = async (filterBySite: boolean = false) => {
     setIsExporting(true);
     setExportMessage(null);
@@ -1111,6 +1149,38 @@ function App() {
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-3">
+                  {/* Alert Sending Toggle */}
+                  {alertSendingConfigured && (user?.rol === 'Administrador' || user?.rol === 'Operador') && (
+                    <button
+                      onClick={handleToggleAlertSending}
+                      disabled={alertSendingLoading}
+                      className={`inline-flex items-center gap-2.5 px-4 py-2.5 border text-sm font-medium rounded-lg transition-all ${
+                        alertSendingEnabled
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300'
+                          : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
+                      } ${alertSendingLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      title={alertSendingEnabled ? 'Envio de alertas activo - clic para desactivar' : 'Envio de alertas inactivo - clic para activar'}
+                    >
+                      {alertSendingEnabled ? (
+                        <Bell className="h-4 w-4" />
+                      ) : (
+                        <BellOff className="h-4 w-4" />
+                      )}
+                      <span className="hidden sm:inline">Envio de alertas</span>
+                      <div
+                        className={`relative w-9 h-5 rounded-full transition-colors ${
+                          alertSendingEnabled ? 'bg-emerald-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <div
+                          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                            alertSendingEnabled ? 'translate-x-4' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </div>
+                    </button>
+                  )}
+
                   {/* Refresh Button */}
                   <button
                     onClick={() => {

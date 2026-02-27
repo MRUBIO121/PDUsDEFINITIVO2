@@ -189,6 +189,8 @@ const SONAR_CONFIG = {
   skipSslVerify: process.env.SONAR_SKIP_SSL_VERIFY === 'true'
 };
 
+let alertSendingEnabled = false;
+
 const https = require('https');
 const http = require('http');
 
@@ -277,6 +279,10 @@ const sonarErrorCache = new Map();
 async function sendToSonar(alertData, state) {
   if (!SONAR_CONFIG.enabled) {
     return { success: false, error: 'SONAR integration disabled' };
+  }
+
+  if (!alertSendingEnabled) {
+    return { success: false, error: 'Alert sending disabled by user' };
   }
 
   try {
@@ -4861,6 +4867,32 @@ app.get('/api/sonar/status', requireAuth, (req, res) => {
     enabled: SONAR_CONFIG.enabled,
     configured: !!(SONAR_CONFIG.apiUrl && SONAR_CONFIG.bearerToken),
     errorCount: sonarErrorCache.size,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/alert-sending', requireAuth, (req, res) => {
+  res.json({
+    success: true,
+    enabled: alertSendingEnabled,
+    configured: SONAR_CONFIG.enabled,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.post('/api/alert-sending', requireAuth, requireRole('Administrador', 'Operador'), (req, res) => {
+  const { enabled } = req.body;
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ success: false, message: 'Field "enabled" must be a boolean' });
+  }
+  alertSendingEnabled = enabled;
+  logger.info('[ALERT-SENDING] Toggle changed', {
+    enabled: alertSendingEnabled,
+    changedBy: req.session.usuario || 'unknown'
+  });
+  res.json({
+    success: true,
+    enabled: alertSendingEnabled,
     timestamp: new Date().toISOString()
   });
 });
