@@ -276,12 +276,12 @@ const sonarErrorCache = new Map();
  * @param {string} state - 'OPEN' or 'CLOSED'
  * @returns {Promise<{success: boolean, uuid?: string, error?: string}>}
  */
-async function sendToSonar(alertData, state) {
+async function sendToSonar(alertData, state, force = false) {
   if (!SONAR_CONFIG.enabled) {
     return { success: false, error: 'SONAR integration disabled' };
   }
 
-  if (!alertSendingEnabled) {
+  if (!alertSendingEnabled && !force) {
     return { success: false, error: 'Alert sending disabled by user' };
   }
 
@@ -4895,6 +4895,116 @@ app.post('/api/alert-sending', requireAuth, requireRole('Administrador', 'Operad
     enabled: alertSendingEnabled,
     timestamp: new Date().toISOString()
   });
+});
+
+app.post('/api/sonar/send-individual', requireAuth, requireRole('Administrador', 'Operador'), async (req, res) => {
+  try {
+    const { rackId, rackName } = req.body;
+    if (!rackId) {
+      return res.status(400).json({ success: false, message: 'rackId is required' });
+    }
+
+    if (!SONAR_CONFIG.enabled) {
+      return res.status(400).json({ success: false, message: 'SONAR integration is not configured' });
+    }
+
+    const alertsResult = await executeQuery(async (pool) => {
+      return await pool.request()
+        .input('rack_id', sql.NVarChar, String(rackId))
+        .query(`
+          SELECT id, pdu_id, rack_id, name, country, site, dc, phase, chain, node, serial,
+                 metric_type, alert_reason, alert_value, alert_field, threshold_exceeded,
+                 alert_started_at
+          FROM active_critical_alerts
+          WHERE rack_id = @rack_id AND uuid_open IS NULL
+          ORDER BY alert_started_at ASC
+        `);
+    });
+
+    if (!alertsResult.recordset || alertsResult.recordset.length === 0) {
+      return res.json({ success: true, sent: 0, message: 'No pending alerts found for this rack' });
+    }
+
+    let sent = 0;
+    let errors = 0;
+
+    for (const alert of alertsResult.recordset) {
+      const alertData = {
+        pdu_id: alert.pdu_id,
+        rack_id: alert.rack_id,
+        name: alert.name,
+        country: alert.country || 'N/A',
+        site: alert.site || 'N/A',
+        dc: alert.dc || 'N/A',
+        phase: alert.phase || 'N/A',
+        chain: alert.chain || 'N/A',
+        node: alert.node || 'N/A',
+        serial: alert.serial || 'N/A',
+        alert_reason: alert.alert_reason,
+        current: alert.alert_field === 'current' ? alert.alert_value : 0,
+        voltage: alert.alert_field === 'voltage' ? alert.alert_value : 0,
+        temperature: alert.alert_field === 'sensorTemperature' ? alert.alert_value : null,
+        humidity: alert.alert_field === 'sensorHumidity' ? alert.alert_value : null,
+        gwName: 'N/A',
+        gwIp: 'N/A',
+        alert_started: formatDateForSonar(alert.alert_started_at || new Date())
+      };
+
+      const result = await sendToSonar(alertData, 'OPEN', true);
+
+      if (result.success && result.uuid) {
+        try {
+          await executeQuery(async (pool) => {
+            await pool.request()
+              .input('uuid_open', sql.NVarChar, result.uuid)
+              .input('alert_id', sql.UniqueIdentifier, alert.id)
+              .query(`
+                UPDATE active_critical_alerts
+                SET uuid_open = @uuid_open
+                WHERE id = @alert_id
+              `);
+          });
+          sonarErrorCache.delete(alert.rack_id);
+          sent++;
+        } catch (dbError) {
+          logger.warn('[SONAR] Individual alert sent but failed to save UUID', { rackId: alert.rack_id, uuid: result.uuid });
+          sent++;
+        }
+      } else {
+        sonarErrorCache.set(alert.rack_id, {
+          error: result.error,
+          timestamp: new Date(),
+          alertReason: alert.alert_reason
+        });
+        errors++;
+      }
+    }
+
+    logger.info('[SONAR] Individual alert send completed', {
+      rackId,
+      rackName: rackName || rackId,
+      sent,
+      errors,
+      total: alertsResult.recordset.length,
+      triggeredBy: req.session.usuario || 'unknown'
+    });
+
+    res.json({
+      success: true,
+      sent,
+      errors,
+      total: alertsResult.recordset.length,
+      message: sent > 0
+        ? `${sent} alerta(s) enviada(s) a SONAR exitosamente`
+        : errors > 0
+          ? 'No se pudieron enviar las alertas a SONAR'
+          : 'No hay alertas pendientes para este rack'
+    });
+
+  } catch (error) {
+    logger.error('[SONAR] Individual alert send error', { error: error.message });
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 // Endpoint para exportar alertas a Excel

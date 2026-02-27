@@ -28,6 +28,7 @@ interface GatewayGroupProps {
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
   onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
   onSendChainToMaintenance?: (chain: string, site: string, dc: string, rackData?: any) => void;
+  onSendAlertToSonar?: (rackId: string, rackName: string) => void;
   maintenanceRacks: Set<string>;
   expandedRackNames: Set<string>;
   onToggleRackExpansion: (rackName: string) => void;
@@ -52,6 +53,7 @@ export default function GatewayGroup({
   onConfigureThresholds,
   onSendRackToMaintenance,
   onSendChainToMaintenance,
+  onSendAlertToSonar,
   maintenanceRacks,
   expandedRackNames,
   onToggleRackExpansion
@@ -242,6 +244,7 @@ export default function GatewayGroup({
                 onConfigureThresholds={onConfigureThresholds}
                 onSendRackToMaintenance={onSendRackToMaintenance}
                 onSendChainToMaintenance={onSendChainToMaintenance}
+                onSendAlertToSonar={onSendAlertToSonar}
                 maintenanceRacks={maintenanceRacks}
                 isExpanded={expandedRackNames.has(rackGroup[0].name)}
                 onToggleExpansion={handleToggleRow}

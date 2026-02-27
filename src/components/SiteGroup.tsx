@@ -29,6 +29,7 @@ interface SiteGroupProps {
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
   onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
   onSendChainToMaintenance?: (chain: string, site: string, dc: string, rackData?: any) => void;
+  onSendAlertToSonar?: (rackId: string, rackName: string) => void;
   maintenanceRacks: Set<string>;
   expandedRackNames: Set<string>;
   onToggleRackExpansion: (rackName: string) => void;
@@ -54,6 +55,7 @@ export default function SiteGroup({
   onConfigureThresholds,
   onSendRackToMaintenance,
   onSendChainToMaintenance,
+  onSendAlertToSonar,
   maintenanceRacks,
   expandedRackNames,
   onToggleRackExpansion
@@ -257,6 +259,7 @@ export default function SiteGroup({
               onConfigureThresholds={onConfigureThresholds}
               onSendRackToMaintenance={onSendRackToMaintenance}
               onSendChainToMaintenance={onSendChainToMaintenance}
+              onSendAlertToSonar={onSendAlertToSonar}
               maintenanceRacks={maintenanceRacks}
               expandedRackNames={expandedRackNames}
               onToggleRackExpansion={onToggleRackExpansion}

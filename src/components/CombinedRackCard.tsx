@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Server, Settings, Wrench, MoreVertical, Zap, AlertTriangle } from 'lucide-react';
+import { Server, Settings, Wrench, MoreVertical, Zap, AlertTriangle, Send } from 'lucide-react';
 import { RackData } from '../types';
 
 interface CombinedRackCardProps {
@@ -17,6 +17,7 @@ interface CombinedRackCardProps {
   onConfigureThresholds?: (rackId: string, rackName: string) => void;
   onSendRackToMaintenance?: (rackId: string, chain: string, rackName: string, rackData?: any) => void;
   onSendChainToMaintenance?: (chain: string, site: string, dc: string, rackData?: any) => void;
+  onSendAlertToSonar?: (rackId: string, rackName: string) => void;
   maintenanceRacks: Set<string>;
   isExpanded: boolean;
   onToggleExpansion: () => void;
@@ -31,6 +32,7 @@ export default function CombinedRackCard({
   onConfigureThresholds,
   onSendRackToMaintenance,
   onSendChainToMaintenance,
+  onSendAlertToSonar,
   maintenanceRacks,
   isExpanded,
   onToggleExpansion
@@ -182,7 +184,7 @@ export default function CombinedRackCard({
             )}
           </div>
           <div className="flex items-center gap-2">
-            {(onConfigureThresholds || onSendRackToMaintenance || onSendChainToMaintenance) && (
+            {(onConfigureThresholds || onSendRackToMaintenance || onSendChainToMaintenance || (onSendAlertToSonar && overallStatus === 'critical')) && (
               <div className="relative menu-button" ref={menuRef}>
                 <button
                   onClick={(e) => {
@@ -266,10 +268,26 @@ export default function CombinedRackCard({
                           }
                         );
                         }}
-                        className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-amber-50 transition-colors last:rounded-b-lg border-t border-gray-100"
+                        className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-amber-50 transition-colors border-t border-gray-100"
                       >
                         <Wrench className="h-4 w-4 text-amber-600" />
                         <span>Enviar Chain a Mantenimiento</span>
+                      </button>
+                    )}
+                    {onSendAlertToSonar && overallStatus === 'critical' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowMenu(false);
+                          onSendAlertToSonar(
+                            commonInfo.rackId || commonInfo.id,
+                            commonInfo.name
+                          );
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm text-gray-700 hover:bg-red-50 transition-colors last:rounded-b-lg border-t border-gray-100"
+                      >
+                        <Send className="h-4 w-4 text-red-600" />
+                        <span>Enviar alerta</span>
                       </button>
                     )}
                   </div>

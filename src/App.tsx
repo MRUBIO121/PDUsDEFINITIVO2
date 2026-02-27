@@ -727,6 +727,36 @@ function App() {
     }
   };
 
+  const handleSendAlertToSonar = async (rackId: string, rackName: string) => {
+    if (!confirm(`¿Deseas enviar la alerta del rack "${rackName}" a SONAR manualmente?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/sonar/send-individual', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rackId, rackName })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP ${response.status}`);
+      }
+
+      if (data.sent > 0) {
+        alert(`${data.message}`);
+        refreshData();
+      } else {
+        alert(data.message || 'No hay alertas pendientes para enviar.');
+      }
+    } catch (error) {
+      alert(`Error al enviar alerta a SONAR: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+  };
+
   const handleExportAlerts = async (filterBySite: boolean = false) => {
     setIsExporting(true);
     setExportMessage(null);
@@ -1665,6 +1695,7 @@ function App() {
                       onConfigureThresholds={(user?.rol === 'Administrador' || user?.rol === 'Operador') ? handleConfigureThresholds : undefined}
                       onSendRackToMaintenance={(user?.rol !== 'Observador') ? handleSendRackToMaintenance : undefined}
                       onSendChainToMaintenance={(user?.rol !== 'Observador') ? handleSendChainToMaintenance : undefined}
+                      onSendAlertToSonar={(!alertSendingEnabled && alertSendingConfigured && (user?.rol === 'Administrador' || user?.rol === 'Operador')) ? handleSendAlertToSonar : undefined}
                       maintenanceRacks={maintenanceRacks}
                       expandedRackNames={expandedRackNames}
                       onToggleRackExpansion={handleToggleRackExpansion}
