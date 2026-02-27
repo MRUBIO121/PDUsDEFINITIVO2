@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Server, Settings, Wrench, MoreVertical, Zap, AlertTriangle, Send } from 'lucide-react';
+import { Server, Settings, Wrench, MoreVertical, Zap, Send } from 'lucide-react';
 import { RackData } from '../types';
 
 interface CombinedRackCardProps {
@@ -133,7 +133,6 @@ export default function CombinedRackCard({
   const rackName = String(commonInfo.name || '').trim();
   const rackId = String(commonInfo.rackId || commonInfo.id || '').trim();
   const isInMaintenance = (rackName && maintenanceRacks.has(rackName)) || (rackId && maintenanceRacks.has(rackId));
-  const sonarError = racks.find(r => r.sonarError)?.sonarError;
   const hasCriticalAlerts = overallStatus === 'critical';
   const sonarSent = hasCriticalAlerts && racks.some(r => r.sonarSent);
 
@@ -171,15 +170,6 @@ export default function CombinedRackCard({
               <span className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded flex items-center gap-1">
                 <Wrench className="w-3 h-3" />
                 Mantenimiento
-              </span>
-            )}
-            {sonarError && (
-              <span
-                className="text-xs text-orange-700 bg-orange-100 px-2 py-1 rounded flex items-center gap-1 cursor-help"
-                title={`Error SONAR: ${sonarError}`}
-              >
-                <AlertTriangle className="w-3 h-3" />
-                Error SONAR
               </span>
             )}
           </div>
