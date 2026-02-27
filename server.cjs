@@ -4880,7 +4880,7 @@ app.get('/api/alert-sending', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/alert-sending', requireAuth, requireRole('Administrador', 'Operador'), (req, res) => {
+app.post('/api/alert-sending', requireAuth, requireRole('Administrador', 'Operador'), async (req, res) => {
   const { enabled } = req.body;
   if (typeof enabled !== 'boolean') {
     return res.status(400).json({ success: false, message: 'Field "enabled" must be a boolean' });
@@ -4895,6 +4895,13 @@ app.post('/api/alert-sending', requireAuth, requireRole('Administrador', 'Operad
     enabled: alertSendingEnabled,
     timestamp: new Date().toISOString()
   });
+  if (enabled && SONAR_CONFIG.enabled) {
+    sendExistingAlertsToSonar().then(result => {
+      logger.info('[ALERT-SENDING] Sent existing unsent alerts after activation', result);
+    }).catch(err => {
+      logger.error('[ALERT-SENDING] Error sending existing alerts after activation', { error: err.message });
+    });
+  }
 });
 
 app.post('/api/sonar/send-individual', requireAuth, requireRole('Administrador', 'Operador'), async (req, res) => {
